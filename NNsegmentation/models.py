@@ -17,8 +17,8 @@ from copy import deepcopy
 from keras import backend as K
 from keras.models import Model, load_model
 from keras.layers import Dense, Layer, Input, BatchNormalization, Conv2D, Lambda
-from layers import weighted_binary_cross_entropy, ValidMetrics, Reshape, MergeOnZ
-from data import load_input, preprocess
+from .layers import weighted_binary_cross_entropy, ValidMetrics, Reshape, MergeOnZ
+from .data import load_input, preprocess
 
 class Segment(object):
   def __init__(self,

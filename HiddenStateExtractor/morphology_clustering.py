@@ -29,6 +29,19 @@ def generate_cell_sizes(fs, out_path=None):
       pickle.dump(sizes, f_w)
   return sizes
 
+def select_clean_trajecteories(dats_, trajs):
+  clean_trajs = {}
+  traj_diffs_dict = {}
+  for t in trajs:
+    traj_dats_ = dats_[np.array(trajs[t])]
+    traj_diffs = np.linalg.norm(traj_dats_[1:] - traj_dats_[:-1], ord=2, axis=1)
+    traj_diffs_dict[t] = traj_diffs
+  thr = np.quantile(np.concatenate(list(traj_diffs_dict.values())), 0.9)
+  for t in trajs:
+    if np.quantile(traj_diffs_dict[t], 0.7) < thr:
+      clean_trajs[t] = trajs[t]
+  return clean_trajs
+  
 def read_trajectories(fs, out_path=None):
   latent_space_trajs = {}
   sites = ['D%d-Site_%d' % (i, j) for j in range(9) for i in range(3, 6)]
@@ -81,12 +94,29 @@ def generate_short_traj_morphorlogy(vs, traj_list, length=5):
 
 def Kmean_on_short_trajs(vs, trajs, length=5, n_clusters=4):
   short_trajs = generate_short_traj_morphorlogy(vs, list(trajs.values()), length=length)
+  short_trajs = short_trajs.reshape((len(short_trajs), -1))
+  
   clustering = KMeans(n_clusters=n_clusters)
   clustering.fit(short_trajs)
   predicted_classes = {}
   for t in trajs:
     sub_trajs = generate_short_traj_morphorlogy(vs, [trajs[t]], length=length)
+    sub_trajs = sub_trajs.reshape((len(sub_trajs), -1))
     labels = clustering.predict(sub_trajs)
+    predicted_classes[t] = labels
+  return predicted_classes
+
+def Kmean_on_short_traj_diffs(vs, trajs, length=5, n_clusters=4):
+  short_trajs = generate_short_traj_morphorlogy(vs, list(trajs.values()), length=length)
+  short_traj_diffs = (short_trajs[:, 1:] - short_trajs[:, :-1]).reshape((len(short_trajs), -1))
+  
+  clustering = KMeans(n_clusters=n_clusters)
+  clustering.fit(short_traj_diffs)
+  predicted_classes = {}
+  for t in trajs:
+    sub_trajs = generate_short_traj_morphorlogy(vs, [trajs[t]], length=length)
+    sub_traj_diffs = (sub_trajs[:, 1:] - sub_trajs[:, :-1]).reshape((len(sub_trajs), -1))
+    labels = clustering.predict(sub_traj_diffs)
     predicted_classes[t] = labels
   return predicted_classes
 
@@ -131,12 +161,15 @@ if __name__ == '__main__':
   length = 5
   n_clusters = 3
   dats_ = pickle.load(open('./%s_PCA.pkl' % feat, 'rb'))
+  
+  clean_trajs = select_clean_trajecteories(dats_, trajs)
+  
   traj_classes = Kmean_on_short_trajs(dats_, trajs, length=length, n_clusters=n_clusters)
   
   
   representative_trajs = {}
   try:
-    os.mkdir('%s_clustered_trajs' % feat)
+    os.mkdir('%s_clustered_traj_diffs' % feat)
   except:
     pass
   traj_names = list(traj_classes.keys())
@@ -155,13 +188,13 @@ if __name__ == '__main__':
       continue
     if not cl in representative_trajs:
       try:
-        os.mkdir('./%s_clustered_trajs/%s' % (feat, cl))
+        os.mkdir('./%s_clustered_traj_diffs/%s' % (feat, cl))
       except:
         pass
       representative_trajs[cl] = []
     representative_trajs[cl].append(t)
     if len(representative_trajs[cl]) < 50:
-      save_traj(t, output_path='./%s_clustered_trajs/%s/%s.gif' % (feat, cl, t[:9] + '_' + t[10:])) 
+      save_traj(t, output_path='./%s_clustered_traj_diffs/%s/%s.gif' % (feat, cl, t[:9] + '_' + t[10:])) 
   
   ##############################################
   color_range = [np.array((0., 0., 1., 0.5)), 

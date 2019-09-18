@@ -228,7 +228,10 @@ def predict_whole_map(file_path,
                       batch_size=8, 
                       n_supp=5, 
                       time_slices=1):
-  inputs = load_input(file_path)
+  if file_path.__class__ is str:
+    inputs = load_input(file_path)
+  else:
+    inputs = file_path
   x_size = model.input_shape[0]
   y_size = model.input_shape[1]
 
@@ -301,12 +304,15 @@ def predict_whole_map(file_path,
     total_outputs.append(concatenated_output)
   total_outputs = np.stack(total_outputs, 0)
   
-  if out_file_path is None:
-    out_file_path = os.path.splitext(file_path)[0] + '_NNProbabilities'
-  np.save(out_file_path, total_outputs)
-  
-  cv2.imwrite(os.path.splitext(file_path)[0] + '.png', inputs[0, :, :, 0])
-  plot_prediction_prob(total_outputs[0], os.path.splitext(file_path)[0] + '_NNpred.png')
+  if file_path.__class__ is str:
+    if out_file_path is None:
+      out_file_path = os.path.splitext(file_path)[0] + '_NNProbabilities'
+    np.save(out_file_path, total_outputs)
+    
+    cv2.imwrite(os.path.splitext(file_path)[0] + '.png', inputs[0, :, :, 0])
+    plot_prediction_prob(total_outputs[0], os.path.splitext(file_path)[0] + '_NNpred.png')
+  else:
+    return total_outputs
   
   
 #def read_XY(patches):

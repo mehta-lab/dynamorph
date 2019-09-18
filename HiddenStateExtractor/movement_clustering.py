@@ -29,7 +29,7 @@ def generate_MSD_distri(trajectories_positions):
 
 def plot_MSD(trajectories_positions, fit=True, with_intercept=False, first_n_points=5):
   MSD = generate_MSD_distri(trajectories_positions)
-  ks = sorted(MSD.keys())
+  ks = sorted(MSD.keys())8hn
   points = np.array([(k, np.mean(MSD[k])) for k in ks])
   
   plt.plot(points[:, 0], points[:, 1], '.-', label='MSD')
