@@ -241,6 +241,7 @@ class VQ_VAE(nn.Module):
                commitment_cost=0.25,
                channel_var=CHANNEL_VAR,
                alpha=0.005,
+               gpu=True,
                **kwargs):
     super(VQ_VAE, self).__init__(**kwargs)
     self.num_inputs = num_inputs
@@ -265,7 +266,7 @@ class VQ_VAE(nn.Module):
         nn.Conv2d(self.num_hiddens, self.num_hiddens, 3, padding=1),
         nn.BatchNorm2d(self.num_hiddens),
         ResidualBlock(self.num_hiddens, self.num_residual_hiddens, self.num_residual_layers))
-    self.vq = VectorQuantizer(self.num_hiddens, self.num_embeddings, commitment_cost=self.commitment_cost)
+    self.vq = VectorQuantizer(self.num_hiddens, self.num_embeddings, commitment_cost=self.commitment_cost, gpu=gpu)
     self.dec = nn.Sequential(
         nn.ConvTranspose2d(self.num_hiddens, self.num_hiddens//2, 4, stride=2, padding=1),
         nn.ReLU(),
