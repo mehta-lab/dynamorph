@@ -15,7 +15,7 @@ from matplotlib import cm
 import imageio
 import tifffile
 import statsmodels.api as sm
-from naive_imagenet import DATA_ROOT
+from .naive_imagenet import DATA_ROOT
 
 def generate_MSD_distri(trajectories_positions):
   MSD = {i: [] for i in range(1, 15)}

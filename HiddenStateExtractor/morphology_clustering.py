@@ -4,7 +4,7 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
-from naive_imagenet import DATA_ROOT, read_file_path
+from .naive_imagenet import DATA_ROOT, read_file_path
 import pickle
 import cv2
 import h5py

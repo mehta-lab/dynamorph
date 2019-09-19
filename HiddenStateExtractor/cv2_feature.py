@@ -12,7 +12,7 @@ import pickle
 import random
 import os
 import matplotlib.pyplot as plt
-from naive_imagenet import preprocess, read_file_path, DATA_ROOT, CHANNEL_MAX
+from .naive_imagenet import preprocess, read_file_path, DATA_ROOT, CHANNEL_MAX
 import multiprocessing as mp
 
 # Feature extractor

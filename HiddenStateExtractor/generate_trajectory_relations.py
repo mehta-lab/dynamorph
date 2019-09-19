@@ -6,7 +6,7 @@ Created on Wed Aug 14 16:19:26 2019
 @author: michaelwu
 """
 import pickle
-from naive_imagenet import read_file_path, DATA_ROOT
+from .naive_imagenet import read_file_path, DATA_ROOT
 
 fs = read_file_path(DATA_ROOT + '/Data/StaticPatches')
 relations = {}

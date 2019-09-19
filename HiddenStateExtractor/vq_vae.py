@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import pickle
 from torch.utils.data import TensorDataset, DataLoader
-from naive_imagenet import DATA_ROOT, read_file_path
+from .naive_imagenet import DATA_ROOT, read_file_path
 
 CHANNEL_VAR = np.array([0.06, 0.09]) # After normalized to 0~1
 CHANNEL_MAX = np.array([65535., 65535.])
