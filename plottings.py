@@ -8,11 +8,14 @@ Created on Tue Sep 17 15:20:21 2019
 import numpy as np
 import cv2
 import os
+import pickle
 from NNsegmentation.models import Segment
 from NNsegmentation.data import predict_whole_map
 from SingleCellPatch.extract_patches import instance_clustering
 from SingleCellPatch.generate_trajectories import frame_matching
 import matplotlib
+matplotlib.use('AGG')
+import matplotlib.pyplot as plt
 
 RAW_DATA_PATH = '/mnt/comp_micro/Projects/CellVAE/Combined'
 color_mg = np.array([240, 94, 56], dtype='uint8')
@@ -246,7 +249,7 @@ cv2.imwrite('/home/michaelwu/fig2_traj_matching_f1.png', mat1)
 
 
 all_saved_trajs = pickle.load(open(os.path.split(RAW_DATA_PATH)[0] + '/Data/DynamicPatches/D5-Site_0/mg_traj.pkl', 'rb'))
-mg_trajectories, mg_trajectories_positions = all_saved_trajs
+mg_trajectories, mg_trajectories_positions = all_saved_trajs0
 def distance(p1, p2):
   return (p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2
 target_traj = plotted[1]
@@ -260,3 +263,220 @@ for t in sorted(mg_trajectories[i].keys()):
     mats.append(np.array(f['masked_mat'][:, :, 0]))
 for i in [0, 1, 5, 10, 20]:
   cv2.imwrite('/home/michaelwu/fig2_sample_traj_%d.png' % i, mats[i].astype('uint16'))
+
+
+
+
+################################################################################################
+from HiddenStateExtractor.vq_vae import VQ_VAE, CHANNEL_MAX, CHANNEL_VAR, prepare_dataset
+from HiddenStateExtractor.naive_imagenet import read_file_path, DATA_ROOT
+from HiddenStateExtractor.morphology_clustering import select_clean_trajecteories, Kmean_on_short_trajs
+import torch as t
+import seaborn as sns
+import h5py
+import pandas as pd
+
+
+cs = [0, 1]
+input_shape = (128, 128)
+gpu = False
+
+fs = read_file_path(DATA_ROOT + '/Data/StaticPatches')
+np.random.seed(1234)
+sample_fs = np.random.choice(fs, (7,), replace=False)
+dataset = prepare_dataset(sample_fs, cs=cs, input_shape=input_shape, channel_max=CHANNEL_MAX)
+
+model = VQ_VAE(alpha=0.0005, gpu=gpu)
+model.load_state_dict(t.load('./HiddenStateExtractor/save_0005.pt', map_location='cpu'))
+for i in range(7):
+  sample = dataset[i:(i+1)][0]
+  output = model(sample)[0]
+  inp = sample.data.numpy()
+  out = output.data.numpy()
+  cv2.imwrite('/home/michaelwu/fig3_VAE_pair%d_input.png' % i, inp[0, 0] * 255)
+  cv2.imwrite('/home/michaelwu/fig3_VAE_pair%d_output.png' % i, out[0, 0] * 255)
+
+
+
+
+
+
+
+feat = 'save_0005_before'
+sites = ['D%d-Site_%d' % (i, j) for j in range(9) for i in range(3, 6)]
+fs = sorted(read_file_path(DATA_ROOT + '/Data/StaticPatches'))
+trajs = pickle.load(open('./HiddenStateExtractor/trajectory_in_inds.pkl', 'rb'))
+
+dats = pickle.load(open(DATA_ROOT + '/Data/%s.pkl' % feat, 'rb'))
+ks = sorted([k for k in dats.keys() if dats[k] is not None])
+assert ks == fs
+sizes = pickle.load(open(DATA_ROOT + '/Data/EncodedSizes.pkl', 'rb'))
+ss = [sizes[k] for k in ks]
+
+length = 5
+n_clusters = 3
+seed = 123
+dats_ = pickle.load(open('./HiddenStateExtractor/%s_PCA.pkl' % feat, 'rb')) 
+
+np.random.seed(seed)
+clean_trajs = select_clean_trajecteories(dats_, trajs)
+traj_classes = Kmean_on_short_trajs(dats_, trajs, length=length, n_clusters=n_clusters)
+representative_trajs = {}
+traj_names = list(clean_trajs.keys())
+np.random.shuffle(traj_names)
+for t in traj_names:
+  if np.unique(traj_classes[t]).shape[0] == 1:
+    cl = str(traj_classes[t][0])
+  elif np.unique(traj_classes[t]).shape[0] == 2:
+    if np.unique(traj_classes[t][:5]).shape[0] == 1 and \
+       np.unique(traj_classes[t][-5:]).shape[0] == 1 and \
+       traj_classes[t][0] != traj_classes[t][-1]:
+      cl = str(traj_classes[t][0]) + '_' + str(traj_classes[t][-1])
+    else:
+      continue
+  else:
+    continue
+  if not cl in representative_trajs:
+    representative_trajs[cl] = []
+  representative_trajs[cl].append(t)
+
+cmap = matplotlib.cm.get_cmap('binary')  
+range_min = np.log(min(ss))
+range_max = np.log(max(ss))
+colors = [cmap(((np.log(s) - range_min)/(range_max - range_min))**1.5) for s in ss]
+
+plt.clf()
+sns.set_style('white')
+sns.despine()
+plt.scatter(dats_[:, 0], dats_[:, 1], c=colors, s=0.3, edgecolors='none')
+
+np.random.seed(seed)
+c0_trajs = np.random.choice(representative_trajs['0'], (5,), replace=False)
+for t in c0_trajs:
+  order = np.array(trajs[t])
+  if t==c0_trajs[0]:
+    plt.plot(dats_[order][:, 0], dats_[order][:, 1], c='#ffd700', marker='.', linewidth=0.5, markersize=1., label='Small')
+  else:
+    plt.plot(dats_[order][:, 0], dats_[order][:, 1], c='#ffd700', marker='.', linewidth=0.5, markersize=1.)
+with h5py.File(fs[trajs[c0_trajs[4]][0]], 'r') as f:
+  example_fig = np.array(f["masked_mat"])[:, :, 0]
+  cv2.imwrite('/home/michaelwu/fig3_morphology_pca_example_small0.png', example_fig.astype('uint16'))
+with h5py.File(fs[trajs[c0_trajs[4]][-1]], 'r') as f:
+  example_fig = np.array(f["masked_mat"])[:, :, 0]
+  cv2.imwrite('/home/michaelwu/fig3_morphology_pca_example_small1.png', example_fig.astype('uint16'))
+
+c2_trajs = np.random.choice(representative_trajs['2'], (5,), replace=False)
+for t in c2_trajs:
+  order = np.array(trajs[t])
+  if t==c2_trajs[0]:
+    plt.plot(dats_[order][:, 0], dats_[order][:, 1], c='#e42256', marker='.', linewidth=0.5, markersize=1., label='Medium')
+  else:
+    plt.plot(dats_[order][:, 0], dats_[order][:, 1], c='#e42256', marker='.', linewidth=0.5, markersize=1.)
+with h5py.File(fs[trajs[c2_trajs[2]][0]], 'r') as f:
+  example_fig = np.array(f["masked_mat"])[:, :, 0]
+  cv2.imwrite('/home/michaelwu/fig3_morphology_pca_example_medium0.png', example_fig.astype('uint16'))
+with h5py.File(fs[trajs[c2_trajs[2]][-1]], 'r') as f:
+  example_fig = np.array(f["masked_mat"])[:, :, 0]
+  cv2.imwrite('/home/michaelwu/fig3_morphology_pca_example_medium1.png', example_fig.astype('uint16'))
+
+c1_trajs = np.random.choice(representative_trajs['1'], (5,), replace=False)
+for t in c1_trajs:
+  order = np.array(trajs[t])
+  if t==c1_trajs[0]:
+    plt.plot(dats_[order][:, 0], dats_[order][:, 1], c='#00b1b0', marker='.', linewidth=0.5, markersize=1., label='Large')
+  else:
+    plt.plot(dats_[order][:, 0], dats_[order][:, 1], c='#00b1b0', marker='.', linewidth=0.5, markersize=1.)
+with h5py.File(fs[trajs[c1_trajs[4]][0]], 'r') as f:
+  example_fig = np.array(f["masked_mat"])[:, :, 0]
+  cv2.imwrite('/home/michaelwu/fig3_morphology_pca_example_large0.png', example_fig.astype('uint16'))
+with h5py.File(fs[trajs[c1_trajs[4]][-1]], 'r') as f:
+  example_fig = np.array(f["masked_mat"])[:, :, 0]
+  cv2.imwrite('/home/michaelwu/fig3_morphology_pca_example_large1.png', example_fig.astype('uint16'))
+
+
+plt.legend(fontsize=14)
+plt.xlabel("PC1", fontsize=18)
+plt.ylabel("PC2", fontsize=18)
+
+plt.savefig('/home/michaelwu/fig3_morphology_pca.eps')
+
+
+
+all_mg_trajs = {}
+for site in sites:
+  _, mg_trajectories_positions = pickle.load(open(DATA_ROOT + '/Data/DynamicPatches/%s/mg_traj.pkl' % site, 'rb'))
+  for i, traj in enumerate(mg_trajectories_positions):
+    all_mg_trajs[site + '/%d' % i] = traj
+
+traj_average_moving_distances = {}
+for t in representative_trajs['0'] + representative_trajs['1'] + representative_trajs['2']: 
+  traj_average_moving_distances[t] = []
+  t_keys = sorted(all_mg_trajs[t].keys())
+
+  assert len(t_keys) > length
+  dists = []
+  for t_point in range(len(t_keys) - 1):
+    d = np.linalg.norm(all_mg_trajs[t][t_keys[t_point+1]] - all_mg_trajs[t][t_keys[t_point]], ord=2)
+    dists.append(d)
+  traj_average_moving_distances[t] = np.log(np.mean(dists) + 1e-9)
+
+cluster_dict = {0: 'Small', 1: 'Large', 2: 'Medium'}
+cluster_assign_col = []
+average_dist_col = []
+for t in representative_trajs['0']:
+  cluster_assign_col.append(cluster_dict[0])
+  average_dist_col.append(traj_average_moving_distances[t])
+for t in representative_trajs['1']:
+  cluster_assign_col.append(cluster_dict[1])
+  average_dist_col.append(traj_average_moving_distances[t])
+for t in representative_trajs['2']:
+  cluster_assign_col.append(cluster_dict[2])
+  average_dist_col.append(traj_average_moving_distances[t])
+
+df = pd.DataFrame({'cluster': cluster_assign_col, 'aver_dist': average_dist_col})
+plt.clf()
+sns.set_style('white')
+sns.violinplot(y='cluster', 
+               x='aver_dist', 
+               data=df, 
+               order=['Small', 'Medium', 'Large'], 
+               palette={'Small': '#ffd700', 'Medium': '#e42256', 'Large': '#00b1b0'},
+               orient='h')
+#plt.xlim(0, 5)
+plt.yticks(fontsize=14, rotation=45)
+plt.ylabel('')
+plt.xlabel('Average Movement', fontsize=18)
+plt.savefig('/home/michaelwu/fig3_aver_dist.eps')
+
+
+small_traj_represented = ['D5-Site_0/8', 'D5-Site_0/19']
+medium_traj_represented = ['D5-Site_0/16', 'D5-Site_0/21']
+large_traj_represented = ['D5-Site_0/0', 'D5-Site_0/24']
+
+mat = np.zeros((raw_input.shape[0], raw_input.shape[1], 3), dtype='uint8')
+mat[:, :] = (raw_input / 256).astype('uint8')
+
+for t in small_traj_represented:
+  traj = all_mg_trajs[t]
+  positions = np.stack([traj[k] for k in sorted(traj.keys())])
+  for i in range(positions.shape[0] - 1):
+    start = positions[i]
+    end = positions[i + 1]
+    mat = cv2.line(mat, (start[1], start[0]), (end[1], end[0]), (0, 215, 255), thickness=2)
+
+for t in medium_traj_represented:
+  traj = all_mg_trajs[t]
+  positions = np.stack([traj[k] for k in sorted(traj.keys())])
+  for i in range(positions.shape[0] - 1):
+    start = positions[i]
+    end = positions[i + 1]
+    mat = cv2.line(mat, (start[1], start[0]), (end[1], end[0]), (86, 34, 228), thickness=2)
+
+for t in large_traj_represented:
+  traj = all_mg_trajs[t]
+  positions = np.stack([traj[k] for k in sorted(traj.keys())])
+  for i in range(positions.shape[0] - 1):
+    start = positions[i]
+    end = positions[i + 1]
+    mat = cv2.line(mat, (start[1], start[0]), (end[1], end[0]), (176, 177, 0), thickness=2)
+cv2.imwrite('/home/michaelwu/fig3_movement_samles.png', mat)
