@@ -29,6 +29,26 @@ def generate_cell_sizes(fs, out_path=None):
       pickle.dump(sizes, f_w)
   return sizes
 
+def generate_cell_aspect_ratios(fs, out_path=None):
+  aps = {}
+  for i, f_n in enumerate(fs):
+    if i % 1000 == 0:
+      print("Processed %d" % i)
+      if not out_path is None:
+        with open(out_path, 'wb') as f_w:
+          pickle.dump(aps, f_w)
+    with h5py.File(f_n, 'r') as f:
+      mask = np.array(f['masked_mat'][:, :, 2]).astype('uint8')
+
+      cnts = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)[-2]
+      cnt = sorted(cnts, key=cv2.contourArea, reverse=True)[0]
+      rbox = cv2.minAreaRect(cnt)
+      aps[f_n] = rbox[1][0]/rbox[1][1]
+  if not out_path is None:
+    with open(out_path, 'wb') as f_w:
+      pickle.dump(aps, f_w)
+  return sizes
+
 def select_clean_trajecteories(dats_, trajs):
   clean_trajs = {}
   traj_diffs_dict = {}
