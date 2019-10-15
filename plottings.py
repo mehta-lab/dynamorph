@@ -611,9 +611,11 @@ df = pd.DataFrame({'t': np.log(np.array(sorted(MSD_small.keys()))),
 plt.clf()
 sns.set_style('whitegrid')
 
-plt.plot(df['t'], df['MSD (Small)'], '.-', c='#cd3435', linewidth=2, markersize=10, label='MSD (Small)')
+#plt.plot(df['t'], df['MSD (Small)'], '.-', c='#cd3435', linewidth=2, markersize=10, label='MSD (Small)')
+plt.errorbar(df['t'], df['MSD (Small)'], yerr=df['MSD_std (Small)'], c='#cd3435', linewidth=2, markersize=10, label='MSD (Small)')
 plt.plot(df['t'], df['Linear Fit (Small)'], '--', c='#cd3435', linewidth=2)
 plt.plot(df['t'], df['MSD (Large)'], '.-', c='#00b1b0', linewidth=2, markersize=10, label='MSD (Large)')
+#plt.errorbar(df['t'], df['MSD (Large)'], yerr=df['MSD_std (Large)'], c='#00b1b0', linewidth=2, markersize=10, label='MSD (Large)')
 plt.plot(df['t'], df['Linear Fit (Large)'], '--', c='#00b1b0', linewidth=2)
 
 x_ticks = np.array([0.5, 1., 2., 4, 8])
