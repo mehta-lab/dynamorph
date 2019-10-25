@@ -20,6 +20,7 @@ import matplotlib
 from matplotlib import cm
 matplotlib.use('AGG')
 import matplotlib.pyplot as plt
+from matplotlib.ticker import NullLocator
 import seaborn as sns
 import imageio
 from HiddenStateExtractor.vq_vae import VQ_VAE, CHANNEL_MAX, CHANNEL_VAR, prepare_dataset
@@ -27,6 +28,7 @@ from HiddenStateExtractor.naive_imagenet import read_file_path, DATA_ROOT
 from HiddenStateExtractor.morphology_clustering import select_clean_trajecteories, Kmean_on_short_trajs
 from HiddenStateExtractor.movement_clustering import save_traj
 import statsmodels.api as sm
+import scipy
 
 RAW_DATA_PATH = '/mnt/comp_micro/Projects/CellVAE/Combined'
 color_mg = np.array([240, 94, 56], dtype='uint8')
@@ -612,7 +614,7 @@ for i in range(20):
   large_traj_MSDs_trimmed[i] = scipy.stats.trimboth(l_dists, 0.25)
 
 x = np.arange(1, 20)
-y_bins = np.arange(0.9, 10.5, 0.6) # log scale
+y_bins = np.arange(0.9, 11.7, 0.6) # log scale
 density_map = np.zeros((20, len(y_bins) - 1))
 y = []
 for i in range(1, 20):
@@ -634,7 +636,7 @@ xticks_positions = xticks / (27/60)
 plt.gca().set_xticks(xticks_positions)
 plt.gca().set_xticklabels(xticks)
 plt.gca().xaxis.set_minor_locator(NullLocator())
-yticks = np.array([0.5, 2, 8, 32, 128, 512])
+yticks = np.array([0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024])
 yticks_positions = (np.log(yticks / (0.325 * 0.325)) - 0.9)/(y_bins[1] - y_bins[0]) - 0.5 # same adjustment for imshow
 plt.gca().set_yticks(yticks_positions)
 plt.gca().set_yticklabels(yticks)
