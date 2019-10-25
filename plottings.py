@@ -577,84 +577,7 @@ g.set_xlabel('')
 g.set_ylabel('')
 plt.savefig('/home/michaelwu/fig4_aver_dist.eps')
 
-
-
-# MSD_length = 20
-# def generate_MSD_distri(trajectories_positions, length=MSD_length):
-#   MSD = {i * 0.45: [] for i in range(1, length)} # 0.45h for 27min
-#   for t in trajectories_positions:
-#     for t1 in sorted(t.keys()):
-#       for t2 in range(t1+1, min(max(t.keys())+1, t1+length)):
-#         if t2 in t:
-#           dist = np.linalg.norm(t[t2] - t[t1], ord=2)
-#           MSD[(t2-t1) * 0.45].append((dist*0.325)**2) # 0.325um for 1pixel
-#   return MSD
-# MSD_small = generate_MSD_distri([all_mg_trajs_positions[t] for t in small_trajs])
-# MSD_large = generate_MSD_distri([all_mg_trajs_positions[t] for t in large_trajs])
-
-
-# fit_length = 8
-# X = np.log(np.array(sorted(MSD_small.keys()))[:8])
-# y1 = [np.log(np.mean(MSD_small[i*0.45])) for i in np.arange(1, fit_length + 1)]
-# y2 = [np.log(np.mean(MSD_large[i*0.45])) for i in np.arange(1, fit_length + 1)]
-# X = sm.add_constant(X)
-# intercept1, slope1 = sm.OLS(y1, X).fit().params
-# intercept2, slope2 = sm.OLS(y2, X).fit().params
-
-# df = pd.DataFrame({'t': np.log(np.array(sorted(MSD_small.keys()))),
-#                    'MSD (Small)': [np.log(np.mean(MSD_small[i*0.45])) for i in np.arange(1, MSD_length)],
-#                    'MSD_std (Small)': [np.log(np.std(MSD_small[i*0.45])) for i in np.arange(1, MSD_length)],
-#                    'MSD (Large)': [np.log(np.mean(MSD_large[i*0.45])) for i in np.arange(1, MSD_length)],
-#                    'MSD_std (Large)': [np.log(np.std(MSD_large[i*0.45])) for i in np.arange(1, MSD_length)],
-#                    'Linear Fit (Small)': np.log(np.array(sorted(MSD_small.keys()))) * slope1 + intercept1,
-#                    'Linear Fit (Large)': np.log(np.array(sorted(MSD_small.keys()))) * slope2 + intercept2})
-# plt.clf()
-# sns.set_style('whitegrid')
-
-# #plt.plot(df['t'], df['MSD (Small)'], '.-', c='#cd3435', linewidth=2, markersize=10, label='MSD (Small)')
-# plt.errorbar(df['t'], df['MSD (Small)'], yerr=df['MSD_std (Small)'], c='#cd3435', linewidth=2, markersize=10, label='MSD (Small)')
-# plt.plot(df['t'], df['Linear Fit (Small)'], '--', c='#cd3435', linewidth=2)
-# plt.plot(df['t'], df['MSD (Large)'], '.-', c='#00b1b0', linewidth=2, markersize=10, label='MSD (Large)')
-# #plt.errorbar(df['t'], df['MSD (Large)'], yerr=df['MSD_std (Large)'], c='#00b1b0', linewidth=2, markersize=10, label='MSD (Large)')
-# plt.plot(df['t'], df['Linear Fit (Large)'], '--', c='#00b1b0', linewidth=2)
-
-# x_ticks = np.array([0.5, 1., 2., 4, 8])
-# plt.gca().set_xticks(np.log(x_ticks))
-# plt.gca().set_xticklabels(x_ticks)
-
-# y_ticks = np.array([8, 16, 32, 64, 128, 256, 512])
-# plt.gca().set_yticks(np.log(y_ticks))
-# plt.gca().set_yticklabels(y_ticks)
-
-# plt.legend()
-# plt.savefig('/home/michaelwu/fig4_MSD.eps')
-
 MSD_length = 20
-
-# small_traj_ensembles = []
-# for t in small_trajs:
-#   t_start = min(all_mg_trajs_positions[t].keys()) + 1
-#   t_end = max(all_mg_trajs_positions[t].keys())
-#   while (t_start + 20 <= t_end):
-#     s_traj = {(t_now - t_start): all_mg_trajs_positions[t][t_now] \
-#         for t_now in range(t_start, t_start+20) if t_now in all_mg_trajs_positions[t]}
-#     small_traj_ensembles.append(s_traj)
-#     for t_start in range(max(s_traj.keys()) + t_start + 1, t_end + 1):
-#       if t_start in all_mg_trajs_positions[t]:
-#         break
-
-# large_traj_ensembles = []
-# for t in large_trajs:
-#   t_start = min(all_mg_trajs_positions[t].keys()) + 1
-#   t_end = max(all_mg_trajs_positions[t].keys())
-#   while (t_start + 20 <= t_end):
-#     l_traj = {(t_now - t_start): all_mg_trajs_positions[t][t_now] \
-#         for t_now in range(t_start, t_start+20) if t_now in all_mg_trajs_positions[t]}
-#     large_traj_ensembles.append(l_traj)
-#     for t_start in range(max(l_traj.keys()) + t_start + 1, t_end + 1):
-#       if t_start in all_mg_trajs_positions[t]:
-#         break
-
 
 small_traj_ensembles = []
 for t in small_trajs:
@@ -688,85 +611,63 @@ for i in range(20):
   small_traj_MSDs_trimmed[i] = scipy.stats.trimboth(s_dists, 0.25)
   large_traj_MSDs_trimmed[i] = scipy.stats.trimboth(l_dists, 0.25)
 
-x = np.arange(20)
-y_bins = np.linspace(0, np.quantile(small_traj_MSDs[19], 0.95), 41)
-density_map = np.zeros((20, 40))
+x = np.arange(1, 20)
+y_bins = np.arange(0.9, 10.5, 0.6) # log scale
+density_map = np.zeros((20, len(y_bins) - 1))
 y = []
-for i in range(20):
+for i in range(1, 20):
   for d in small_traj_MSDs[i]:
-    ind_bin = 40 - (y_bins > d).sum()
-    if ind_bin < 40:
+    if d == 0: 
+      continue
+    ind_bin = ((np.log(d) - y_bins) > 0).sum() - 1
+    if ind_bin < density_map.shape[1] and ind_bin >= 0:
       density_map[i][ind_bin] += 1
-  y.append(np.mean(small_traj_MSDs[i])/(y_bins[1] - y_bins[0]))
-
+  y.append((np.log(np.mean(small_traj_MSDs[i])) - 0.9)/(y_bins[1] - y_bins[0]))
 density_map = density_map/density_map.sum(1, keepdims=True)
-plt.clf()
-plt.imshow(np.transpose(np.log(density_map + 1e-5)), cmap='Reds', vmin=-7.5, origin='lower')
-plt.plot(x, y, 'r-')
 
-xticks = np.array([0, 2, 4, 6, 8])
+plt.clf()
+plt.imshow(np.transpose(density_map), cmap='Reds', origin='lower', alpha=0.5)
+plt.plot(x, np.array(y) - 0.5, 'r.-') # -0.5 is the adjustment for imshow
+plt.gca().set_xscale('log')
+xticks = np.array([0.5, 1, 2, 4, 8])
 xticks_positions = xticks / (27/60)
 plt.gca().set_xticks(xticks_positions)
 plt.gca().set_xticklabels(xticks)
-
-yticks = np.array([0, 40, 80, 120, 160, 200])
-yticks_positions = (yticks / (0.325 * 0.325))/(y_bins[1] - y_bins[0])
+plt.gca().xaxis.set_minor_locator(NullLocator())
+yticks = np.array([0.5, 2, 8, 32, 128, 512])
+yticks_positions = (np.log(yticks / (0.325 * 0.325)) - 0.9)/(y_bins[1] - y_bins[0]) - 0.5 # same adjustment for imshow
 plt.gca().set_yticks(yticks_positions)
 plt.gca().set_yticklabels(yticks)
+plt.xlabel('Time lag (h)')
+plt.ylabel('MSD(um^2)')
+plt.savefig('/home/michaelwu/fig_MSD1.eps')
 
-plt.savefig('/home/michaelwu/temp.png', dpi=300)
 
-
-
-x = np.arange(20)
-y_bins = np.linspace(0, np.quantile(large_traj_MSDs[19], 0.95), 41)
-density_map = np.zeros((20, 40))
+density_map = np.zeros((20, len(y_bins) - 1))
 y = []
-for i in range(20):
+for i in range(1, 20):
   for d in large_traj_MSDs[i]:
-    ind_bin = 40 - (y_bins > d).sum()
-    if ind_bin < 40:
+    if d == 0: 
+      continue
+    ind_bin = ((np.log(d) - y_bins) > 0).sum() - 1
+    if ind_bin < density_map.shape[1] and ind_bin >= 0:
       density_map[i][ind_bin] += 1
-  y.append(np.mean(large_traj_MSDs[i])/(y_bins[1] - y_bins[0]))
-
+  y.append((np.log(np.mean(large_traj_MSDs[i])) - 0.9)/(y_bins[1] - y_bins[0]))
 density_map = density_map/density_map.sum(1, keepdims=True)
-plt.clf()
-plt.imshow(np.transpose(np.log(density_map + 1e-5)), cmap='Blues', vmin=-8, origin='lower')
-plt.plot(x, y, 'b-')
 
-xticks = np.array([0, 2, 4, 6, 8])
+plt.clf()
+plt.imshow(np.transpose(density_map), cmap='Blues', origin='lower', alpha=0.5)
+plt.plot(x, np.array(y) - 0.5, 'b.-')
+plt.gca().set_xscale('log')
+xticks = np.array([0.5, 1, 2, 4, 8])
 xticks_positions = xticks / (27/60)
 plt.gca().set_xticks(xticks_positions)
 plt.gca().set_xticklabels(xticks)
-
-yticks = np.array([0, 400, 800, 1200, 1600])
-yticks_positions = (yticks / (0.325 * 0.325))/(y_bins[1] - y_bins[0])
+plt.gca().xaxis.set_minor_locator(NullLocator())
+yticks = np.array([0.5, 2, 8, 32, 128, 512])
+yticks_positions = (np.log(yticks / (0.325 * 0.325)) - 0.9)/(y_bins[1] - y_bins[0]) - 0.5
 plt.gca().set_yticks(yticks_positions)
 plt.gca().set_yticklabels(yticks)
-
-plt.savefig('/home/michaelwu/temp2.png', dpi=300)
-
-
-
-
-
-# plt.plot(x, [small_traj_MSDs[i][0] for i in x], 'b-')
-# plt.fill_between(x, 
-#                  [small_traj_MSDs[i][0] - small_traj_MSDs[i][1] for i in x],
-#                  [small_traj_MSDs[i][0] + small_traj_MSDs[i][1] for i in x], facecolor='blue', alpha=0.2)
-# plt.plot(x, [large_traj_MSDs[i][0] for i in x], 'r-')
-# plt.fill_between(x, 
-#                  [large_traj_MSDs[i][0] - large_traj_MSDs[i][1] for i in x],
-#                  [large_traj_MSDs[i][0] + large_traj_MSDs[i][1] for i in x], facecolor='red', alpha=0.2)
-# plt.savefig('/home/michaelwu/MSD.png')
-
-# plt.clf()
-# plt.plot(x, [small_traj_MSDs_trimmed[i][0] for i in x], 'b-')
-# plt.fill_between(x, 
-#                  [small_traj_MSDs_trimmed[i][0] - small_traj_MSDs_trimmed[i][1] for i in x],
-#                  [small_traj_MSDs_trimmed[i][0] + small_traj_MSDs_trimmed[i][1] for i in x], facecolor='blue', alpha=0.2)
-# plt.plot(x, [large_traj_MSDs_trimmed[i][0] for i in x], 'r-')
-# plt.fill_between(x, 
-#                  [large_traj_MSDs_trimmed[i][0] - large_traj_MSDs_trimmed[i][1] for i in x],
-#                  [large_traj_MSDs_trimmed[i][0] + large_traj_MSDs_trimmed[i][1] for i in x], facecolor='red', alpha=0.2)
-# plt.savefig('/home/michaelwu/MSD_trimmed.png')
+plt.xlabel('Time lag (h)')
+plt.ylabel('MSD(um^2)')
+plt.savefig('/home/michaelwu/fig_MSD2.eps')

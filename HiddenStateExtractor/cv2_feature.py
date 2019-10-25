@@ -6,6 +6,7 @@ Created on Mon Aug 12 09:53:46 2019
 @author: michaelwu
 """
 import cv2
+import h5py
 import numpy as np
 import scipy
 import pickle
@@ -43,6 +44,17 @@ def worker(f_n):
   x = preprocess(f_n, cs=[0, 1], channel_max=CHANNEL_MAX)
   y = extract_features(x, vector_size=32)
   return y
+
+def extract_density(f_n):
+  with h5py.File(f_n, 'r') as f:
+    dat = f['masked_mat']
+    phase = np.array(dat[:, :, 0]) / 65535.
+    mask = np.array(dat[:, :, 2])
+    
+    bg_density = np.median(phase[np.where(mask == 0)])
+    peak_density = (phase * mask).max() - bg_density
+    total_density = ((phase - bg_density) * mask).sum()
+  return peak_density, total_density
   
 if __name__ == '__main__':
   fs = read_file_path(DATA_ROOT + '/Data/StaticPatches')
