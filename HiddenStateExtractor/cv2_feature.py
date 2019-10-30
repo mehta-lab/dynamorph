@@ -57,8 +57,10 @@ def get_density(dat):
   retardance = np.array(dat[:, :, 1]) / 65535.
   mask = np.array(dat[:, :, 2])
   
-  bg_phase = np.median(phase[np.where(mask == 0)])
-  bg_retardance = np.median(retardance[np.where(mask == 0)])
+  #bg_phase = np.median(phase[np.where(mask == 0)])
+  #bg_retardance = np.median(retardance[np.where(mask == 0)])
+  bg_phase = 0.
+  bg_retardance = 0.
 
   peak_phase = ((phase - bg_phase) * mask).max()
   sum_phase = ((phase - bg_phase) * mask).sum()
