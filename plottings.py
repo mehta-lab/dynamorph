@@ -373,7 +373,7 @@ fs = sorted(pickle.load(open('./HiddenStateExtractor/file_paths_bkp.pkl', 'rb'))
 trajs = pickle.load(open('./HiddenStateExtractor/trajectory_in_inds.pkl', 'rb'))
 dats_ = pickle.load(open('./HiddenStateExtractor/%s_PCA.pkl' % feat, 'rb'))
 sizes = pickle.load(open(DATA_ROOT + '/Data/EncodedSizes.pkl', 'rb'))
-ss = [sizes[f] for f in fs]
+ss = [sizes[f][0] for f in fs]
 
 cmap = matplotlib.cm.get_cmap('BuPu')  
 range_min = np.log(min(ss))
@@ -467,7 +467,7 @@ fs = sorted(pickle.load(open('./HiddenStateExtractor/file_paths_bkp.pkl', 'rb'))
 trajs = pickle.load(open('./HiddenStateExtractor/trajectory_in_inds.pkl', 'rb'))
 dats_ = pickle.load(open('./HiddenStateExtractor/%s_PCA.pkl' % feat, 'rb'))
 sizes = pickle.load(open(DATA_ROOT + '/Data/EncodedSizes.pkl', 'rb'))
-aps = pickle.load(open(DATA_ROOT + '/Data/EncodedAspectRatios.pkl', 'rb'))
+#aps = pickle.load(open(DATA_ROOT + '/Data/EncodedAspectRatios.pkl', 'rb'))
 
 all_mg_trajs = {}
 all_mg_trajs_positions = {}
@@ -478,7 +478,7 @@ for site in sites:
     all_mg_trajs_positions[site + '/%d' % i] = traj
 
 traj_average_moving_distances = {}
-traj_aps_mean = {}
+#traj_aps_mean = {}
 traj_cell_sizes_mean = {}
 traj_cell_sizes_std = {}
 traj_PC1 = {}
@@ -494,11 +494,11 @@ for t in all_mg_trajs:
     dists.append(d)
   traj_average_moving_distances[t] = np.mean(dists)
 
-  traj_sizes = [sizes[fs[ind]] for ind in trajs[t]]
+  traj_sizes = [sizes[fs[ind]][0] for ind in trajs[t]]
   traj_cell_sizes_mean[t] = np.mean(traj_sizes)
   traj_cell_sizes_std[t] = np.std(traj_sizes)
-  traj_aps = [min(aps[fs[ind]], 1/aps[fs[ind]]) for ind in trajs[t]]
-  traj_aps_mean[t] = np.mean(traj_aps)
+  #traj_aps = [min(aps[fs[ind]], 1/aps[fs[ind]]) for ind in trajs[t]]
+  #traj_aps_mean[t] = np.mean(traj_aps)
   pc1s = [dats_[ind, 0] for ind in trajs[t]]
   pc2s = [dats_[ind, 1] for ind in trajs[t]]
   traj_PC1[t] = np.mean(pc1s)
@@ -510,7 +510,7 @@ t_arrays = sorted(all_mg_trajs.keys())
 df = pd.DataFrame({'PC1': [traj_PC1[t] for t in t_arrays],
                    'PC2': [traj_PC2[t] for t in t_arrays],
                    'sizes': [traj_cell_sizes_mean[t] for t in t_arrays],
-                   'aps': [traj_aps_mean[t] for t in t_arrays],
+                   #'aps': [traj_aps_mean[t] for t in t_arrays],
                    'dists': [np.log(traj_average_moving_distances[t] * 0.72222) for t in t_arrays]}) #0.72um/h for 1pixel/27min
 
 sns.set_style('white')
@@ -613,6 +613,12 @@ for i in range(20):
   small_traj_MSDs_trimmed[i] = scipy.stats.trimboth(s_dists, 0.25)
   large_traj_MSDs_trimmed[i] = scipy.stats.trimboth(l_dists, 0.25)
 
+def forceAspect(ax,aspect=1):
+  im = ax.get_images()
+  extent =  im[0].get_extent()
+  ax.set_aspect(abs((extent[1]-extent[0])/(extent[3]-extent[2]))/aspect)
+
+
 x = np.arange(1, 20)
 y_bins = np.arange(0.9, 11.7, 0.6) # log scale
 density_map = np.zeros((20, len(y_bins) - 1))
@@ -627,22 +633,23 @@ for i in range(1, 20):
   y.append((np.log(np.mean(small_traj_MSDs[i])) - 0.9)/(y_bins[1] - y_bins[0]))
 density_map = density_map/density_map.sum(1, keepdims=True)
 
+
+sns.set_style('white')
 plt.clf()
-plt.imshow(np.transpose(density_map), cmap='Reds', origin='lower', alpha=0.5)
-plt.plot(x, np.array(y) - 0.5, 'r.-') # -0.5 is the adjustment for imshow
-plt.gca().set_xscale('log')
+fig = plt.figure()
+ax = fig.add_subplot(121)
+ax.imshow(np.transpose(density_map), cmap='Reds', origin='lower', vmin=0.01, vmax=0.3, alpha=0.5)
+ax.plot(x, np.array(y) - 0.5, '.-', c='#ba4748') # -0.5 is the adjustment for imshow
+ax.set_xscale('log')
 xticks = np.array([0.5, 1, 2, 4, 8])
 xticks_positions = xticks / (27/60)
-plt.gca().set_xticks(xticks_positions)
-plt.gca().set_xticklabels(xticks)
-plt.gca().xaxis.set_minor_locator(NullLocator())
-yticks = np.array([0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024])
+ax.set_xticks(xticks_positions)
+ax.set_xticklabels(xticks)
+ax.xaxis.set_minor_locator(NullLocator())
+yticks = np.array([0.5, 2, 8, 32, 128, 512, 2048])
 yticks_positions = (np.log(yticks / (0.325 * 0.325)) - 0.9)/(y_bins[1] - y_bins[0]) - 0.5 # same adjustment for imshow
-plt.gca().set_yticks(yticks_positions)
-plt.gca().set_yticklabels(yticks)
-plt.xlabel('Time lag (h)')
-plt.ylabel('MSD(um^2)')
-plt.savefig('/home/michaelwu/fig_MSD1.eps')
+ax.set_yticks(yticks_positions)
+ax.set_yticklabels(yticks)
 
 
 density_map = np.zeros((20, len(y_bins) - 1))
@@ -657,19 +664,14 @@ for i in range(1, 20):
   y.append((np.log(np.mean(large_traj_MSDs[i])) - 0.9)/(y_bins[1] - y_bins[0]))
 density_map = density_map/density_map.sum(1, keepdims=True)
 
-plt.clf()
-plt.imshow(np.transpose(density_map), cmap='Blues', origin='lower', alpha=0.5)
-plt.plot(x, np.array(y) - 0.5, 'b.-')
-plt.gca().set_xscale('log')
-xticks = np.array([0.5, 1, 2, 4, 8])
-xticks_positions = xticks / (27/60)
-plt.gca().set_xticks(xticks_positions)
-plt.gca().set_xticklabels(xticks)
-plt.gca().xaxis.set_minor_locator(NullLocator())
-yticks = np.array([0.5, 2, 8, 32, 128, 512])
-yticks_positions = (np.log(yticks / (0.325 * 0.325)) - 0.9)/(y_bins[1] - y_bins[0]) - 0.5
-plt.gca().set_yticks(yticks_positions)
-plt.gca().set_yticklabels(yticks)
-plt.xlabel('Time lag (h)')
-plt.ylabel('MSD(um^2)')
-plt.savefig('/home/michaelwu/fig_MSD2.eps')
+ax2 = fig.add_subplot(122)
+ax2.imshow(np.transpose(density_map), cmap='BuGn', origin='lower', vmax=0.2, alpha=0.5)
+ax2.plot(x, np.array(y) - 0.5, '.-', c='#0b6b6a')
+ax2.set_xscale('log')
+ax2.set_xticks(xticks_positions)
+ax2.set_xticklabels(xticks)
+ax2.xaxis.set_minor_locator(NullLocator())
+ax2.set_yticks(yticks_positions)
+ax2.set_yticklabels(yticks)
+plt.tight_layout()
+fig.savefig('/home/michaelwu/fig4_MSD.eps')
