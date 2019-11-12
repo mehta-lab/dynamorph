@@ -61,8 +61,10 @@ def remove_close_points(masking_points, target_points):
   return [p for i, p in masking_points if dist[i] > 5]
 
 def generate_mask(positions, positions_labels, cell_id, window, window_segmentation):
-  remove_mask = np.zeros((256, 256), dtype=int)
-  target_mask = np.zeros((256, 256), dtype=int)
+  x_size = window[0][1] - window[0][0]
+  y_size = window[1][1] - window[1][0]
+  remove_mask = np.zeros((x_size, y_size), dtype=int)
+  target_mask = np.zeros((x_size, y_size), dtype=int)
 
   for i, p in enumerate(positions):
     if not within_range(window, p):
@@ -77,9 +79,9 @@ def generate_mask(positions, positions_labels, cell_id, window, window_segmentat
   remove_mask = ((remove_mask - target_mask2) > 0) * 1
 
   remove_mask[np.where(window_segmentation[:, :, 0] == -1)] = 1
-  return remove_mask.reshape((256, 256, 1)), \
-      target_mask.reshape((256, 256, 1)), \
-      target_mask2.reshape((256, 256, 1))
+  return remove_mask.reshape((x_size, y_size, 1)), \
+      target_mask.reshape((x_size, y_size, 1)), \
+      target_mask2.reshape((x_size, y_size, 1))
 
 def instance_clustering(cell_segmentation, ct_thr=(500, 12000), instance_map=True, map_path=None, fg_thr=0.3):
   all_cells = cell_segmentation[:, :, 0] < fg_thr
@@ -149,13 +151,30 @@ def instance_clustering(cell_segmentation, ct_thr=(500, 12000), instance_map=Tru
 
   return (mg_cell_positions, non_mg_cell_positions, other_cells), positions, positions_labels
 
+def get_cell_rect_angle(tm):
+  contours, _ = cv2.findContours(tm.astype('uint8'), 1, 2)
+  areas = [cv2.contourArea(cnt) for cnt in contours]
+  rect = cv2.minAreaRect(contours[np.argmax(areas)])
+  w, h = rect[1]
+  ang = rect[2]
+  if w < h:
+    ang = ang - 90
+  return ang
 
 if __name__ == '__main__':
   
   path = '/mnt/comp_micro/Projects/CellVAE'
   sites = ['D%d-Site_%d' % (i, j) for j in range(9) for i in range(3, 6)]
   CHANNEL_MAX = [65535., 65535.]
+  align_long_axis = False
+  if align_long_axis:
+    # window size 256 * sqrt(2)
+    window_size = 364
+  else:
+    window_size = 256
+  
   for site in sites:
+    site_data = {}
     print("On site %s" % site)
     image_stack = np.load(os.path.join(path, 'Combined', '%s.npy' % site))
     segmentation_stack = np.load(os.path.join(path, 'Combined', '%s_NNProbabilities.npy' % site))
@@ -163,23 +182,27 @@ if __name__ == '__main__':
     if not os.path.exists(path + '/Data/StaticPatches/%s' % site):
       os.mkdir(path + '/Data/StaticPatches/%s' % site)
 
-    cell_positions = {}
-    cell_pixel_assignments = {}
-    for t_point in range(image_stack.shape[0]):
-      print("\tClustering time %d" % t_point)
-      cell_segmentation = segmentation_stack[t_point, :, :]
-      instance_map_path = path + '/Data/StaticPatches/%s/segmentation_%d.png' % (site, t_point)
-      res = instance_clustering(cell_segmentation, instance_map=True, map_path=instance_map_path)
+    if not os.path.exists(path + '/Data/StaticPatches/%s/cell_positions.pkl' % site) or \
+       not os.path.exists(path + '/Data/StaticPatches/%s/cell_pixel_assignments.pkl' % site):
+      cell_positions = {}
+      cell_pixel_assignments = {}
+      for t_point in range(image_stack.shape[0]):
+        print("\tClustering time %d" % t_point)
+        cell_segmentation = segmentation_stack[t_point, :, :]
+        instance_map_path = path + '/Data/StaticPatches/%s/segmentation_%d.png' % (site, t_point)
+        res = instance_clustering(cell_segmentation, instance_map=True, map_path=instance_map_path)
 
-      cell_positions[t_point] = res[0] # MG, Non-MG, Chimeric Cells
-      cell_pixel_assignments[t_point] = res[1:]
+        cell_positions[t_point] = res[0] # MG, Non-MG, Chimeric Cells
+        cell_pixel_assignments[t_point] = res[1:]
 
 
-    with open(path + '/Data/StaticPatches/%s/cell_positions.pkl' % site, 'wb') as f:
-      pickle.dump(cell_positions, f)
-    with open(path + '/Data/StaticPatches/%s/cell_pixel_assignments.pkl' % site, 'wb') as f:
-      pickle.dump(cell_pixel_assignments, f)
-
+      with open(path + '/Data/StaticPatches/%s/cell_positions.pkl' % site, 'wb') as f:
+        pickle.dump(cell_positions, f)
+      with open(path + '/Data/StaticPatches/%s/cell_pixel_assignments.pkl' % site, 'wb') as f:
+        pickle.dump(cell_pixel_assignments, f)
+    else:
+      cell_positions = pickle.load(open(path + '/Data/StaticPatches/%s/cell_positions.pkl' % site, 'rb'))
+      cell_pixel_assignments = pickle.load(open(path + '/Data/StaticPatches/%s/cell_pixel_assignments.pkl' % site, 'rb'))
 
     ### Generate time-independent static patches ###
     for t_point in range(image_stack.shape[0]):
@@ -191,12 +214,12 @@ if __name__ == '__main__':
       mg_cells, non_mg_cells, other_cells = cell_positions[t_point]
       background_pool = raw_image[np.where(cell_segmentation[:, :, 0] > 0.9)]
       background_pool = np.median(background_pool, 0)
-      background_filling = np.ones((256, 256, 1)) * background_pool.reshape((1, 1, -1))
+      background_filling = np.ones((window_size, window_size, 1)) * background_pool.reshape((1, 1, -1))
+
 
       for cell_id, cell_position in mg_cells:
-
-        window = [(cell_position[0]-128, cell_position[0]+128),
-                  (cell_position[1]-128, cell_position[1]+128)]
+        window = [(cell_position[0]-window_size//2, cell_position[0]+window_size//2),
+                  (cell_position[1]-window_size//2, cell_position[1]+window_size//2)]
         window_segmentation = select_window(cell_segmentation, window, padding=-1)
         
         remove_mask, tm, tm2 = generate_mask(positions, 
@@ -208,10 +231,33 @@ if __name__ == '__main__':
         output_mat = select_window(raw_image, window, padding=0)
         masked_output_mat = output_mat * (1 - remove_mask) + background_filling * remove_mask
 
-        output_mat = np.concatenate([output_mat, tm, tm2], 2)
-        masked_output_mat = np.concatenate([masked_output_mat, tm, tm2], 2)
-        cv2.imwrite(path + '/Data/StaticPatches/%s/%d_%d.png' % (site, t_point, cell_id), output_mat[:, :, 0]/CHANNEL_MAX[0] * 255.)
-        cv2.imwrite(path + '/Data/StaticPatches/%s/%d_%d_masked.png' % (site, t_point, cell_id), masked_output_mat[:, :, 0]/CHANNEL_MAX[0] * 255.)
-        with h5py.File(path + '/Data/StaticPatches/%s/%d_%d.h5' % (site, t_point, cell_id), 'w') as f:
+        if align_long_axis:
+          ang = get_cell_rect_angle(tm)
+
+          M = cv2.getRotationMatrix2D((window_size/2, window_size/2), ang, 1)
+          tm_ = cv2.warpAffine(tm.astype('uint8'), M, (window_size, window_size)).reshape((window_size, window_size, 1))
+          tm2_ = cv2.warpAffine(tm2.astype('uint8'), M, (window_size, window_size)).reshape((window_size, window_size, 1))
+          output_mat_ = cv2.warpAffine(output_mat.astype('uint16'), M, (window_size, window_size))
+          masked_output_mat_ = cv2.warpAffine(masked_output_mat.astype('uint16'), M, (window_size, window_size))
+
+          # HARDCODED for size to be 256 * 256
+          tm = tm_[(window_size//2 - 128):(window_size//2 + 128),
+                   (window_size//2 - 128):(window_size//2 + 128)]
+          tm2 = tm2_[(window_size//2 - 128):(window_size//2 + 128),
+                     (window_size//2 - 128):(window_size//2 + 128)]
+          output_mat = output_mat_[(window_size//2 - 128):(window_size//2 + 128),
+                                   (window_size//2 - 128):(window_size//2 + 128)]
+          masked_output_mat = masked_output_mat_[(window_size//2 - 128):(window_size//2 + 128),
+                                                 (window_size//2 - 128):(window_size//2 + 128)]
+
+        # Just to prevent backward compatibility issue cast to int64 and float 64 respectively
+        output_mat = np.concatenate([output_mat, tm, tm2], 2).astype('int64')
+        masked_output_mat = np.concatenate([masked_output_mat, tm, tm2], 2).astype('float64')
+        #cv2.imwrite(path + '/Data/StaticPatches/%s/%d_%d.png' % (site, t_point, cell_id), output_mat[:, :, 0]/CHANNEL_MAX[0] * 255.)
+        #cv2.imwrite(path + '/Data/StaticPatches/%s/%d_%d_masked.png' % (site, t_point, cell_id), masked_output_mat[:, :, 0]/CHANNEL_MAX[0] * 255.)
+        with h5py.File(path + '/Data/StaticPatches/%s/%d_%d_rotated.h5' % (site, t_point, cell_id), 'w') as f:
           f.create_dataset("mat", data=output_mat)
           f.create_dataset("masked_mat", data=masked_output_mat)
+        site_data[path + '/Data/StaticPatches/%s/%d_%d.h5' % (site, t_point, cell_id)] = {"mat": output_mat, "masked_mat": masked_output_mat}
+    with open('../%s_all_patches_rotated.pkl' % site, 'wb') as f:
+      pickle.dump(site_data, f)
