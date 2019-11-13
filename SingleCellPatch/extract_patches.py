@@ -166,7 +166,7 @@ if __name__ == '__main__':
   path = '/mnt/comp_micro/Projects/CellVAE'
   sites = ['D%d-Site_%d' % (i, j) for j in range(9) for i in range(3, 6)]
   CHANNEL_MAX = [65535., 65535.]
-  align_long_axis = False
+  align_long_axis = True
   if align_long_axis:
     # window size 256 * sqrt(2)
     window_size = 364
@@ -176,6 +176,8 @@ if __name__ == '__main__':
   for site in sites:
     site_data = {}
     print("On site %s" % site)
+    if os.path.exists('../%s_all_patches_rotated.pkl' % site):
+      continue
     image_stack = np.load(os.path.join(path, 'Combined', '%s.npy' % site))
     segmentation_stack = np.load(os.path.join(path, 'Combined', '%s_NNProbabilities.npy' % site))
 
@@ -255,9 +257,13 @@ if __name__ == '__main__':
         masked_output_mat = np.concatenate([masked_output_mat, tm, tm2], 2).astype('float64')
         #cv2.imwrite(path + '/Data/StaticPatches/%s/%d_%d.png' % (site, t_point, cell_id), output_mat[:, :, 0]/CHANNEL_MAX[0] * 255.)
         #cv2.imwrite(path + '/Data/StaticPatches/%s/%d_%d_masked.png' % (site, t_point, cell_id), masked_output_mat[:, :, 0]/CHANNEL_MAX[0] * 255.)
-        with h5py.File(path + '/Data/StaticPatches/%s/%d_%d_rotated.h5' % (site, t_point, cell_id), 'w') as f:
-          f.create_dataset("mat", data=output_mat)
-          f.create_dataset("masked_mat", data=masked_output_mat)
+        try:
+          with h5py.File(path + '/Data/StaticPatches/%s/%d_%d_rotated.h5' % (site, t_point, cell_id), 'w') as f:
+            f.create_dataset("mat", data=output_mat)
+            f.create_dataset("masked_mat", data=masked_output_mat)
+        except Exception as e:
+          print(e)
+          print("ERROR ON PATCH %s/Data/StaticPatches/%s/%d_%d_rotated.h5" % (path, site, t_point, cell_id))
         site_data[path + '/Data/StaticPatches/%s/%d_%d.h5' % (site, t_point, cell_id)] = {"mat": output_mat, "masked_mat": masked_output_mat}
     with open('../%s_all_patches_rotated.pkl' % site, 'wb') as f:
       pickle.dump(site_data, f)
