@@ -430,6 +430,29 @@ def prepare_dataset(fs, cs=[0, 1], input_shape=(128, 128), channel_max=CHANNEL_M
   dataset = TensorDataset(t.stack(tensors, 0))
   return dataset
 
+def prepare_dataset_from_collection(fs, 
+                                    cs=[0, 1], 
+                                    input_shape=(128, 128), 
+                                    channel_max=CHANNEL_MAX,
+                                    file_path='./'
+                                    file_suffix='_all_patches.pkl'):
+  tensors = {}
+  files = set([f.split('/')[-2] for f in fs])
+  for file_name in files:
+    file_dat = pickle.load(open(os.path.join(file_path, '%s%s' % (file_name, file_suffix)), 'rb')) #HARDCODED
+    fs_ = [f for f in fs if f.split('/')[-2] == file_name ]
+    for i, f_n in enumerate(fs_):
+      dat = file_dat[f_n]['masked_mat']
+      if cs is None:
+        cs = np.arange(dat.shape[2])
+      stacks = []
+      for c, m in zip(cs, channel_max):
+        c_slice = cv2.resize(np.array(dat[:, :, c]).astype(float), input_shape)
+        stacks.append(c_slice/m)
+      tensors[f_n] = t.from_numpy(np.stack(stacks, 0)).float()
+  dataset = TensorDataset(t.stack([tensors[f_n] for f_n in fs], 0))
+  return dataset
+
 def reorder_with_trajectories(dataset, relations, seed=None):
   if not seed is None:
     np.random.seed(seed)
@@ -488,13 +511,17 @@ if __name__ == '__main__':
   gpu = True
 
   ### Load Data ###
-  fs = read_file_path(DATA_ROOT + '/Data/StaticPatches')
+  #fs = read_file_path(DATA_ROOT + '/Data/StaticPatches')
   #dataset = prepare_dataset(fs, cs=cs, input_shape=input_shape, channel_max=CHANNEL_MAX)
   #dataset_mask = prepare_dataset(fs, cs=cs_mask, input_shape=input_shape, channel_max=[1., 1.])
-  
+  fs = pickle.load(open('./HiddenStateExtractor/file_paths_bkp.pkl', 'rb'))
+  dataset = prepare_dataset_from_collection(fs, cs=cs, input_shape=input_shape, channel_max=CHANNEL_MAX)
+  dataset_mask = prepare_dataset_from_collection(fs, cs=cs_mask, input_shape=input_shape, channel_max=[1., 1.])
+
+
   path = '/mnt/comp_micro/Projects/CellVAE'
-  dataset = t.load(path + '/Data/StaticPatchesAll.pt')
-  dataset_mask = t.load(path + '/Data/StaticPatchesAllMask.pt')
+  #dataset = t.load(path + '/Data/StaticPatchesAll.pt')
+  #dataset_mask = t.load(path + '/Data/StaticPatchesAllMask.pt')
   relations = pickle.load(open(path + '/Data/StaticPatchesAllRelations.pkl', 'rb'))
   
   dataset, relation_mat, inds_in_order = reorder_with_trajectories(dataset, relations, seed=123)
