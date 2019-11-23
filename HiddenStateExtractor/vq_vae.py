@@ -434,7 +434,7 @@ def prepare_dataset_from_collection(fs,
                                     cs=[0, 1], 
                                     input_shape=(128, 128), 
                                     channel_max=CHANNEL_MAX,
-                                    file_path='./'
+                                    file_path='./',
                                     file_suffix='_all_patches.pkl'):
   tensors = {}
   files = set([f.split('/')[-2] for f in fs])
