@@ -516,6 +516,18 @@ def rescale(dataset):
   new_tensor = t.stack(channel_slices, 1)
   return TensorDataset(new_tensor)
 
+def resscale_backward(tensor):
+  assert len(tensor.shape) == 4
+  assert len(CHANNEL_RANGE) == tensor.shape[1]
+  channel_slices = []
+  for i in range(len(CHANNEL_RANGE)):
+    lower_, upper_ = CHANNEL_RANGE[i]
+    channel_slice = lower_ + tensor[:, i] * (upper_ - lower_)
+    channel_slices.append(channel_slice)
+  new_tensor = t.stack(channel_slices, 1)
+  return new_tensor
+
+
 if __name__ == '__main__':
   ### Settings ###
   cs = [0, 1]
@@ -587,8 +599,8 @@ if __name__ == '__main__':
   random_inds = np.random.randint(0, len(dataset), (10,))
   for i in random_inds:
     sample = dataset[i:(i+1)][0].cuda()
-    cv2.imwrite('/home/michaelwu/sample%d_0.png' % i, enhance(sample[0, 0].cpu().data.numpy(), 0.4, 0.7)*255)
-    cv2.imwrite('/home/michaelwu/sample%d_1.png' % i, enhance(sample[0, 1].cpu().data.numpy(), 0., 0.2)*255)
+    cv2.imwrite('/home/michaelwu/sample%d_0.png' % i, enhance(sample[0, 0].cpu().data.numpy(), 0., 1.)*255)
+    cv2.imwrite('/home/michaelwu/sample%d_1.png' % i, enhance(sample[0, 1].cpu().data.numpy(), 0., 1.)*255)
     output = model(sample)[0]
-    cv2.imwrite('/home/michaelwu/sample%d_0_rebuilt.png' % i, enhance(output[0, 0].cpu().data.numpy(), 0.4, 0.7)*255)
-    cv2.imwrite('/home/michaelwu/sample%d_1_rebuilt.png' % i, enhance(output[0, 1].cpu().data.numpy(), 0., 0.2)*255)
+    cv2.imwrite('/home/michaelwu/sample%d_0_rebuilt.png' % i, enhance(output[0, 0].cpu().data.numpy(), 0., 1.)*255)
+    cv2.imwrite('/home/michaelwu/sample%d_1_rebuilt.png' % i, enhance(output[0, 1].cpu().data.numpy(), 0., 1.)*255)
