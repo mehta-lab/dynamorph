@@ -11,7 +11,8 @@ import pickle
 from torch.utils.data import TensorDataset, DataLoader
 from .naive_imagenet import DATA_ROOT, read_file_path
 
-CHANNEL_VAR = np.array([0.06, 0.09]) # After normalized to 0~1
+CHANNEL_RANGE = [(0.3, 0.8), (0., 0.6)] 
+CHANNEL_VAR = np.array([0.0475, 0.0394]) # After normalized to CHANNEL_RANGE
 CHANNEL_MAX = np.array([65535., 65535.])
 
 class VectorQuantizer(nn.Module):
@@ -503,39 +504,51 @@ def reorder_with_trajectories(dataset, relations, seed=None):
   relation_mat = relation_mat[np.array(inds_in_order)][:, np.array(inds_in_order)]
   return TensorDataset(new_tensor), relation_mat, inds_in_order
 
+def rescale(dataset):
+  tensor = dataset.tensors[0]
+  assert len(CHANNEL_RANGE) == tensor.shape[1]
+  channel_slices = []
+  for i in range(len(CHANNEL_RANGE)):
+    lower_, upper_ = CHANNEL_RANGE[i]
+    channel_slice = (tensor[:, i] - lower_) / (upper_ - lower_)
+    channel_slice = t.clamp(channel_slice, 0, 1)
+    channel_slices.append(channel_slice)
+  new_tensor = t.stack(channel_slices, 1)
+  return TensorDataset(new_tensor)
+
 if __name__ == '__main__':
   ### Settings ###
   cs = [0, 1]
   cs_mask = [2, 3]
   input_shape = (128, 128)
   gpu = True
+  path = '/mnt/comp_micro/Projects/CellVAE'
 
   ### Load Data ###
   #fs = read_file_path(DATA_ROOT + '/Data/StaticPatches')
-  #dataset = prepare_dataset(fs, cs=cs, input_shape=input_shape, channel_max=CHANNEL_MAX)
-  #dataset_mask = prepare_dataset(fs, cs=cs_mask, input_shape=input_shape, channel_max=[1., 1.])
   fs = pickle.load(open('./HiddenStateExtractor/file_paths_bkp.pkl', 'rb'))
-  dataset = prepare_dataset_from_collection(fs, cs=cs, input_shape=input_shape, channel_max=CHANNEL_MAX)
-  dataset_mask = prepare_dataset_from_collection(fs, cs=cs_mask, input_shape=input_shape, channel_max=[1., 1.])
 
+  #dataset = prepare_dataset(fs, cs=cs, input_shape=input_shape, channel_max=CHANNEL_MAX)
+  #dataset = prepare_dataset_from_collection(fs, cs=cs, input_shape=input_shape, channel_max=CHANNEL_MAX)
+  dataset = t.load('StaticPatchesAll.pt')
+  #dataset_mask = prepare_dataset(fs, cs=cs_mask, input_shape=input_shape, channel_max=[1., 1.])
+  #dataset_mask = prepare_dataset_from_collection(fs, cs=cs_mask, input_shape=input_shape, channel_max=[1., 1.])
+  dataset_mask = t.load('StaticPatchesAllMask.pt')
 
-  path = '/mnt/comp_micro/Projects/CellVAE'
-  #dataset = t.load(path + '/Data/StaticPatchesAll.pt')
-  #dataset_mask = t.load(path + '/Data/StaticPatchesAllMask.pt')
-  relations = pickle.load(open(path + '/Data/StaticPatchesAllRelations.pkl', 'rb'))
-  
+  relations = pickle.load(open(path + '/Data/StaticPatchesAllRelations.pkl', 'rb'))  
   dataset, relation_mat, inds_in_order = reorder_with_trajectories(dataset, relations, seed=123)
   dataset_mask = TensorDataset(dataset_mask.tensors[0][np.array(inds_in_order)])
+  dataset = rescale(dataset)
   
   ### Initialize Model ###
-  model = VQ_VAE(alpha=0.001)
+  model = VQ_VAE(alpha=0.0005)
   if gpu:
     model = model.cuda()
   model = train(model, 
                 dataset, 
                 relation_mat=relation_mat, 
                 mask=dataset_mask,
-                n_epochs=1000, 
+                n_epochs=500, 
                 lr=0.0001, 
                 batch_size=128, 
                 gpu=gpu)
@@ -547,10 +560,9 @@ if __name__ == '__main__':
   for i in range(500):
     sample = dataset[i:(i+1)][0].cuda()
     z_before = model.enc(sample)
-    
     indices = model.vq.encode_inputs(z_before)
     used_indices.append(np.unique(indices.cpu().data.numpy()))
-
+  print(np.unique(np.concatenate(used_indices)))
   ### Generate latent vectors ###
   z_bs = {}
   z_as = {}
@@ -566,15 +578,17 @@ if __name__ == '__main__':
     
   
   ### Visualize reconstruction ###
-  import matplotlib.pyplot as plt
-  i = 2
-  sample = dataset[i:(i+1)][0].cuda()
-  output = model(sample)[0]
-  plt.imshow(output[0, 0].cpu().data.numpy())
-  plt.imshow(sample[0, 0].cpu().data.numpy())
-  
 
+  def enhance(mat, lower_thr, upper_thr):
+    mat = np.clip(mat, lower_thr, upper_thr)
+    mat = (mat - lower_thr)/(upper_thr - lower_thr)
+    return mat
 
-  for i in range(8):
-    sample = dataset[i:(i+1)][0].cuda();cv2.imwrite('sample%d.png' % i, sample[0, 2].cpu().data.numpy()*255)
-    output = model(sample)[0];cv2.imwrite('sample_rebuilt%d.png' % i, output[0, 2].cpu().data.numpy()*255)
+  random_inds = np.random.randint(0, len(dataset), (10,))
+  for i in random_inds:
+    sample = dataset[i:(i+1)][0].cuda()
+    cv2.imwrite('/home/michaelwu/sample%d_0.png' % i, enhance(sample[0, 0].cpu().data.numpy(), 0.4, 0.7)*255)
+    cv2.imwrite('/home/michaelwu/sample%d_1.png' % i, enhance(sample[0, 1].cpu().data.numpy(), 0., 0.2)*255)
+    output = model(sample)[0]
+    cv2.imwrite('/home/michaelwu/sample%d_0_rebuilt.png' % i, enhance(output[0, 0].cpu().data.numpy(), 0.4, 0.7)*255)
+    cv2.imwrite('/home/michaelwu/sample%d_1_rebuilt.png' % i, enhance(output[0, 1].cpu().data.numpy(), 0., 0.2)*255)
