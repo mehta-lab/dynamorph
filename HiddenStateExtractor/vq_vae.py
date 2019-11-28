@@ -547,7 +547,8 @@ if __name__ == '__main__':
   #dataset_mask = prepare_dataset_from_collection(fs, cs=cs_mask, input_shape=input_shape, channel_max=[1., 1.])
   dataset_mask = t.load('StaticPatchesAllMask.pt')
 
-  relations = pickle.load(open(path + '/Data/StaticPatchesAllRelations.pkl', 'rb'))  
+  # Note that `relations` is depending on the order of fs (should not sort)
+  relations = pickle.load(open(path + '/Data/StaticPatchesAllRelations.pkl', 'rb'))
   dataset, relation_mat, inds_in_order = reorder_with_trajectories(dataset, relations, seed=123)
   dataset_mask = TensorDataset(dataset_mask.tensors[0][np.array(inds_in_order)])
   dataset = rescale(dataset)

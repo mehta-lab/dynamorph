@@ -10,6 +10,7 @@ import cv2
 import os
 import pickle
 import torch as t
+import torch
 import h5py
 import pandas as pd
 from NNsegmentation.models import Segment
@@ -23,14 +24,15 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import NullLocator
 import seaborn as sns
 import imageio
-from HiddenStateExtractor.vq_vae import VQ_VAE, CHANNEL_MAX, CHANNEL_VAR, prepare_dataset
+from sklearn.decomposition import PCA
+from scipy.stats import pearsonr, spearmanr
+from HiddenStateExtractor.vq_vae import VQ_VAE, CHANNEL_MAX, CHANNEL_VAR, CHANNEL_RANGE, prepare_dataset, rescale
 from HiddenStateExtractor.naive_imagenet import read_file_path, DATA_ROOT
 from HiddenStateExtractor.morphology_clustering import select_clean_trajecteories, Kmean_on_short_trajs
 from HiddenStateExtractor.movement_clustering import save_traj
 import statsmodels.api as sm
 import scipy
 
-RAW_DATA_PATH = '/mnt/comp_micro/Projects/CellVAE/Combined'
 color_mg = np.array([240, 94, 56], dtype='uint8')
 color_nonmg = np.array([66, 101, 251], dtype='uint8')
 color_bg = np.array([150, 150, 150], dtype='uint8')
@@ -38,25 +40,35 @@ color_fg = (color_mg * 0.7 + color_nonmg * 0.3).astype('uint8')
 sites = ['D%d-Site_%d' % (i, j) for j in range(9) for i in range(3, 6)]
 
 def enhance_contrast(mat, a=1.5, b=-10000):
-  mat2 = cv2.addWeighted(mat, 1.5, mat, 0, -10000)
+  mat2 = cv2.addWeighted(mat, a, mat, 0, b)
   return mat2
 
-def plot_patch(sample_path, out_path, boundary=False, channel=0):
-  with h5py.File(sample_path, 'r') as f:
-    mat = np.array(f['masked_mat'][:, :, channel].astype('uint16'))
-    mask = np.array(f['masked_mat'][:, :, 2].astype('uint16'))
-  mat2 = enhance_contrast(mat, 1.5, -10000)
-  cv2.imwrite(out_path, mat2)
+def plot_patch(mat, out_path):
+  if mat.__class__ is tuple:
+    mat = mat[0]
+  mat = mat.cpu().numpy()
+  mat = mat[0] * 65535
+  mat2 = np.clip(enhance_contrast(mat, 1.5, -25000), 0, 65535).astype('uint16')
+  cv2.imwrite(out_path, mat2.astype('uint16'))
 
 ############################################################################################################
 
+# Fig 2 A1
 # Raw input (phase channel)
+RAW_DATA_PATH = '/mnt/comp_micro/Projects/CellVAE/Combined'
 raw_input_stack = np.load(RAW_DATA_PATH + '/D5-Site_0.npy')
 raw_input = raw_input_stack[0, :, :, 0:1]
 cv2.imwrite('/home/michaelwu/fig2_raw.png', raw_input)
-# raw_movie = [cv2.resize(slic[:, :, 0], (512, 512)) for slic in raw_input_stack]
-# imageio.mimsave('/home/michaelwu/sample_movie.gif', np.stack(raw_movie, 0))
 
+##########
+
+# Supp Video 1
+raw_movie = [cv2.resize(slic[:, :, 0], (512, 512)) for slic in raw_input_stack]
+imageio.mimsave('/home/michaelwu/supp_video_sample_movie.gif', np.stack(raw_movie, 0))
+
+##########
+
+# Fig 2 A2
 # Human annotations of (background, mg, non-mg)
 annotations = np.load(RAW_DATA_PATH + '/D5-Site_0_Annotations.npy')
 annotations = annotations[0]
@@ -68,20 +80,9 @@ mat[np.where(annotations == 2)[:2]] = (1 - alpha) * mat[np.where(annotations == 
 mat[np.where(annotations == 1)[:2]] = (1 - alpha) * mat[np.where(annotations == 1)[:2]] + alpha * color_bg.reshape((1, 3))
 cv2.imwrite('/home/michaelwu/fig2_annotations.png', mat)
 
-# Random Forest prediction
-RF_predictions_stack = np.load(RAW_DATA_PATH + '/D5-Site_0_RFProbabilities.npy')
-RF_predictions = RF_predictions_stack[0]
-RF_bg = RF_predictions[:, :, 0:1]
-RF_fg = RF_predictions[:, :, 1:2] + RF_predictions[:, :, 2:3]
-mat = np.zeros((raw_input.shape[0], raw_input.shape[1], 3), dtype='uint8')
-mat[:, :] = (raw_input / 256).astype('uint8')
-alpha = 0.7
-positions = np.where((RF_bg > 0.5))[:2]
-mat[positions] = (1 - alpha) * mat[positions] + alpha * color_bg.reshape((1, 3))
-positions = np.where((RF_fg > 0.5))[:2]
-mat[positions] = (1 - alpha) * mat[positions] + alpha * color_fg.reshape((1, 3))
-cv2.imwrite('/home/michaelwu/fig2_rf_predictions.png', mat)
+##########
 
+# Fig 2 A3
 # U-Net prediction
 NN_predictions_stack = np.load(RAW_DATA_PATH + '/D5-Site_0_NNProbabilities.npy')
 NN_predictions = NN_predictions_stack[0]
@@ -95,49 +96,62 @@ mg_positions = np.where(NN_predictions[:, :, 1] > 0.5)[:2]
 mat[mg_positions] = (mat * (1 - (alpha * NN_predictions[:, :, 1:2])) + np.ones_like(mat) * color_mg.reshape((1, 1, 3)) * (alpha * NN_predictions[:, :, 1:2]))[mg_positions]
 cv2.imwrite('/home/michaelwu/fig2_nn_predictions.png', mat)
 
-# raw_input_off = raw_input_stack[20, :, :, 0:1]
-# RF_predictions_off = RF_predictions_stack[20]
-# cv2.imwrite('/home/michaelwu/off_fig2_raw.png', raw_input_off)
+##########
 
-# mat = np.zeros((raw_input_off.shape[0], raw_input_off.shape[1], 3), dtype='uint8')
-# mat[:, :] = (raw_input_off / 256).astype('uint8')
-# alpha = 0.7
-# mg_positions = np.where(RF_predictions_off[:, :, 1] > 0.5)[:2]
-# nonmg_positions = np.where(RF_predictions_off[:, :, 2] > 0.5)[:2]
-# mat = mat * (1 - (alpha * RF_predictions_off[:, :, 0:1])) + np.ones_like(mat) * color_bg.reshape((1, 1, 3)) * (alpha * RF_predictions_off[:, :, 0:1])
-# mat[mg_positions] = (mat * (1 - (alpha * RF_predictions_off[:, :, 1:2])) + np.ones_like(mat) * color_mg.reshape((1, 1, 3)) * (alpha * RF_predictions_off[:, :, 1:2]))[mg_positions]
-# mat[nonmg_positions] = (mat * (1 - (alpha * RF_predictions_off[:, :, 2:3])) + np.ones_like(mat) * color_nonmg.reshape((1, 1, 3)) * (alpha * RF_predictions_off[:, :, 2:3]))[nonmg_positions]
-# cv2.imwrite('/home/michaelwu/off_fig2_rf_predictions_annotation_only.png', mat)
+# Supp Fig 1 RF
+raw_input_off = raw_input_stack[20, :, :, 0:1]
+RF_predictions_stack = np.load(RAW_DATA_PATH + '/D5-Site_0_RFProbabilities.npy')
+RF_predictions_off = RF_predictions_stack[20]
+cv2.imwrite('/home/michaelwu/supp_fig1_raw.png', raw_input_off)
 
-# model = Segment(input_shape=(256, 256, 2), 
-#                 unet_feat=32,
-#                 fc_layers=[64, 32],
-#                 n_classes=3,
-#                 model_path='./NNsegmentation/temp_save')
-# model.load(model.model_path + '/final.h5')
-# NN_predictions_off = predict_whole_map(raw_input_stack[20:21], model, n_supp=20)[0]
-# mat = np.zeros((raw_input_off.shape[0], raw_input_off.shape[1], 3), dtype='uint8')
-# mat[:, :] = (raw_input_off / 256).astype('uint8')
-# alpha = 0.7
-# mg_positions = np.where(NN_predictions_off[:, :, 1] > 0.5)[:2]
-# nonmg_positions = np.where(NN_predictions_off[:, :, 2] > 0.5)[:2]
-# mat = mat * (1 - (alpha * NN_predictions_off[:, :, 0:1])) + np.ones_like(mat) * color_bg.reshape((1, 1, 3)) * (alpha * NN_predictions_off[:, :, 0:1])
-# mat[mg_positions] = (mat * (1 - (alpha * NN_predictions_off[:, :, 1:2])) + np.ones_like(mat) * color_mg.reshape((1, 1, 3)) * (alpha * NN_predictions_off[:, :, 1:2]))[mg_positions]
-# mat[nonmg_positions] = (mat * (1 - (alpha * NN_predictions_off[:, :, 2:3])) + np.ones_like(mat) * color_nonmg.reshape((1, 1, 3)) * (alpha * NN_predictions_off[:, :, 2:3]))[nonmg_positions]
-# cv2.imwrite('/home/michaelwu/off_fig2_nn_predictions.png', mat)
+mat = np.zeros((raw_input_off.shape[0], raw_input_off.shape[1], 3), dtype='uint8')
+mat[:, :] = (raw_input_off / 256).astype('uint8')
+alpha = 0.7
+mg_positions = np.where(RF_predictions_off[:, :, 1] > 0.5)[:2]
+nonmg_positions = np.where(RF_predictions_off[:, :, 2] > 0.5)[:2]
+mat = mat * (1 - (alpha * RF_predictions_off[:, :, 0:1])) + np.ones_like(mat) * color_bg.reshape((1, 1, 3)) * (alpha * RF_predictions_off[:, :, 0:1])
+mat[mg_positions] = (mat * (1 - (alpha * RF_predictions_off[:, :, 1:2])) + np.ones_like(mat) * color_mg.reshape((1, 1, 3)) * (alpha * RF_predictions_off[:, :, 1:2]))[mg_positions]
+mat[nonmg_positions] = (mat * (1 - (alpha * RF_predictions_off[:, :, 2:3])) + np.ones_like(mat) * color_nonmg.reshape((1, 1, 3)) * (alpha * RF_predictions_off[:, :, 2:3]))[nonmg_positions]
+cv2.imwrite('/home/michaelwu/supp_fig1_rf_predictions_annotation_only.png', mat)
 
-# model.load(model.model_path + '/stage0_0.h5')
-# NN_predictions_off2 = predict_whole_map(raw_input_stack[20:21], model, n_supp=20)[0]
-# mat = np.zeros((raw_input_off.shape[0], raw_input_off.shape[1], 3), dtype='uint8')
-# mat[:, :] = (raw_input_off / 256).astype('uint8')
-# alpha = 0.7
-# mg_positions = np.where(NN_predictions_off2[:, :, 1] > 0.5)[:2]
-# nonmg_positions = np.where(NN_predictions_off2[:, :, 2] > 0.5)[:2]
-# mat = mat * (1 - (alpha * NN_predictions_off2[:, :, 0:1])) + np.ones_like(mat) * color_bg.reshape((1, 1, 3)) * (alpha * NN_predictions_off2[:, :, 0:1])
-# mat[mg_positions] = (mat * (1 - (alpha * NN_predictions_off2[:, :, 1:2])) + np.ones_like(mat) * color_mg.reshape((1, 1, 3)) * (alpha * NN_predictions_off2[:, :, 1:2]))[mg_positions]
-# mat[nonmg_positions] = (mat * (1 - (alpha * NN_predictions_off2[:, :, 2:3])) + np.ones_like(mat) * color_nonmg.reshape((1, 1, 3)) * (alpha * NN_predictions_off2[:, :, 2:3]))[nonmg_positions]
-# cv2.imwrite('/home/michaelwu/off_fig2_nn_predictions_annotation_only.png', mat)
+##########
 
+# Supp Fig 1 NN-only
+model = Segment(input_shape=(256, 256, 2), 
+                unet_feat=32,
+                fc_layers=[64, 32],
+                n_classes=3,
+                model_path='./NNsegmentation/temp_save')
+model.load(model.model_path + '/stage0_0.h5')
+NN_predictions_off2 = predict_whole_map(raw_input_stack[20:21], model, n_supp=20)[0]
+mat = np.zeros((raw_input_off.shape[0], raw_input_off.shape[1], 3), dtype='uint8')
+mat[:, :] = (raw_input_off / 256).astype('uint8')
+alpha = 0.7
+mg_positions = np.where(NN_predictions_off2[:, :, 1] > 0.5)[:2]
+nonmg_positions = np.where(NN_predictions_off2[:, :, 2] > 0.5)[:2]
+mat = mat * (1 - (alpha * NN_predictions_off2[:, :, 0:1])) + np.ones_like(mat) * color_bg.reshape((1, 1, 3)) * (alpha * NN_predictions_off2[:, :, 0:1])
+mat[mg_positions] = (mat * (1 - (alpha * NN_predictions_off2[:, :, 1:2])) + np.ones_like(mat) * color_mg.reshape((1, 1, 3)) * (alpha * NN_predictions_off2[:, :, 1:2]))[mg_positions]
+mat[nonmg_positions] = (mat * (1 - (alpha * NN_predictions_off2[:, :, 2:3])) + np.ones_like(mat) * color_nonmg.reshape((1, 1, 3)) * (alpha * NN_predictions_off2[:, :, 2:3]))[nonmg_positions]
+cv2.imwrite('/home/michaelwu/supp_fig1_nn_predictions_annotation_only.png', mat)
+
+##########
+
+# Supp Fig 1 NN-combined
+model.load(model.model_path + '/final.h5')
+NN_predictions_off = predict_whole_map(raw_input_stack[20:21], model, n_supp=20)[0]
+mat = np.zeros((raw_input_off.shape[0], raw_input_off.shape[1], 3), dtype='uint8')
+mat[:, :] = (raw_input_off / 256).astype('uint8')
+alpha = 0.7
+mg_positions = np.where(NN_predictions_off[:, :, 1] > 0.5)[:2]
+nonmg_positions = np.where(NN_predictions_off[:, :, 2] > 0.5)[:2]
+mat = mat * (1 - (alpha * NN_predictions_off[:, :, 0:1])) + np.ones_like(mat) * color_bg.reshape((1, 1, 3)) * (alpha * NN_predictions_off[:, :, 0:1])
+mat[mg_positions] = (mat * (1 - (alpha * NN_predictions_off[:, :, 1:2])) + np.ones_like(mat) * color_mg.reshape((1, 1, 3)) * (alpha * NN_predictions_off[:, :, 1:2]))[mg_positions]
+mat[nonmg_positions] = (mat * (1 - (alpha * NN_predictions_off[:, :, 2:3])) + np.ones_like(mat) * color_nonmg.reshape((1, 1, 3)) * (alpha * NN_predictions_off[:, :, 2:3]))[nonmg_positions]
+cv2.imwrite('/home/michaelwu/supp_fig1_nn_predictions.png', mat)
+
+##########
+
+# Fig 2 B1
 # Instance separation
 cells, positions, positions_labels = instance_clustering(NN_predictions, fg_thr=0.2)
 mg_cell_positions, non_mg_cell_positions, other_cells = cells
@@ -160,6 +174,9 @@ for cell_id, mean_pos in other_cells:
 cv2.imwrite('/home/michaelwu/fig2_nn_predictions_instance.png', mat)
 cv2.imwrite('/home/michaelwu/fig2_nn_predictions_instance_small.png', mat[:940, :940])
 
+##########
+
+# Fig 2 B2 - left
 # Generate bounding boxes
 mat = np.zeros((raw_input.shape[0], raw_input.shape[1], 3), dtype='uint8')
 mat[:, :] = (raw_input / 256).astype('uint8')
@@ -188,9 +205,11 @@ for cell_id, mean_pos in non_mg_cell_positions:
   mat = add_box(mat, mean_pos, color_nonmg)
 for cell_id, mean_pos in mg_cell_positions:
   mat = add_box(mat, mean_pos, color_mg)
-cv2.imwrite('/home/michaelwu/fig2_nn_predictions_boxed.png', mat)
 cv2.imwrite('/home/michaelwu/fig2_nn_predictions_boxed_small.png', mat[:940, :940])
 
+##########
+
+# Fig 2 B2 - right
 # Generate boxed samples
 np.random.seed(123)
 mg_inds = np.random.choice(np.arange(len(mg_cell_positions)), (30,), replace=False)
@@ -210,6 +229,9 @@ for i in non_mg_inds:
                 (mean_pos[1] - 128):(mean_pos[1] + 128)]
     cv2.imwrite('/home/michaelwu/fig2_nn_predictions_boxed_non_mg_%d.png' % non_mg_cell_positions[i][0], patch)
 
+##########
+
+# Fig 2 C1
 # Frame Matching
 frame0 = raw_input_stack[0, :, :, 0:1]
 frame1 = raw_input_stack[1, :, :, 0:1]
@@ -302,6 +324,9 @@ for i in np.random.permutation(np.arange(len(non_mg_matchings[0]))):
 cv2.imwrite('/home/michaelwu/fig2_traj_matching_f0.png', mat0[:940, :940])
 cv2.imwrite('/home/michaelwu/fig2_traj_matching_f1.png', mat1[:940, :940])
 
+##########
+
+# Fig 2 C2
 # Sample plotted traj zoomed in
 mg_trajectories, mg_trajectories_positions = pickle.load(open(os.path.split(RAW_DATA_PATH)[0] + '/Data/DynamicPatches/D5-Site_0/mg_traj.pkl', 'rb'))
 non_mg_trajectories, non_mg_trajectories_positions = pickle.load(open(os.path.split(RAW_DATA_PATH)[0] + '/Data/DynamicPatches/D5-Site_0/non_mg_traj.pkl', 'rb'))
@@ -311,23 +336,23 @@ sample_non_mg_traj_positions = non_mg_trajectories_positions[0]
 sample_mg_traj = mg_trajectories[2]
 sample_mg_traj_positions = mg_trajectories_positions[2]
 
-
-
 for i in [0, 1, 4, 8, 16]:
   mat = raw_input_stack[i][:, :, 0]
   center = sample_mg_traj_positions[i]
   mg_mat = mat[center[0]-128:center[0]+128,
                center[1]-128:center[1]+128]
-  cv2.imwrite('/home/michaelwu/fig2_sample_mg_traj_%d.png' % i, enhance_contrast(mg_mat))
+  cv2.imwrite('/home/michaelwu/fig2_sample_mg_traj_%d.png' % i, enhance_contrast(mg_mat, 1.5, -10000))
   center = sample_non_mg_traj_positions[i]
   non_mg_mat = mat[center[0]-128:center[0]+128,
                    center[1]-128:center[1]+128]
-  cv2.imwrite('/home/michaelwu/fig2_sample_non_mg_traj_%d.png' % i, enhance_contrast(non_mg_mat))
+  cv2.imwrite('/home/michaelwu/fig2_sample_non_mg_traj_%d.png' % i, enhance_contrast(non_mg_mat, 1.5, -10000))
 
+##########
 
+# Supp Video 2
 # Sample trajectories
 np.random.seed(123)
-inds = np.random.choice(np.arange(len(mg_trajectories_positions)), (5,), replace=False)
+inds = [39, 15, 30, 43]
 for i in inds:
   save_traj('D5-Site_0/%d' % i, '/home/michaelwu/sample_traj_%d.gif' % i)
   stacks = []
@@ -337,41 +362,62 @@ for i in inds:
       stacks.append(f["masked_mat"][:, :, 0])
   imageio.mimsave('/home/michaelwu/sample_traj_movie_%d.gif' % i, np.stack(stacks, 0))
 
-
-
-
 ############################################################################################################
 
+# Fig 3 A
 # VAE illustration
 cs = [0, 1]
 input_shape = (128, 128)
-gpu = False
-fs = read_file_path(DATA_ROOT + '/Data/StaticPatches')
-np.random.seed(1234)
-sample_fs = np.random.choice(fs, (4,), replace=False)
-dataset = prepare_dataset(sample_fs, cs=cs, input_shape=input_shape, channel_max=CHANNEL_MAX)
+gpu = True
+# Order for `dataset`, `relations`
+fs_ = pickle.load(open('./HiddenStateExtractor/file_paths_bkp.pkl', 'rb'))
+# Order for `trajs`
+fs = sorted(pickle.load(open('./HiddenStateExtractor/file_paths_bkp.pkl', 'rb')))
+dataset = torch.load('StaticPatchesAll.pt')
+dataset = rescale(dataset)
 model = VQ_VAE(alpha=0.0005, gpu=gpu)
-model.load_state_dict(t.load('./HiddenStateExtractor/save_0005.pt', map_location='cpu'))
-for i in range(4):
-  sample = dataset[i:(i+1)][0]
+model = model.cuda()
+model.load_state_dict(torch.load('./HiddenStateExtractor/save_0005_bkp4.pt'))
+
+sample_fs = ['/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D3-Site_4/1_45.h5',
+             '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D3-Site_6/3_20.h5',
+             '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D4-Site_7/50_34.h5',
+             '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D5-Site_8/47_14.h5']
+
+for i, f in enumerate(sample_fs):
+  sample_ind = fs_.index(f)
+  sample = dataset[sample_ind:(sample_ind+1)][0].cuda()
   output = model(sample)[0]
-  inp = sample.data.numpy()
-  out = output.data.numpy()
+  inp = sample.cpu().data.numpy()
+  out = output.cpu().data.numpy()
   input_phase = (inp[0, 0] * 65535).astype('uint16')
   output_phase = (out[0, 0] * 65535).astype('uint16')
   input_retardance = (inp[0, 1] * 65535).astype('uint16')
   output_retardance = (out[0, 1] * 65535).astype('uint16')
-  cv2.imwrite('/home/michaelwu/fig3_VAE_pair%d_input_phase.png' % i, enhance_contrast(input_phase))
-  cv2.imwrite('/home/michaelwu/fig3_VAE_pair%d_output_phase.png' % i, enhance_contrast(output_phase))
-  cv2.imwrite('/home/michaelwu/fig3_VAE_pair%d_input_retardance.png' % i, enhance_contrast(input_retardance))
-  cv2.imwrite('/home/michaelwu/fig3_VAE_pair%d_output_retardance.png' % i, enhance_contrast(output_retardance))
+  cv2.imwrite('/home/michaelwu/fig3_VAE_pair%d_input_phase.png' % i, enhance_contrast(input_phase, 1.5, -25000))
+  cv2.imwrite('/home/michaelwu/fig3_VAE_pair%d_output_phase.png' % i, enhance_contrast(output_phase, 1.5, -25000))
+  cv2.imwrite('/home/michaelwu/fig3_VAE_pair%d_input_retardance.png' % i, enhance_contrast(input_retardance, 3, 0))
+  cv2.imwrite('/home/michaelwu/fig3_VAE_pair%d_output_retardance.png' % i, enhance_contrast(output_retardance, 3, 0))
 
+##########
 
+# Fig 3 B(PCA) & C
 # PCA on VAE latent space
-feat = 'save_0005_before'
-fs = sorted(pickle.load(open('./HiddenStateExtractor/file_paths_bkp.pkl', 'rb')))
+z_bs = {}
+z_as = {}
+for i in range(len(dataset)):
+  sample = dataset[i:(i+1)][0].cuda()
+  z_b = model.enc(sample)
+  z_a, _, _ = model.vq(z_b)
+  f_n = fs_[i]
+  z_as[f_n] = z_a.cpu().data.numpy()
+  z_bs[f_n] = z_b.cpu().data.numpy()
+dats = np.stack([z_bs[f] for f in fs], 0).reshape((len(dataset), -1))
+pca = PCA(0.5)
+dats_ = pca.fit_transform(dats)
+with open('./save_00005_bkp4_latent_space_PCAed.pkl', 'wb') as f:
+  pickle.dump(dats_, f)
 trajs = pickle.load(open('./HiddenStateExtractor/trajectory_in_inds.pkl', 'rb'))
-dats_ = pickle.load(open('./HiddenStateExtractor/%s_PCA.pkl' % feat, 'rb'))
 sizes = pickle.load(open(DATA_ROOT + '/Data/EncodedSizes.pkl', 'rb'))
 ss = [sizes[f][0] for f in fs]
 
@@ -383,12 +429,16 @@ plt.clf()
 sns.set_style('white')
 fig, ax = plt.subplots()
 ax.scatter(dats_[:, 0], dats_[:, 1], c=colors, s=0.5, edgecolors='none')
+rec1 = plt.Rectangle((-2, 0), 6, 2, color=(228/256, 34/256, 86/256, 0.7), fc='none')
+rec2 = plt.Rectangle((0, -2), 2, 6, color=(0/256, 137/256, 123/256, 0.7), fc='none')
+ax.add_patch(rec1)
+ax.add_patch(rec2)
 
-traj_samples = ['D4-Site_0/18', 'D3-Site_7/62', 'D3-Site_2/24', 'D5-Site_7/50']
+traj_samples = ['D4-Site_0/18', 'D3-Site_7/62', 'D3-Site_2/24', 'D3-Site_0/38']
 selected_frames = [np.array([1, 7, 16, 27, 43]),
                    np.array([1, 7, 12, 16, 21]),
                    np.array([0, 10, 20, 30, 40]),
-                   np.array([1, 10, 20, 30, 40])]
+                   np.array([1, 10, 20, 30, 43])]
 cmap2 = matplotlib.cm.get_cmap('tab10')
 colors2 = [cmap2.colors[1],
            cmap2.colors[5], 
@@ -411,13 +461,14 @@ for ct, (t, inds, c) in enumerate(zip(traj_samples, selected_frames, colors2)):
              head_width=0.2, 
              head_length=0.3)
   for j, ind in enumerate(order[inds]):
-    plot_patch(fs[ind], '/home/michaelwu/fig3_state_transition_sample_%d_%d.png' % (ct, j))
+    f = fs[ind]
+    sample_ind = fs_.index(f)
+    plot_patch(dataset[sample_ind], '/home/michaelwu/fig3_state_transition_sample_%d_%d.png' % (ct, j))
 
-rec1 = plt.Rectangle((-2, 0), 10, 2, color='#e42256', fc='none')
-rec2 = plt.Rectangle((0, -5), 2, 10, color='#00897b', fc='none')
-ax.add_patch(rec1)
-ax.add_patch(rec2)
+plt.xlim(-6, 8)
+plt.ylim(-4, 8)
 plt.savefig('/home/michaelwu/fig3_morphology_pca.eps')
+plt.savefig('/home/michaelwu/fig3_morphology_pca.png', dpi=300)
 
 plt.clf()
 fig, ax = plt.subplots(figsize=(6, 1))
@@ -427,47 +478,73 @@ cb1 = matplotlib.colorbar.ColorbarBase(ax, cmap='BuPu',
                                        orientation='horizontal')
 plt.savefig('/home/michaelwu/fig3_morphology_pca_cbar.eps')
 
+##########
+
+# Fig 3 B(patches)
 # PC1&2 samples
-bins_PC1 = {(i, i+0.5): [] for i in np.arange(-2, 8, 0.5)}
-bins_PC2 = {(i, i+0.5): [] for i in np.arange(-5, 5, 0.5)}
-for i in range(84884):
-  val0 = dats_[i, 0] 
-  val1 = dats_[i, 1]
-  for b in bins_PC1:
-    if val0 > b[0] and val0 <= b[1] and val1 > 0. and val1 <= 2.:
-      bins_PC1[b].append(fs[i])
-  for b in bins_PC2:
-    if val0 > 0. and val0 <= 1. and val1 > b[0] and val1 <= b[1]:
-      bins_PC2[b].append(fs[i])
+# bins_PC1 = {(i, i+0.5): [] for i in np.arange(-2, 4, 0.5)}
+# bins_PC2 = {(i, i+0.5): [] for i in np.arange(-2, 4, 0.5)}
+# for i in range(84884):
+#   val0 = dats_[i, 0] 
+#   val1 = dats_[i, 1]
+#   for b in bins_PC1:
+#     if val0 > b[0] and val0 <= b[1] and val1 > 0. and val1 <= 2.:
+#       bins_PC1[b].append(fs[i])
+#   for b in bins_PC2:
+#     if val0 > 0. and val0 <= 1. and val1 > b[0] and val1 <= b[1]:
+#       bins_PC2[b].append(fs[i])
+
+# os.mkdir('/home/michaelwu/fig3_PC1')
+# for i, b in enumerate(sorted(bins_PC1.keys())):
+#   samples = np.random.choice(bins_PC1[b], (5,), replace=False)
+#   prefix = 'b%d' % i
+#   for s in samples:
+#     name = s.split('/')[-2:]
+#     name = prefix + '_' + name[0] + '_' + name[1].split('.')[0] + '.png'
+#     plot_patch(s, '/home/michaelwu/fig3_PC1/%s' % name)
+
+# os.mkdir('/home/michaelwu/fig3_PC2')
+# for i, b in enumerate(sorted(bins_PC2.keys())):
+#   samples = np.random.choice(bins_PC2[b], (5,), replace=False)
+#   prefix = 'b%d' % i
+#   for s in samples:
+#     name = s.split('/')[-2:]
+#     name = prefix + '_' + name[0] + '_' + name[1].split('.')[0] + '.png'
+#     plot_patch(s, '/home/michaelwu/fig3_PC2/%s' % name)
 
 sample_PC1s = [
-    '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D5-Site_2/39_4.h5',
-    '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D4-Site_0/30_47.h5',
-    '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D5-Site_0/14_22.h5',
-    '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D5-Site_6/13_24.h5',
-    '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D3-Site_4/28_44.h5'
+    '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D5-Site_2/43_57.h5',
+    '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D3-Site_5/19_67.h5',
+    '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D3-Site_6/51_55.h5',
+    '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D4-Site_0/29_25.h5',
+    '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D5-Site_1/3_15.h5'
 ]
 sample_PC2s = [
-    '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D5-Site_8/44_67.h5',
-    '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D3-Site_0/47_60.h5',
-    '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D5-Site_3/23_0.h5',
-    '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D3-Site_4/38_66.h5',
-    '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D3-Site_4/45_1.h5'
+    '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D5-Site_7/48_28.h5',
+    '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D4-Site_5/19_21.h5',
+    '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D5-Site_1/20_24.h5',
+    '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D4-Site_7/28_14.h5',
+    '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D5-Site_4/19_89.h5'
 ]
 
 for i, sample in enumerate(sample_PC1s):
-  plot_patch(sample, '/home/michaelwu/fig3_samples_PC1_%d.png' % i)
+  sample_ind = fs_.index(sample)
+  plot_patch(dataset[sample_ind], '/home/michaelwu/fig3_samples_PC1_%d.png' % i)
 for i, sample in enumerate(sample_PC2s):
-  plot_patch(sample, '/home/michaelwu/fig3_samples_PC2_%d.png' % i)
+  sample_ind = fs_.index(sample)
+  plot_patch(dataset[sample_ind], '/home/michaelwu/fig3_samples_PC2_%d.png' % i)
 
-################################################################################################
+############################################################################################################
 
+# Fig 4 A
+# KDE plot of PC1/speed
 feat = 'save_0005_before'
+dataset = torch.load('StaticPatchesAll.pt')
+fs_ = pickle.load(open('./HiddenStateExtractor/file_paths_bkp.pkl', 'rb'))
 fs = sorted(pickle.load(open('./HiddenStateExtractor/file_paths_bkp.pkl', 'rb')))
 trajs = pickle.load(open('./HiddenStateExtractor/trajectory_in_inds.pkl', 'rb'))
-dats_ = pickle.load(open('./HiddenStateExtractor/%s_PCA.pkl' % feat, 'rb'))
+dats_ = pickle.load(open('./save_00005_bkp4_latent_space_PCAed.pkl', 'rb'))
 sizes = pickle.load(open(DATA_ROOT + '/Data/EncodedSizes.pkl', 'rb'))
-#aps = pickle.load(open(DATA_ROOT + '/Data/EncodedAspectRatios.pkl', 'rb'))
 
 all_mg_trajs = {}
 all_mg_trajs_positions = {}
@@ -478,13 +555,9 @@ for site in sites:
     all_mg_trajs_positions[site + '/%d' % i] = traj
 
 traj_average_moving_distances = {}
-#traj_aps_mean = {}
 traj_cell_sizes_mean = {}
-traj_cell_sizes_std = {}
 traj_PC1 = {}
 traj_PC2 = {}
-traj_PC1_std = {}
-traj_PC2_std = {}
 for t in all_mg_trajs:
   t_keys = sorted(all_mg_trajs[t].keys())
   dists = []
@@ -493,31 +566,24 @@ for t in all_mg_trajs:
                        all_mg_trajs_positions[t][t_keys[t_point]], ord=2)
     dists.append(d)
   traj_average_moving_distances[t] = np.mean(dists)
-
   traj_sizes = [sizes[fs[ind]][0] for ind in trajs[t]]
   traj_cell_sizes_mean[t] = np.mean(traj_sizes)
-  traj_cell_sizes_std[t] = np.std(traj_sizes)
-  #traj_aps = [min(aps[fs[ind]], 1/aps[fs[ind]]) for ind in trajs[t]]
-  #traj_aps_mean[t] = np.mean(traj_aps)
   pc1s = [dats_[ind, 0] for ind in trajs[t]]
   pc2s = [dats_[ind, 1] for ind in trajs[t]]
   traj_PC1[t] = np.mean(pc1s)
   traj_PC2[t] = np.mean(pc2s)
-  traj_PC1_std[t] = np.std(pc1s)
-  traj_PC2_std[t] = np.std(pc2s)
 
 t_arrays = sorted(all_mg_trajs.keys())
 df = pd.DataFrame({'PC1': [traj_PC1[t] for t in t_arrays],
                    'PC2': [traj_PC2[t] for t in t_arrays],
                    'sizes': [traj_cell_sizes_mean[t] for t in t_arrays],
-                   #'aps': [traj_aps_mean[t] for t in t_arrays],
                    'dists': [np.log(traj_average_moving_distances[t] * 0.72222) for t in t_arrays]}) #0.72um/h for 1pixel/27min
 
 sns.set_style('white')
 bins_y = np.linspace(0.1, 4.3, 20)
-bins_x = np.linspace(-6, 7, 20)
+bins_x = np.linspace(-4, 4, 20)
 plt.clf()
-g = sns.JointGrid(x='PC1', y='dists', data=df, ylim=(0.1, 4.3), xlim=(-6, 7))
+g = sns.JointGrid(x='PC1', y='dists', data=df, ylim=(0.1, 4.3), xlim=(-4, 4))
 _ = g.ax_marg_x.hist(df['PC1'], bins=bins_x)
 _ = g.ax_marg_y.hist(df['dists'], bins=bins_y, orientation='horizontal')
 g.plot_joint(sns.kdeplot, cmap="Blues", shade=True)
@@ -526,22 +592,26 @@ g.ax_joint.set_yticks(np.log(y_ticks))
 g.ax_joint.set_yticklabels(y_ticks)
 g.set_axis_labels('', '')
 plt.savefig('/home/michaelwu/fig4_correlation_kde.eps')
+plt.savefig('/home/michaelwu/fig4_correlation_kde.png', dpi=300)
 
+##########
 
+# Fig 4 B
+# Sample traj
 traj_represented = ['D4-Site_8/16', 'D4-Site_1/14', 'D4-Site_0/15', 
                     'D4-Site_5/1', 'D3-Site_3/56', 'D5-Site_4/33']
 colors = [(53, 52, 205)] * 3 + [(176, 177, 0)] * 3
 for t, c in zip(traj_represented, colors):
   traj = all_mg_trajs[t]
-  with h5py.File(fs[trajs[t][0]], 'r') as f:
-    frame0 = np.array(f['masked_mat'][:, :, 0]).astype('uint16')
-  frame0 = enhance_contrast(frame0)
+  frame0_name = fs[trajs[t][0]]
+  frame0 = dataset[fs_.index(frame0_name)][0][0].cpu().numpy()
+  frame0 = np.clip(enhance_contrast(frame0 * 65535, 1.5, -25000), 0, 65535)
   mat = np.zeros((frame0.shape[0], frame0.shape[1], 3), dtype='uint8')
   mat[:, :] = (np.expand_dims(frame0, 2) / 256).astype('uint8')
   try:
     traj_positions = all_mg_trajs_positions[t]
     positions = np.stack([traj_positions[k] for k in sorted(traj.keys())])
-    center_position = positions[0] - np.array([128, 128])
+    center_position = positions[0] - np.array([64, 64])
     for i in range(positions.shape[0] - 1):
       start = positions[i] - center_position
       end = positions[i + 1] - center_position
@@ -550,14 +620,18 @@ for t, c in zip(traj_represented, colors):
   except Exception as e:
     print(e)
 
+##########
+
+# Fig 4 C
+# Violin plot of two modes
 small_trajs = []
 large_trajs = []
 for t in trajs:
   traj_dats_ = dats_[np.array(trajs[t])]
-  if np.quantile(traj_dats_[:, 0], 0.7) < -0.5 and \
-     np.quantile(traj_dats_[:, 1], 0.3) > 0.5 and len(traj_dats_) > 20:
+  if np.quantile(traj_dats_[:, 0], 0.7) < -0.8 and \
+     np.quantile(traj_dats_[:, 1], 0.3) < 0 and len(traj_dats_) > 20:
     small_trajs.append(t)
-  if np.quantile(traj_dats_[:, 0], 0.3) > 1.8 and len(traj_dats_) > 20:
+  if np.quantile(traj_dats_[:, 0], 0.3) > 0.8 and len(traj_dats_) > 20:
     large_trajs.append(t)
 
 df = pd.DataFrame({'cluster': ['Small'] * len(small_trajs) + ['Large'] * len(large_trajs), 
@@ -578,7 +652,12 @@ g.set_xticklabels(['', ''])
 g.set_xlabel('')
 g.set_ylabel('')
 plt.savefig('/home/michaelwu/fig4_aver_dist.eps')
+plt.savefig('/home/michaelwu/fig4_aver_dist.png', dpi=300)
 
+##########
+
+# Fig 4 D
+# MSD plot of two modes
 MSD_length = 20
 
 small_traj_ensembles = []
@@ -599,12 +678,10 @@ for t in large_trajs:
           for t_now in range(t_start, t_start+20) if t_now in all_mg_trajs_positions[t]}
       large_traj_ensembles.append(l_traj)
 
-
 small_traj_MSDs = {}
 large_traj_MSDs = {}
 small_traj_MSDs_trimmed = {}
 large_traj_MSDs_trimmed = {}
-
 for i in range(20):
   s_dists = [np.square(t[i] - t[0]).sum() for t in small_traj_ensembles if i in t]
   l_dists = [np.square(t[i] - t[0]).sum() for t in large_traj_ensembles if i in t]
@@ -617,7 +694,6 @@ def forceAspect(ax,aspect=1):
   im = ax.get_images()
   extent =  im[0].get_extent()
   ax.set_aspect(abs((extent[1]-extent[0])/(extent[3]-extent[2]))/aspect)
-
 
 x = np.arange(1, 20)
 y_bins = np.arange(0.9, 11.7, 0.6) # log scale
@@ -632,7 +708,6 @@ for i in range(1, 20):
       density_map[i][ind_bin] += 1
   y.append((np.log(np.mean(small_traj_MSDs[i])) - 0.9)/(y_bins[1] - y_bins[0]))
 density_map = density_map/density_map.sum(1, keepdims=True)
-
 
 sns.set_style('white')
 plt.clf()
@@ -650,7 +725,6 @@ yticks = np.array([0.5, 2, 8, 32, 128, 512, 2048])
 yticks_positions = (np.log(yticks / (0.325 * 0.325)) - 0.9)/(y_bins[1] - y_bins[0]) - 0.5 # same adjustment for imshow
 ax.set_yticks(yticks_positions)
 ax.set_yticklabels(yticks)
-
 
 density_map = np.zeros((20, len(y_bins) - 1))
 y = []
@@ -675,3 +749,4 @@ ax2.set_yticks(yticks_positions)
 ax2.set_yticklabels(yticks)
 plt.tight_layout()
 fig.savefig('/home/michaelwu/fig4_MSD.eps')
+fig.savefig('/home/michaelwu/fig4_MSD.png', dpi=300)
