@@ -39,17 +39,36 @@ color_bg = np.array([150, 150, 150], dtype='uint8')
 color_fg = (color_mg * 0.7 + color_nonmg * 0.3).astype('uint8')
 sites = ['D%d-Site_%d' % (i, j) for j in range(9) for i in range(3, 6)]
 
+# Contrast Setting
+phase_a = 2.
+phase_b = -50000.
+retardance_a = 3.
+retardance_b = 0.
+
 def enhance_contrast(mat, a=1.5, b=-10000):
   mat2 = cv2.addWeighted(mat, a, mat, 0, b)
   return mat2
 
-def plot_patch(mat, out_path):
-  if mat.__class__ is tuple:
-    mat = mat[0]
-  mat = mat.cpu().numpy()
-  mat = mat[0] * 65535
-  mat2 = np.clip(enhance_contrast(mat, 1.5, -25000), 0, 65535).astype('uint16')
-  cv2.imwrite(out_path, mat2.astype('uint16'))
+def plot_patches(names, out_paths):
+  sites = set(n.split('/')[-2] for n in names)
+  for site in sites:
+    image_inds = [i for i, n in enumerate(names) if n.split('/')[-2] == site]
+    site_dat = pickle.load(open('../data_temp/%s_all_patches.pkl' % site, 'rb'))
+    for i in image_inds:
+      mat = site_dat[names[i]]["masked_mat"][:, :, 0]
+      mat2 = np.clip(enhance_contrast(mat, phase_a, phase_b), 0, 65535).astype('uint16')
+      cv2.imwrite(out_paths[i], mat2.astype('uint16'))
+
+def save_movie(names, path):
+  sites = set(n.split('/')[-2] for n in names)
+  assert len(sites) == 1
+  site_dat = pickle.load(open('../data_temp/%s_all_patches.pkl' % list(sites)[0], 'rb'))
+  stacks = []
+  for n in names:
+    mat = site_dat[n]["masked_mat"][:, :, 0]
+    mat2 = np.clip(enhance_contrast(mat, phase_a, phase_b), 0, 65535).astype('uint16')
+    stacks.append(mat2)
+  imageio.mimsave(path, np.stack(stacks, 0))
 
 ############################################################################################################
 
@@ -64,7 +83,7 @@ cv2.imwrite('/home/michaelwu/fig2_raw.png', raw_input)
 
 # Supp Video 1
 raw_movie = [cv2.resize(slic[:, :, 0], (512, 512)) for slic in raw_input_stack]
-imageio.mimsave('/home/michaelwu/supp_video_sample_movie.gif', np.stack(raw_movie, 0))
+imageio.mimsave('/home/michaelwu/supp_video1_sample_movie.gif', np.stack(raw_movie, 0))
 
 ##########
 
@@ -99,9 +118,9 @@ cv2.imwrite('/home/michaelwu/fig2_nn_predictions.png', mat)
 ##########
 
 # Supp Fig 1 RF
-raw_input_off = raw_input_stack[20, :, :, 0:1]
+raw_input_off = raw_input_stack[30, :, :, 0:1]
 RF_predictions_stack = np.load(RAW_DATA_PATH + '/D5-Site_0_RFProbabilities.npy')
-RF_predictions_off = RF_predictions_stack[20]
+RF_predictions_off = RF_predictions_stack[30]
 cv2.imwrite('/home/michaelwu/supp_fig1_raw.png', raw_input_off)
 
 mat = np.zeros((raw_input_off.shape[0], raw_input_off.shape[1], 3), dtype='uint8')
@@ -123,7 +142,7 @@ model = Segment(input_shape=(256, 256, 2),
                 n_classes=3,
                 model_path='./NNsegmentation/temp_save')
 model.load(model.model_path + '/stage0_0.h5')
-NN_predictions_off2 = predict_whole_map(raw_input_stack[20:21], model, n_supp=20)[0]
+NN_predictions_off2 = predict_whole_map(raw_input_stack[30:31], model, n_supp=20)[0]
 mat = np.zeros((raw_input_off.shape[0], raw_input_off.shape[1], 3), dtype='uint8')
 mat[:, :] = (raw_input_off / 256).astype('uint8')
 alpha = 0.7
@@ -138,7 +157,7 @@ cv2.imwrite('/home/michaelwu/supp_fig1_nn_predictions_annotation_only.png', mat)
 
 # Supp Fig 1 NN-combined
 model.load(model.model_path + '/final.h5')
-NN_predictions_off = predict_whole_map(raw_input_stack[20:21], model, n_supp=20)[0]
+NN_predictions_off = predict_whole_map(raw_input_stack[30:31], model, n_supp=20)[0]
 mat = np.zeros((raw_input_off.shape[0], raw_input_off.shape[1], 3), dtype='uint8')
 mat[:, :] = (raw_input_off / 256).astype('uint8')
 alpha = 0.7
@@ -351,16 +370,12 @@ for i in [0, 1, 4, 8, 16]:
 
 # Supp Video 2
 # Sample trajectories
-np.random.seed(123)
 inds = [39, 15, 30, 43]
 for i in inds:
-  save_traj('D5-Site_0/%d' % i, '/home/michaelwu/sample_traj_%d.gif' % i)
-  stacks = []
-  for k in sorted(mg_trajectories[i].keys()):
-    v = mg_trajectories[i][k]
-    with h5py.File(os.path.split(RAW_DATA_PATH)[0] + '/Data/StaticPatches/D5-Site_0/%d_%d.h5' % (k, v), 'r') as f:
-      stacks.append(f["masked_mat"][:, :, 0])
-  imageio.mimsave('/home/michaelwu/sample_traj_movie_%d.gif' % i, np.stack(stacks, 0))
+  traj_name = 'D5-Site_0/%d' % i
+  save_traj(traj_name, '/home/michaelwu/supp_video2_sample_traj_%d.gif' % i)
+  names = ['/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D5-Site_0/%d_%d.h5' % (j, mg_trajectories[i][j]) for j in sorted(mg_trajectories[i].keys())]
+  save_movie(names, '/home/michaelwu/supp_video2_sample_traj_movie_%d.gif' % i)
 
 ############################################################################################################
 
@@ -394,10 +409,10 @@ for i, f in enumerate(sample_fs):
   output_phase = (out[0, 0] * 65535).astype('uint16')
   input_retardance = (inp[0, 1] * 65535).astype('uint16')
   output_retardance = (out[0, 1] * 65535).astype('uint16')
-  cv2.imwrite('/home/michaelwu/fig3_VAE_pair%d_input_phase.png' % i, enhance_contrast(input_phase, 1.5, -25000))
-  cv2.imwrite('/home/michaelwu/fig3_VAE_pair%d_output_phase.png' % i, enhance_contrast(output_phase, 1.5, -25000))
-  cv2.imwrite('/home/michaelwu/fig3_VAE_pair%d_input_retardance.png' % i, enhance_contrast(input_retardance, 3, 0))
-  cv2.imwrite('/home/michaelwu/fig3_VAE_pair%d_output_retardance.png' % i, enhance_contrast(output_retardance, 3, 0))
+  cv2.imwrite('/home/michaelwu/fig3_VAE_pair%d_input_phase.png' % i, enhance_contrast(input_phase, 1., -10000)) # Note dataset has been rescaled
+  cv2.imwrite('/home/michaelwu/fig3_VAE_pair%d_output_phase.png' % i, enhance_contrast(output_phase, 1., -10000))
+  cv2.imwrite('/home/michaelwu/fig3_VAE_pair%d_input_retardance.png' % i, enhance_contrast(input_retardance, 2., 0.))
+  cv2.imwrite('/home/michaelwu/fig3_VAE_pair%d_output_retardance.png' % i, enhance_contrast(output_retardance, 2., 0.))
 
 ##########
 
@@ -415,7 +430,7 @@ for i in range(len(dataset)):
 dats = np.stack([z_bs[f] for f in fs], 0).reshape((len(dataset), -1))
 pca = PCA(0.5)
 dats_ = pca.fit_transform(dats)
-with open('./save_00005_bkp4_latent_space_PCAed.pkl', 'wb') as f:
+with open('./save_0005_bkp4_latent_space_PCAed.pkl', 'wb') as f:
   pickle.dump(dats_, f)
 trajs = pickle.load(open('./HiddenStateExtractor/trajectory_in_inds.pkl', 'rb'))
 sizes = pickle.load(open(DATA_ROOT + '/Data/EncodedSizes.pkl', 'rb'))
@@ -460,10 +475,13 @@ for ct, (t, inds, c) in enumerate(zip(traj_samples, selected_frames, colors2)):
              length_includes_head=True,
              head_width=0.2, 
              head_length=0.3)
+  names = []
+  output_paths = []
   for j, ind in enumerate(order[inds]):
     f = fs[ind]
-    sample_ind = fs_.index(f)
-    plot_patch(dataset[sample_ind], '/home/michaelwu/fig3_state_transition_sample_%d_%d.png' % (ct, j))
+    names.append(f)
+    output_paths.append('/home/michaelwu/fig3_state_transition_sample_%d_%d.png' % (ct, j))
+  plot_patches(names, output_paths)
 
 plt.xlim(-6, 8)
 plt.ylim(-4, 8)
@@ -527,12 +545,137 @@ sample_PC2s = [
     '/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D5-Site_4/19_89.h5'
 ]
 
-for i, sample in enumerate(sample_PC1s):
-  sample_ind = fs_.index(sample)
-  plot_patch(dataset[sample_ind], '/home/michaelwu/fig3_samples_PC1_%d.png' % i)
-for i, sample in enumerate(sample_PC2s):
-  sample_ind = fs_.index(sample)
-  plot_patch(dataset[sample_ind], '/home/michaelwu/fig3_samples_PC2_%d.png' % i)
+plot_patches(sample_PC1s, ['/home/michaelwu/fig3_samples_PC1_%d.png' % i for i in range(len(sample_PC1s))])
+plot_patches(sample_PC2s, ['/home/michaelwu/fig3_samples_PC2_%d.png' % i for i in range(len(sample_PC2s))])
+
+##########
+
+# Supp Fig 2
+# Scatter plot between PC1 and size
+sizes = pickle.load(open('/mnt/comp_micro/Projects/CellVAE/Data/EncodedSizes.pkl', 'rb'))
+densities = pickle.load(open('/mnt/comp_micro/Projects/CellVAE/Data/EncodedDensities.pkl', 'rb'))
+ss = np.log(np.array([sizes[f][0] for f in fs]))
+ds = np.array([densities[f][0][2] for f in fs])
+PC1s = dats_[:, 0]
+PC2s = dats_[:, 1]
+df = pd.DataFrame({'PC1': PC1s,
+                   'PC2': PC2s,
+                   'Size': ss,
+                   'Density': ds})
+
+sns.set_style('white')
+bins_y = np.linspace(6, 9.3, 20)
+bins_x = np.linspace(-5, 5, 20)
+plt.clf()
+g = sns.JointGrid(x='PC1', y='Size', data=df, ylim=(6, 9.3), xlim=(-5, 5))
+_ = g.ax_marg_x.hist(df['PC1'], bins=bins_x, color=matplotlib.cm.get_cmap('Blues')(0.5))
+_ = g.ax_marg_y.hist(df['Size'], bins=bins_y, orientation='horizontal', color=matplotlib.cm.get_cmap('Blues')(0.5))
+g.plot_joint(sns.kdeplot, cmap="Blues", shade=True)
+y_ticks = np.array([500, 1000, 2000, 4000, 8000])
+g.ax_joint.set_yticks(np.log(y_ticks))
+g.ax_joint.set_yticklabels(y_ticks)
+g.set_axis_labels('PC1', 'Size')
+plt.savefig('/home/michaelwu/supp_fig2_PC1_size.eps')
+plt.savefig('/home/michaelwu/supp_fig2_PC1_size.png', dpi=300)
+
+sns.set_style('white')
+bins_y = np.linspace(0.52, 0.75, 20)
+bins_x = np.linspace(-3, 4, 20)
+plt.clf()
+g = sns.JointGrid(x='PC2', y='Density', data=df, ylim=(0.52, 0.75), xlim=(-3, 4))
+_ = g.ax_marg_x.hist(df['PC2'], bins=bins_x, color=matplotlib.cm.get_cmap('Reds')(0.5))
+_ = g.ax_marg_y.hist(df['Density'], bins=bins_y, orientation='horizontal', color=matplotlib.cm.get_cmap('Reds')(0.5))
+g.plot_joint(sns.kdeplot, cmap="Reds", shade=True)
+g.set_axis_labels('PC2', 'Density')
+plt.savefig('/home/michaelwu/supp_fig2_PC2_density.eps')
+plt.savefig('/home/michaelwu/supp_fig2_PC2_density.png', dpi=300)
+
+##########
+
+# Supp Fig 3
+# Samples along first 4 PCs
+names = []
+out_paths = []
+np.random.seed(123)
+
+PC1s = dats_[:, 0]
+lower_ = np.quantile(PC1s, 0.2)
+lower_fs = [f for i, f in enumerate(fs) if PC1s[i] < lower_]
+upper_ = np.quantile(PC1s, 0.8)
+upper_fs = [f for i, f in enumerate(fs) if PC1s[i] > upper_]
+for i, f in enumerate(np.random.choice(lower_fs, (10,), replace=False)):
+  names.append(f)
+  out_paths.append('/home/michaelwu/supp_fig3_PC1_lower_sample%d.png' % i)
+for i, f in enumerate(np.random.choice(upper_fs, (10,), replace=False)):
+  names.append(f)
+  out_paths.append('/home/michaelwu/supp_fig3_PC1_upper_sample%d.png' % i)
+
+PC2s = dats_[:, 1]
+lower_ = np.quantile(PC2s, 0.2)
+lower_fs = [f for i, f in enumerate(fs) if PC2s[i] < lower_]
+upper_ = np.quantile(PC2s, 0.8)
+upper_fs = [f for i, f in enumerate(fs) if PC2s[i] > upper_]
+for i, f in enumerate(np.random.choice(lower_fs, (10,), replace=False)):
+  names.append(f)
+  out_paths.append('/home/michaelwu/supp_fig3_PC2_lower_sample%d.png' % i)
+for i, f in enumerate(np.random.choice(upper_fs, (10,), replace=False)):
+  names.append(f)
+  out_paths.append('/home/michaelwu/supp_fig3_PC2_upper_sample%d.png' % i)
+
+PC1_range = (np.quantile(PC1s, 0.4), np.quantile(PC1s, 0.6))
+PC2_range = (np.quantile(PC2s, 0.4), np.quantile(PC2s, 0.6))
+PC3s = dats_[:, 2]
+lower_ = np.quantile(PC3s, 0.2)
+lower_fs = [f for i, f in enumerate(fs) if PC3s[i] < lower_ and PC1_range[0] < PC1s[i] < PC1_range[1] and PC2_range[0] < PC2s[i] < PC2_range[1]]
+upper_ = np.quantile(PC3s, 0.8)
+upper_fs = [f for i, f in enumerate(fs) if PC3s[i] > upper_ and PC1_range[0] < PC1s[i] < PC1_range[1] and PC2_range[0] < PC2s[i] < PC2_range[1]]
+for i, f in enumerate(np.random.choice(lower_fs, (10,), replace=False)):
+  names.append(f)
+  out_paths.append('/home/michaelwu/supp_fig3_PC3_lower_sample%d.png' % i)
+for i, f in enumerate(np.random.choice(upper_fs, (10,), replace=False)):
+  names.append(f)
+  out_paths.append('/home/michaelwu/supp_fig3_PC3_upper_sample%d.png' % i)
+
+PC4s = dats_[:, 3]
+lower_ = np.quantile(PC4s, 0.2)
+lower_fs = [f for i, f in enumerate(fs) if PC4s[i] < lower_ and PC1_range[0] < PC1s[i] < PC1_range[1] and PC2_range[0] < PC2s[i] < PC2_range[1]]
+upper_ = np.quantile(PC4s, 0.8)
+upper_fs = [f for i, f in enumerate(fs) if PC4s[i] > upper_ and PC1_range[0] < PC1s[i] < PC1_range[1] and PC2_range[0] < PC2s[i] < PC2_range[1]]
+for i, f in enumerate(np.random.choice(lower_fs, (10,), replace=False)):
+  names.append(f)
+  out_paths.append('/home/michaelwu/supp_fig3_PC4_lower_sample%d.png' % i)
+for i, f in enumerate(np.random.choice(upper_fs, (10,), replace=False)):
+  names.append(f)
+  out_paths.append('/home/michaelwu/supp_fig3_PC4_upper_sample%d.png' % i)
+
+plot_patches(names, out_paths)
+
+##########
+
+# Supp Tab1
+# Correlation between PC1~4, size, density, aspect ratio, etc.
+
+sizes = pickle.load(open('/mnt/comp_micro/Projects/CellVAE/Data/EncodedSizes.pkl', 'rb'))
+densities = pickle.load(open('/mnt/comp_micro/Projects/CellVAE/Data/EncodedDensities.pkl', 'rb'))
+aps_nr = pickle.load(open('/mnt/comp_micro/Projects/CellVAE/Data/EncodedAspectRatios_NoRotation.pkl', 'rb'))
+aps = pickle.load(open('/mnt/comp_micro/Projects/CellVAE/Data/EncodedAspectRatios.pkl', 'rb'))
+
+PCs = [PC1s, PC2s, PC3s, PC4s, PC5s]
+Properties = [[np.log(sizes[f][0]) for f in fs],
+              [densities[f][0][0] for f in fs],
+              [densities[f][0][2] for f in fs],
+              [densities[f][1][0] for f in fs],
+              [densities[f][1][2] for f in fs],
+              [aps[f][2] for f in fs],
+              [aps[f][0]/aps[f][1] for f in fs],
+              [aps_nr[f][0]/aps_nr[f][1] for f in fs]]
+
+sr_mat = np.zeros((len(PCs), len(Properties)))
+pr_mat = np.zeros((len(PCs), len(Properties)))
+for i, PC in enumerate(PCs):
+  for j, prop in enumerate(Properties):
+    sr_mat[i, j] = spearmanr(PC, prop).correlation
+    pr_mat[i, j] = pearsonr(PC, prop)[0]
 
 ############################################################################################################
 
@@ -543,7 +686,7 @@ dataset = torch.load('StaticPatchesAll.pt')
 fs_ = pickle.load(open('./HiddenStateExtractor/file_paths_bkp.pkl', 'rb'))
 fs = sorted(pickle.load(open('./HiddenStateExtractor/file_paths_bkp.pkl', 'rb')))
 trajs = pickle.load(open('./HiddenStateExtractor/trajectory_in_inds.pkl', 'rb'))
-dats_ = pickle.load(open('./save_00005_bkp4_latent_space_PCAed.pkl', 'rb'))
+dats_ = pickle.load(open('./save_0005_bkp4_latent_space_PCAed.pkl', 'rb'))
 sizes = pickle.load(open(DATA_ROOT + '/Data/EncodedSizes.pkl', 'rb'))
 
 all_mg_trajs = {}
@@ -604,14 +747,16 @@ colors = [(53, 52, 205)] * 3 + [(176, 177, 0)] * 3
 for t, c in zip(traj_represented, colors):
   traj = all_mg_trajs[t]
   frame0_name = fs[trajs[t][0]]
-  frame0 = dataset[fs_.index(frame0_name)][0][0].cpu().numpy()
-  frame0 = np.clip(enhance_contrast(frame0 * 65535, 1.5, -25000), 0, 65535)
+  site_name = frame0_name.split('/')[-2]
+  site_dat = pickle.load(open('../data_temp/%s_all_patches.pkl' % site_name, 'rb'))
+  frame0 = site_dat[frame0_name]["masked_mat"][:, :, 0]
+  frame0 = np.clip(enhance_contrast(frame0, phase_a, phase_b), 0, 65535)
   mat = np.zeros((frame0.shape[0], frame0.shape[1], 3), dtype='uint8')
   mat[:, :] = (np.expand_dims(frame0, 2) / 256).astype('uint8')
   try:
     traj_positions = all_mg_trajs_positions[t]
     positions = np.stack([traj_positions[k] for k in sorted(traj.keys())])
-    center_position = positions[0] - np.array([64, 64])
+    center_position = positions[0] - np.array([128, 128])
     for i in range(positions.shape[0] - 1):
       start = positions[i] - center_position
       end = positions[i + 1] - center_position
@@ -619,6 +764,15 @@ for t, c in zip(traj_represented, colors):
     cv2.imwrite('/home/michaelwu/fig4_sample_%s.png' % t.replace('/', '_'), mat)
   except Exception as e:
     print(e)
+
+##########
+
+# Supp Video 3
+# Large/small trajectories
+for t in traj_represented:
+  save_traj(t, '/home/michaelwu/supp_video3_sample_traj_%s.gif' % t.replace('/', '_'))
+  names = [fs[i] for i in trajs[t]]
+  save_movie(names, '/home/michaelwu/supp_video3_sample_traj_movie_%s.gif' % t.replace('/', '_'))
 
 ##########
 

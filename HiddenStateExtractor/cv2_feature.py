@@ -77,16 +77,27 @@ def get_density(dat):
   return (peak_phase, quantile_phase, top200_phase, sum_phase), \
          (peak_retardance, quantile_retardance, top200_retardance, sum_retardance)
 
+# def get_aspect_ratio(dat):
+#   """Return: w, h, angle(adjusted) """
+#   contours, _ = cv2.findContours(dat[:, :, 2].astype('uint8'), 1, 2)
+#   areas = [cv2.contourArea(cnt) for cnt in contours]
+#   rect = cv2.minAreaRect(contours[np.argmax(areas)])
+#   w, h = rect[1]
+#   if w < h:
+#     ang = rect[2] + 180
+#   else:
+#     ang = rect[2] + 90
+#   return w, h, ang
+
 def get_aspect_ratio(dat):
   """Return: w, h, angle(adjusted) """
   contours, _ = cv2.findContours(dat[:, :, 2].astype('uint8'), 1, 2)
   areas = [cv2.contourArea(cnt) for cnt in contours]
   rect = cv2.minAreaRect(contours[np.argmax(areas)])
   w, h = rect[1]
+  ang = rect[2]
   if w < h:
-    ang = rect[2] + 180
-  else:
-    ang = rect[2] + 90
+    ang = ang - 90
   return w, h, ang
 
 def get_aspect_ratio_no_rotation(dat):
