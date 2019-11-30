@@ -118,9 +118,10 @@ cv2.imwrite('/home/michaelwu/fig2_nn_predictions.png', mat)
 ##########
 
 # Supp Fig 1 RF
-raw_input_off = raw_input_stack[30, :, :, 0:1]
+slice_num = 30
+raw_input_off = raw_input_stack[slice_num, :, :, 0:1]
 RF_predictions_stack = np.load(RAW_DATA_PATH + '/D5-Site_0_RFProbabilities.npy')
-RF_predictions_off = RF_predictions_stack[30]
+RF_predictions_off = RF_predictions_stack[slice_num]
 cv2.imwrite('/home/michaelwu/supp_fig1_raw.png', raw_input_off)
 
 mat = np.zeros((raw_input_off.shape[0], raw_input_off.shape[1], 3), dtype='uint8')
@@ -142,7 +143,7 @@ model = Segment(input_shape=(256, 256, 2),
                 n_classes=3,
                 model_path='./NNsegmentation/temp_save')
 model.load(model.model_path + '/stage0_0.h5')
-NN_predictions_off2 = predict_whole_map(raw_input_stack[30:31], model, n_supp=20)[0]
+NN_predictions_off2 = predict_whole_map(raw_input_stack[slice_num:(slice_num + 1)], model, n_supp=20)[0]
 mat = np.zeros((raw_input_off.shape[0], raw_input_off.shape[1], 3), dtype='uint8')
 mat[:, :] = (raw_input_off / 256).astype('uint8')
 alpha = 0.7
@@ -157,7 +158,7 @@ cv2.imwrite('/home/michaelwu/supp_fig1_nn_predictions_annotation_only.png', mat)
 
 # Supp Fig 1 NN-combined
 model.load(model.model_path + '/final.h5')
-NN_predictions_off = predict_whole_map(raw_input_stack[30:31], model, n_supp=20)[0]
+NN_predictions_off = predict_whole_map(raw_input_stack[slice_num:(slice_num + 1)], model, n_supp=20)[0]
 mat = np.zeros((raw_input_off.shape[0], raw_input_off.shape[1], 3), dtype='uint8')
 mat[:, :] = (raw_input_off / 256).astype('uint8')
 alpha = 0.7
@@ -561,7 +562,7 @@ PC2s = dats_[:, 1]
 df = pd.DataFrame({'PC1': PC1s,
                    'PC2': PC2s,
                    'Size': ss,
-                   'Density': ds})
+                   'Peak Phase': ds})
 
 sns.set_style('white')
 bins_y = np.linspace(6, 9.3, 20)
@@ -574,7 +575,8 @@ g.plot_joint(sns.kdeplot, cmap="Blues", shade=True)
 y_ticks = np.array([500, 1000, 2000, 4000, 8000])
 g.ax_joint.set_yticks(np.log(y_ticks))
 g.ax_joint.set_yticklabels(y_ticks)
-g.set_axis_labels('PC1', 'Size')
+g.set_axis_labels('PC1', 'Size', fontsize=16)
+plt.tight_layout()
 plt.savefig('/home/michaelwu/supp_fig2_PC1_size.eps')
 plt.savefig('/home/michaelwu/supp_fig2_PC1_size.png', dpi=300)
 
@@ -582,11 +584,12 @@ sns.set_style('white')
 bins_y = np.linspace(0.52, 0.75, 20)
 bins_x = np.linspace(-3, 4, 20)
 plt.clf()
-g = sns.JointGrid(x='PC2', y='Density', data=df, ylim=(0.52, 0.75), xlim=(-3, 4))
+g = sns.JointGrid(x='PC2', y='Peak Phase', data=df, ylim=(0.52, 0.75), xlim=(-3, 4))
 _ = g.ax_marg_x.hist(df['PC2'], bins=bins_x, color=matplotlib.cm.get_cmap('Reds')(0.5))
-_ = g.ax_marg_y.hist(df['Density'], bins=bins_y, orientation='horizontal', color=matplotlib.cm.get_cmap('Reds')(0.5))
+_ = g.ax_marg_y.hist(df['Peak Phase'], bins=bins_y, orientation='horizontal', color=matplotlib.cm.get_cmap('Reds')(0.5))
 g.plot_joint(sns.kdeplot, cmap="Reds", shade=True)
-g.set_axis_labels('PC2', 'Density')
+g.set_axis_labels('PC2', 'Peak Phase', fontsize=16)
+plt.tight_layout()
 plt.savefig('/home/michaelwu/supp_fig2_PC2_density.eps')
 plt.savefig('/home/michaelwu/supp_fig2_PC2_density.png', dpi=300)
 
@@ -652,23 +655,29 @@ plot_patches(names, out_paths)
 
 ##########
 
-# Supp Tab1
-# Correlation between PC1~4, size, density, aspect ratio, etc.
+# Supp Fig 4
+# Correlation between PC1~6, size, density, aspect ratio, etc.
 
 sizes = pickle.load(open('/mnt/comp_micro/Projects/CellVAE/Data/EncodedSizes.pkl', 'rb'))
 densities = pickle.load(open('/mnt/comp_micro/Projects/CellVAE/Data/EncodedDensities.pkl', 'rb'))
 aps_nr = pickle.load(open('/mnt/comp_micro/Projects/CellVAE/Data/EncodedAspectRatios_NoRotation.pkl', 'rb'))
 aps = pickle.load(open('/mnt/comp_micro/Projects/CellVAE/Data/EncodedAspectRatios.pkl', 'rb'))
 
-PCs = [PC1s, PC2s, PC3s, PC4s, PC5s]
+angle_array = []
+for f in fs:
+  if aps[f][2] >= 0:
+    angle_array.append(aps[f][2] - 90)
+  elif 0.8 < aps[f][0]/aps[f][1] < 1.25:
+    angle_array.append(-90)
+  else:
+    angle_array.append(aps[f][2])
+PCs = [PC1s, PC2s, PC3s, PC4s, dats_[:, 4], dats_[:, 5]]
 Properties = [[np.log(sizes[f][0]) for f in fs],
-              [densities[f][0][0] for f in fs],
               [densities[f][0][2] for f in fs],
-              [densities[f][1][0] for f in fs],
               [densities[f][1][2] for f in fs],
-              [aps[f][2] for f in fs],
-              [aps[f][0]/aps[f][1] for f in fs],
-              [aps_nr[f][0]/aps_nr[f][1] for f in fs]]
+              [aps_nr[f][0]/aps_nr[f][1] for f in fs],
+              angle_array,
+              [aps[f][0]/aps[f][1] for f in fs]]
 
 sr_mat = np.zeros((len(PCs), len(Properties)))
 pr_mat = np.zeros((len(PCs), len(Properties)))
@@ -676,6 +685,22 @@ for i, PC in enumerate(PCs):
   for j, prop in enumerate(Properties):
     sr_mat[i, j] = spearmanr(PC, prop).correlation
     pr_mat[i, j] = pearsonr(PC, prop)[0]
+
+plt.clf()
+fig, ax = plt.subplots()
+cmap = matplotlib.cm.get_cmap('RdBu')
+im = ax.imshow(np.transpose(sr_mat), cmap=cmap, vmin=-1.5, vmax=1.5)
+
+ax.set_xticks(np.arange(len(PCs)))
+ax.set_yticks(np.arange(len(Properties)))
+ax.set_xticklabels(['PC1', 'PC2', 'PC3', 'PC4', 'PC5', 'PC6'])
+ax.set_yticklabels(['Size', 'Peak Phase', 'Peak Retardance', 'Aspect Ratio (y-axis)', 'Aspect Ratio', 'Angle (Long axis)'])
+for i in range(len(PCs)):
+  for j in range(len(Properties)):
+    text = ax.text(i, j, "%.2f" % sr_mat[i, j], ha="center", va="center", color="k")
+plt.tight_layout()
+plt.savefig('/home/michaelwu/supp_fig4_correlations.eps')
+plt.savefig('/home/michaelwu/supp_fig4_correlations.png', dpi=300)
 
 ############################################################################################################
 
