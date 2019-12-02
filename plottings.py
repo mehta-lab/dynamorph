@@ -49,23 +49,29 @@ def enhance_contrast(mat, a=1.5, b=-10000):
   mat2 = cv2.addWeighted(mat, a, mat, 0, b)
   return mat2
 
-def plot_patches(names, out_paths):
+def plot_patches(names, out_paths, masked=True):
   sites = set(n.split('/')[-2] for n in names)
   for site in sites:
     image_inds = [i for i, n in enumerate(names) if n.split('/')[-2] == site]
     site_dat = pickle.load(open('../data_temp/%s_all_patches.pkl' % site, 'rb'))
     for i in image_inds:
-      mat = site_dat[names[i]]["masked_mat"][:, :, 0]
+      if masked:
+        mat = site_dat[names[i]]["masked_mat"][:, :, 0]
+      else:
+        mat = site_dat[names[i]]["mat"][:, :, 0]
       mat2 = np.clip(enhance_contrast(mat, phase_a, phase_b), 0, 65535).astype('uint16')
       cv2.imwrite(out_paths[i], mat2.astype('uint16'))
 
-def save_movie(names, path):
+def save_movie(names, path, masked=True):
   sites = set(n.split('/')[-2] for n in names)
   assert len(sites) == 1
   site_dat = pickle.load(open('../data_temp/%s_all_patches.pkl' % list(sites)[0], 'rb'))
   stacks = []
   for n in names:
-    mat = site_dat[n]["masked_mat"][:, :, 0]
+    if masked:
+      mat = site_dat[n]["masked_mat"][:, :, 0]
+    else:
+      mat = site_dat[n]["mat"][:, :, 0]
     mat2 = np.clip(enhance_contrast(mat, phase_a, phase_b), 0, 65535).astype('uint16')
     stacks.append(mat2)
   imageio.mimsave(path, np.stack(stacks, 0))
@@ -118,7 +124,7 @@ cv2.imwrite('/home/michaelwu/fig2_nn_predictions.png', mat)
 ##########
 
 # Supp Fig 1 RF
-slice_num = 30
+slice_num = 11
 raw_input_off = raw_input_stack[slice_num, :, :, 0:1]
 RF_predictions_stack = np.load(RAW_DATA_PATH + '/D5-Site_0_RFProbabilities.npy')
 RF_predictions_off = RF_predictions_stack[slice_num]
@@ -376,7 +382,7 @@ for i in inds:
   traj_name = 'D5-Site_0/%d' % i
   save_traj(traj_name, '/home/michaelwu/supp_video2_sample_traj_%d.gif' % i)
   names = ['/mnt/comp_micro/Projects/CellVAE/Data/StaticPatches/D5-Site_0/%d_%d.h5' % (j, mg_trajectories[i][j]) for j in sorted(mg_trajectories[i].keys())]
-  save_movie(names, '/home/michaelwu/supp_video2_sample_traj_movie_%d.gif' % i)
+  save_movie(names, '/home/michaelwu/supp_video2_sample_traj_movie_%d.gif' % i, masked=False)
 
 ############################################################################################################
 
@@ -482,7 +488,7 @@ for ct, (t, inds, c) in enumerate(zip(traj_samples, selected_frames, colors2)):
     f = fs[ind]
     names.append(f)
     output_paths.append('/home/michaelwu/fig3_state_transition_sample_%d_%d.png' % (ct, j))
-  plot_patches(names, output_paths)
+  plot_patches(names, output_paths, masked=False)
 
 plt.xlim(-6, 8)
 plt.ylim(-4, 8)
@@ -702,6 +708,48 @@ plt.tight_layout()
 plt.savefig('/home/michaelwu/supp_fig4_correlations.eps')
 plt.savefig('/home/michaelwu/supp_fig4_correlations.png', dpi=300)
 
+##########
+
+# Supp Fig 5
+# Distributional difference between trajectories and non-trajectories
+traj_PC1_diffs = []
+base_diffs = []
+for t in trajs:
+  traj_PC1 = dats_[np.array(trajs[t])][:, 0]
+  traj_PC1_diff = np.abs(traj_PC1[1:] - traj_PC1[:-1])
+  traj_PC1_diffs.append(traj_PC1_diff)
+  random_PC1 = dats_[np.random.choice(np.arange(dats_.shape[0]), (len(trajs[t]),), replace=False), 0]
+  base_diffs.append(np.abs(random_PC1[1:] - random_PC1[:-1]))
+traj_PC1_diffs = np.concatenate(traj_PC1_diffs)
+base_diffs = np.concatenate(base_diffs)
+plt.clf()
+plt.hist(traj_PC1_diffs, bins=np.arange(0, 8, 0.2), normed=True, color=(1, 0, 0, 0.5), label='Trajectories')
+plt.hist(base_diffs, bins=np.arange(0, 8, 0.2), normed=True, color=(0, 0, 1, 0.5), label='Random pairs')
+plt.legend(fontsize=16)
+plt.xlabel('PC1 diff', fontsize=16)
+plt.ylabel('Frequency', fontsize=16)
+plt.savefig('/home/michaelwu/supp_fig5_distri_PC1.eps')
+plt.savefig('/home/michaelwu/supp_fig5_distri_PC1.png', dpi=300)
+
+traj_PC2_diffs = []
+base_diffs = []
+for t in trajs:
+  traj_PC2 = dats_[np.array(trajs[t])][:, 1]
+  traj_PC2_diff = np.abs(traj_PC2[1:] - traj_PC2[:-1])
+  traj_PC2_diffs.append(traj_PC2_diff)
+  random_PC2 = dats_[np.random.choice(np.arange(dats_.shape[0]), (len(trajs[t]),), replace=False), 1]
+  base_diffs.append(np.abs(random_PC2[1:] - random_PC2[:-1]))
+traj_PC2_diffs = np.concatenate(traj_PC2_diffs)
+base_diffs = np.concatenate(base_diffs)
+plt.clf()
+plt.hist(traj_PC2_diffs, bins=np.arange(0, 8, 0.2), normed=True, color=(1, 0, 0, 0.5), label='Trajectories')
+plt.hist(base_diffs, bins=np.arange(0, 8, 0.2), normed=True, color=(0, 0, 1, 0.5), label='Random pairs')
+plt.legend(fontsize=16)
+plt.xlabel('PC2 diff', fontsize=16)
+plt.ylabel('Frequency', fontsize=16)
+plt.savefig('/home/michaelwu/supp_fig5_distri_PC2.eps')
+plt.savefig('/home/michaelwu/supp_fig5_distri_PC2.png', dpi=300)
+
 ############################################################################################################
 
 # Fig 4 A
@@ -797,7 +845,7 @@ for t, c in zip(traj_represented, colors):
 for t in traj_represented:
   save_traj(t, '/home/michaelwu/supp_video3_sample_traj_%s.gif' % t.replace('/', '_'))
   names = [fs[i] for i in trajs[t]]
-  save_movie(names, '/home/michaelwu/supp_video3_sample_traj_movie_%s.gif' % t.replace('/', '_'))
+  save_movie(names, '/home/michaelwu/supp_video3_sample_traj_movie_%s.gif' % t.replace('/', '_'), masked=False)
 
 ##########
 
