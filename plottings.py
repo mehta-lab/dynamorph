@@ -423,7 +423,7 @@ for i, f in enumerate(sample_fs):
 
 ##########
 
-# Fig 3 B(PCA) & C
+# Fig 3 B(PCA) & C, Supp Fig 6, 7
 # PCA on VAE latent space
 z_bs = {}
 z_as = {}
@@ -447,6 +447,34 @@ cmap = matplotlib.cm.get_cmap('BuPu')
 range_min = np.log(min(ss))
 range_max = np.log(max(ss))
 colors = [cmap(((np.log(s) - range_min)/(range_max - range_min))**1.5) for s in ss]
+
+
+cum_explained_var_ratio = list(np.cumsum(pca.explained_variance_ratio_))
+cum_explained_var_ratio.insert(0, 0)
+plt.clf()
+plt.plot(np.arange(len(cum_explained_var_ratio)), cum_explained_var_ratio, '.-')
+verts = [(0, 0), *zip(np.arange(5), cum_explained_var_ratio[:5]), (4, 0)]
+poly = matplotlib.patches.Polygon(verts, facecolor='0.9', edgecolor='0.5')
+plt.gca().add_patch(poly)
+plt.ylim(0, 0.48)
+plt.xlim(-2, 40)
+plt.ylabel("(Cumulative) Explained Variance Ratio", fontsize=16)
+plt.xlabel("Principle Components", fontsize=16)
+plt.savefig('/home/michaelwu/supp_fig6_PCA_explained_variance.eps')
+plt.savefig('/home/michaelwu/supp_fig6_PCA_explained_variance.png', dpi=300)
+
+
+import umap
+reducer = umap.UMAP()
+embedding = reducer.fit_transform(dats)
+plt.clf()
+plt.scatter(embedding[:, 0], embedding[:, 1], c=colors, s=0.5, edgecolors='none')
+plt.xlim(0, 11)
+plt.ylim(-6, 7.5)
+plt.savefig('/home/michaelwu/supp_fig7_UMAP.eps')
+plt.savefig('/home/michaelwu/supp_fig7_UMAP.png', dpi=300)
+
+
 plt.clf()
 sns.set_style('white')
 fig, ax = plt.subplots()
