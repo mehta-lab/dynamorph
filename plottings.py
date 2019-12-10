@@ -423,7 +423,7 @@ for i, f in enumerate(sample_fs):
 
 ##########
 
-# Fig 3 B(PCA) & C, Supp Fig 6, 7
+# Fig 3 B(PCA) & C
 # PCA on VAE latent space
 z_bs = {}
 z_as = {}
@@ -448,7 +448,7 @@ range_min = np.log(min(ss))
 range_max = np.log(max(ss))
 colors = [cmap(((np.log(s) - range_min)/(range_max - range_min))**1.5) for s in ss]
 
-
+# Supp Fig 6
 cum_explained_var_ratio = list(np.cumsum(pca.explained_variance_ratio_))
 cum_explained_var_ratio.insert(0, 0)
 plt.clf()
@@ -463,7 +463,7 @@ plt.xlabel("Principle Components", fontsize=16)
 plt.savefig('/home/michaelwu/supp_fig6_PCA_explained_variance.eps')
 plt.savefig('/home/michaelwu/supp_fig6_PCA_explained_variance.png', dpi=300)
 
-
+# Supp Fig 7
 import umap
 reducer = umap.UMAP()
 embedding = reducer.fit_transform(dats)
@@ -484,7 +484,13 @@ rec2 = plt.Rectangle((0, -2), 2, 6, color=(0/256, 137/256, 123/256, 0.7), fc='no
 ax.add_patch(rec1)
 ax.add_patch(rec2)
 
+# Supp Video 3
 traj_samples = ['D4-Site_0/18', 'D3-Site_7/62', 'D3-Site_2/24', 'D3-Site_0/38']
+for t in traj_samples:
+  save_traj(t, '/home/michaelwu/supp_video3_sample_traj_%s.gif' % t.replace('/', '_'))
+  names = [fs[i] for i in trajs[t]]
+  save_movie(names, '/home/michaelwu/supp_video3_sample_traj_movie_%s.gif' % t.replace('/', '_'), masked=False)
+
 selected_frames = [np.array([1, 7, 16, 27, 43]),
                    np.array([1, 7, 12, 16, 21]),
                    np.array([0, 10, 20, 30, 40]),
@@ -687,6 +693,25 @@ for i, f in enumerate(np.random.choice(upper_fs, (10,), replace=False)):
 
 plot_patches(names, out_paths)
 
+np.random.seed(123)
+names = []
+out_paths = []
+dats_residues = pickle.load(open('./save_0005_bkp4_residues.pkl', 'rb'))
+pca_r = PCA(3)
+dats_residues_ = pca_r.fit_transform(dats_residues)
+rPC1s = dats_residues_[:, 0]
+lower_ = np.quantile(rPC1s, 0.2)
+lower_fs = [f for i, f in enumerate(fs) if rPC1s[i] < lower_ and PC1_range[0] < PC1s[i] < PC1_range[1] and PC2_range[0] < PC2s[i] < PC2_range[1]]
+upper_ = np.quantile(rPC1s, 0.8)
+upper_fs = [f for i, f in enumerate(fs) if rPC1s[i] > upper_ and PC1_range[0] < PC1s[i] < PC1_range[1] and PC2_range[0] < PC2s[i] < PC2_range[1]]
+for i, f in enumerate(np.random.choice(lower_fs, (20,), replace=False)):
+  names.append(f)
+  out_paths.append('/home/michaelwu/supp_fig3_rPC1_lower_sample%d.png' % i)
+for i, f in enumerate(np.random.choice(upper_fs, (20,), replace=False)):
+  names.append(f)
+  out_paths.append('/home/michaelwu/supp_fig3_rPC1_upper_sample%d.png' % i)
+plot_patches(names, out_paths, masked=False)
+
 ##########
 
 # Supp Fig 4
@@ -868,12 +893,12 @@ for t, c in zip(traj_represented, colors):
 
 ##########
 
-# Supp Video 3
+# Supp Video 4
 # Large/small trajectories
 for t in traj_represented:
-  save_traj(t, '/home/michaelwu/supp_video3_sample_traj_%s.gif' % t.replace('/', '_'))
+  save_traj(t, '/home/michaelwu/supp_video4_sample_traj_%s.gif' % t.replace('/', '_'))
   names = [fs[i] for i in trajs[t]]
-  save_movie(names, '/home/michaelwu/supp_video3_sample_traj_movie_%s.gif' % t.replace('/', '_'), masked=False)
+  save_movie(names, '/home/michaelwu/supp_video4_sample_traj_movie_%s.gif' % t.replace('/', '_'), masked=False)
 
 ##########
 
