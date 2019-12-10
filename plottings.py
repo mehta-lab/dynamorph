@@ -696,6 +696,35 @@ plot_patches(names, out_paths)
 np.random.seed(123)
 names = []
 out_paths = []
+# dats = pickle.load(open('./save_0005_bkp4.pkl', 'rb'))
+# sizes = pickle.load(open('/mnt/comp_micro/Projects/CellVAE/Data/EncodedSizes.pkl', 'rb'))
+# densities = pickle.load(open('/mnt/comp_micro/Projects/CellVAE/Data/EncodedDensities.pkl', 'rb'))
+# aps_nr = pickle.load(open('/mnt/comp_micro/Projects/CellVAE/Data/EncodedAspectRatios_NoRotation.pkl', 'rb'))
+# aps = pickle.load(open('/mnt/comp_micro/Projects/CellVAE/Data/EncodedAspectRatios.pkl', 'rb'))
+# angle_array = []
+# for f in fs:
+#   if aps[f][2] >= 0:
+#     angle_array.append(aps[f][2] - 90)
+#   elif 0.8 < aps[f][0]/aps[f][1] < 1.25:
+#     angle_array.append(-90)
+#   else:
+#     angle_array.append(aps[f][2])
+# Properties = [[np.log(sizes[f][0]) for f in fs],
+#               [densities[f][0][2] for f in fs],
+#               [densities[f][1][2] for f in fs],
+#               [aps_nr[f][0]/aps_nr[f][1] for f in fs],
+#               angle_array,
+#               [aps[f][0]/aps[f][1] for f in fs]]
+# X = np.stack(Properties, 1)
+# X = sm.add_constant(X)
+# dats_residues = []
+# for i in range(dats.shape[1]):
+#   y = dats[:, i]
+#   model = sm.OLS(y, X)
+#   results = model.fit()
+#   residue = y - results.predict(X)
+#   dats_residues.append(residue)
+# dats_residues = np.stack(dats_residues, 1)
 dats_residues = pickle.load(open('./save_0005_bkp4_residues.pkl', 'rb'))
 pca_r = PCA(3)
 dats_residues_ = pca_r.fit_transform(dats_residues)
