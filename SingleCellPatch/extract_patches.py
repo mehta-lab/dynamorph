@@ -83,13 +83,18 @@ def generate_mask(positions, positions_labels, cell_id, window, window_segmentat
       target_mask.reshape((x_size, y_size, 1)), \
       target_mask2.reshape((x_size, y_size, 1))
 
-def instance_clustering(cell_segmentation, ct_thr=(500, 12000), instance_map=True, map_path=None, fg_thr=0.3):
+def instance_clustering(cell_segmentation, 
+                        ct_thr=(500, 12000), 
+                        instance_map=True, 
+                        map_path=None, 
+                        fg_thr=0.3,
+                        DBSCAN_thr=(10, 250)):
   all_cells = cell_segmentation[:, :, 0] < fg_thr
   positions = np.array(list(zip(*np.where(all_cells))))
   if len(positions) < 1000:
     return ([], [], []), np.zeros((0, 2), dtype=int), np.zeros((0,), dtype=int)
 
-  clustering = DBSCAN(eps=10, min_samples=250).fit(positions)
+  clustering = DBSCAN(eps=DBSCAN_thr[0], min_samples=DBSCAN_thr[1]).fit(positions)
   positions_labels = clustering.labels_
 
   cell_ids, point_cts = np.unique(positions_labels, return_counts=True)
@@ -148,7 +153,6 @@ def instance_clustering(cell_segmentation, ct_thr=(500, 12000), instance_map=Tru
     
     plt.axis('off')
     plt.savefig(map_path, dpi=300)
-
   return (mg_cell_positions, non_mg_cell_positions, other_cells), positions, positions_labels
 
 def get_cell_rect_angle(tm):
