@@ -32,10 +32,8 @@ def frame_matching(f1, f2, int1, int2, dist_cutoff=100):
   int_dist_mat = int2.reshape((1, -1)) / int1.reshape((-1, 1))
   int_dist_mat = int_dist_mat + 1/int_dist_mat
   int_dist_mat[np.where(int_dist_mat >= 2.5)] = 20.
-  int_dist_mat = int_dist_mat ** 2
-  
-  
-  
+  int_dist_mat = int_dist_mat ** 1.5
+
   cost_mat[:len(f1), :len(f2)] = dist_mat * int_dist_mat
   for i in range(len(f1)):
     cost_mat[i, i+len(f2)] = 1.05 * (dist_cutoff ** 2)
@@ -44,10 +42,12 @@ def frame_matching(f1, f2, int1, int2, dist_cutoff=100):
   cost_mat[len(f1):, len(f2):] = np.transpose(dist_mat)
   links = linear_sum_assignment(cost_mat)
   pairs = []
+  costs = []
   for pair in zip(*links):
     if pair[0] < len(f1) and pair[1] < len(f2):
       pairs.append(pair)
-  return pairs
+      costs.append(cost_mat[pair[0], pair[1]])
+  return pairs, {pairs[i]: costs[i] for i in np.argsort(costs)[-5:]}
 
 def frame_matching_ot(f1, f2, int1, int2, dist_cutoff=50):
 
@@ -287,54 +287,108 @@ def save_traj_bbox(trajectory, trajectory_positions, image_stack, path):
 
 if __name__ == '__main__':
 
-  path = '/mnt/comp_micro/Projects/CellVAE'
-  sites = ['D%d-Site_%d' % (i, j) for j in range(9) for i in range(3, 6)]
+  # path = '/mnt/comp_micro/Projects/CellVAE'
+  # sites = ['D%d-Site_%d' % (i, j) for j in range(9) for i in range(3, 6)]
+  # CHANNEL_MAX = [65535., 65535.]
+  
+  # for site in sites:
+  #   print("On site %s" % site)
+  #   cell_positions = pickle.load(open(path + '/Data/StaticPatches/%s/cell_positions.pkl' % site, 'rb'))
+  #   cell_pixel_assignments = pickle.load(open(path + '/Data/StaticPatches/%s/cell_pixel_assignments.pkl' % site, 'rb'))
+  #   t_points = sorted(cell_positions.keys())
+  #   assert np.allclose(np.array(t_points)[1:] - 1, np.array(t_points)[:-1])
+
+  #   # Mapping to centroid positions
+  #   mg_positions_dict = {k: dict(cell_positions[k][0]) for k in cell_positions}
+  #   non_mg_positions_dict = {k: dict(cell_positions[k][1]) for k in cell_positions}
+
+  #   # Mapping to size of segmentation
+  #   intensities_dict = {}
+  #   for t_point in t_points:
+  #     intensities_d = dict(zip(*np.unique(cell_pixel_assignments[t_point][1], return_counts=True)))
+  #     intensities_d = {p[0]: intensities_d[p[0]] for p in cell_positions[t_point][0] + cell_positions[t_point][1]}
+  #     intensities_dict[t_point] = intensities_d
+
+  #   # Generate Frame-frame matching
+  #   mg_matchings = {}
+  #   non_mg_matchings = {}
+  #   for t_point in t_points[:-1]:
+  #     ids1 = sorted(mg_positions_dict[t_point].keys())
+  #     ids2 = sorted(mg_positions_dict[t_point+1].keys())      
+  #     f1 = [mg_positions_dict[t_point][i] for i in ids1]
+  #     f2 = [mg_positions_dict[t_point+1][i] for i in ids2]
+  #     int1 = [intensities_dict[t_point][i] for i in ids1]
+  #     int2 = [intensities_dict[t_point+1][i] for i in ids2]
+  #     pairs = frame_matching(f1, f2, int1, int2, dist_cutoff=150)
+  #     mg_matchings[t_point] = [(ids1[p1], ids2[p2]) for p1, p2 in pairs]
+      
+  #     ids1 = sorted(non_mg_positions_dict[t_point].keys())
+  #     ids2 = sorted(non_mg_positions_dict[t_point+1].keys())
+  #     f1 = [non_mg_positions_dict[t_point][i] for i in ids1]
+  #     f2 = [non_mg_positions_dict[t_point+1][i] for i in ids2]
+  #     int1 = [intensities_dict[t_point][i] for i in ids1]
+  #     int2 = [intensities_dict[t_point+1][i] for i in ids2]
+  #     pairs = frame_matching(f1, f2, int1, int2, dist_cutoff=150)
+  #     non_mg_matchings[t_point] = [(ids1[p1], ids2[p2]) for p1, p2 in pairs]
+      
+      
+  #   # Connect to trajectories
+  #   mg_trajectories, mg_trajectories_positions = generate_trajectories(mg_matchings, mg_positions_dict, intensities_dict)
+  #   non_mg_trajectories, non_mg_trajectories_positions = generate_trajectories(non_mg_matchings, non_mg_positions_dict, intensities_dict)
+
+
+  #   ### Generate segmentation stacks for trajectories
+  #   if not os.path.exists(path + '/Data/DynamicPatches/%s' % site):
+  #     os.mkdir(path + '/Data/DynamicPatches/%s' % site)
+    
+  #   with open(path + '/Data/DynamicPatches/%s/mg_traj.pkl' % site, 'wb') as f:
+  #     pickle.dump([mg_trajectories, mg_trajectories_positions], f)
+  #   with open(path + '/Data/DynamicPatches/%s/non_mg_traj.pkl' % site, 'wb') as f:
+  #     pickle.dump([non_mg_trajectories, non_mg_trajectories_positions], f)
+
+  #   image_stack = np.load(os.path.join(path, 'Combined', '%s.npy' % site))
+  #   for i, (t, t_p) in enumerate(zip(mg_trajectories, mg_trajectories_positions)):
+  #     save_traj_bbox(t, t_p, image_stack, path + '/Data/DynamicPatches/%s/mg_traj_%d.tif' % (site, i))
+  #   for i, (t, t_p) in enumerate(zip(non_mg_trajectories, non_mg_trajectories_positions)):
+  #     save_traj_bbox(t, t_p, image_stack, path + '/Data/DynamicPatches/%s/non_mg_traj_%d.tif' % (site, i))
+
+  path = '/data/michaelwu/data_temp'
+  sites = ['B4-Site_%d' % i for i in [0, 2, 3, 5, 6]]
   CHANNEL_MAX = [65535., 65535.]
   
   for site in sites:
     print("On site %s" % site)
-    cell_positions = pickle.load(open(path + '/Data/StaticPatches/%s/cell_positions.pkl' % site, 'rb'))
-    cell_pixel_assignments = pickle.load(open(path + '/Data/StaticPatches/%s/cell_pixel_assignments.pkl' % site, 'rb'))
+    cell_positions = pickle.load(open(path + '/B4-supps/%s/cell_positions.pkl' % site, 'rb'))
+    cell_pixel_assignments = pickle.load(open(path + '/B4-supps/%s/cell_pixel_assignments.pkl' % site, 'rb'))
     t_points = sorted(cell_positions.keys())
     assert np.allclose(np.array(t_points)[1:] - 1, np.array(t_points)[:-1])
 
     # Mapping to centroid positions
-    mg_positions_dict = {k: dict(cell_positions[k][0]) for k in cell_positions}
-    non_mg_positions_dict = {k: dict(cell_positions[k][1]) for k in cell_positions}
-
+    cell_positions_dict = {k: dict(cell_positions[k][0] + cell_positions[k][1] + cell_positions[k][2]) for k in cell_positions}
     # Mapping to size of segmentation
     intensities_dict = {}
     for t_point in t_points:
       intensities_d = dict(zip(*np.unique(cell_pixel_assignments[t_point][1], return_counts=True)))
-      intensities_d = {p[0]: intensities_d[p[0]] for p in cell_positions[t_point][0] + cell_positions[t_point][1]}
+      intensities_d = {p[0]: intensities_d[p[0]] for p in cell_positions[t_point][0] + cell_positions[t_point][1] + cell_positions[t_point][2]}
       intensities_dict[t_point] = intensities_d
 
     # Generate Frame-frame matching
-    mg_matchings = {}
-    non_mg_matchings = {}
+    cell_matchings = {}
+    pairs_to_be_checked = {}
     for t_point in t_points[:-1]:
-      ids1 = sorted(mg_positions_dict[t_point].keys())
-      ids2 = sorted(mg_positions_dict[t_point+1].keys())      
-      f1 = [mg_positions_dict[t_point][i] for i in ids1]
-      f2 = [mg_positions_dict[t_point+1][i] for i in ids2]
+      ids1 = sorted(cell_positions_dict[t_point].keys())
+      ids2 = sorted(cell_positions_dict[t_point+1].keys())      
+      f1 = [cell_positions_dict[t_point][i] for i in ids1]
+      f2 = [cell_positions_dict[t_point+1][i] for i in ids2]
       int1 = [intensities_dict[t_point][i] for i in ids1]
       int2 = [intensities_dict[t_point+1][i] for i in ids2]
-      pairs = frame_matching(f1, f2, int1, int2, dist_cutoff=150)
-      mg_matchings[t_point] = [(ids1[p1], ids2[p2]) for p1, p2 in pairs]
-      
-      ids1 = sorted(non_mg_positions_dict[t_point].keys())
-      ids2 = sorted(non_mg_positions_dict[t_point+1].keys())
-      f1 = [non_mg_positions_dict[t_point][i] for i in ids1]
-      f2 = [non_mg_positions_dict[t_point+1][i] for i in ids2]
-      int1 = [intensities_dict[t_point][i] for i in ids1]
-      int2 = [intensities_dict[t_point+1][i] for i in ids2]
-      pairs = frame_matching(f1, f2, int1, int2, dist_cutoff=150)
-      non_mg_matchings[t_point] = [(ids1[p1], ids2[p2]) for p1, p2 in pairs]
-      
+      pairs, top_cost_pairs = frame_matching(f1, f2, int1, int2, dist_cutoff=75)
+      for p in top_cost_pairs:
+        pairs_to_be_checked[('%d_%d' % (t_point, ids1[p[0]]), '%d_%d' % (t_point+1, ids2[p[1]]))] = top_cost_pairs[p]
+      cell_matchings[t_point] = [(ids1[p1], ids2[p2]) for p1, p2 in pairs]
       
     # Connect to trajectories
-    mg_trajectories, mg_trajectories_positions = generate_trajectories(mg_matchings, mg_positions_dict, intensities_dict)
-    non_mg_trajectories, non_mg_trajectories_positions = generate_trajectories(non_mg_matchings, non_mg_positions_dict, intensities_dict)
+    # mg_trajectories, mg_trajectories_positions = generate_trajectories(mg_matchings, mg_positions_dict, intensities_dict)
 
 
     ### Generate segmentation stacks for trajectories
@@ -351,63 +405,3 @@ if __name__ == '__main__':
       save_traj_bbox(t, t_p, image_stack, path + '/Data/DynamicPatches/%s/mg_traj_%d.tif' % (site, i))
     for i, (t, t_p) in enumerate(zip(non_mg_trajectories, non_mg_trajectories_positions)):
       save_traj_bbox(t, t_p, image_stack, path + '/Data/DynamicPatches/%s/non_mg_traj_%d.tif' % (site, i))
-
-#    for i, t in enumerate(trajectories):
-#      mat_traj = np.zeros((len(t), 2048, 2048), dtype=bool)
-#      for j, t_point in enumerate(sorted(t.keys())):
-#        cell_id = t[t_point]
-#        positions = cell_pixel_assignments[t_point][0][np.where(cell_pixel_assignments[t_point][1] == cell_id)[0]]
-#        mat_traj[j, positions[:, 0], positions[:, 1]] = True
-#      tifffile.imwrite('../Data/DynamicPatches/%s/Trajectory%d.tif' % (site, i), mat_traj, dtype=bool)
-#
-#    image_stack = h5py.File('../Combined/%s.h5' % site,'r+')
-#    image_stack = np.stack([image_stack[k] for k in sorted(image_stack.keys())], 0) #txyzc
-#    segmentation_stack = h5py.File('../Combined/%s_NNProbabilities.h5' % site,'r+')['exported_data']
-#    for i, t in enumerate(trajectories):
-#      print("\t Writing trajectory %d/%d" % (i, len(trajectories)))
-#      t_positions = trajectories_positions[i]
-#      # Moving window
-#      f_n = '../Data/DynamicPatches/%s/Trajectory%d_moving.h5' % (site, i)
-#      if not os.path.exists(f_n):
-#        with h5py.File(f_n, 'w') as f:
-#          for _t_point in sorted(t.keys()):
-#            f2 = h5py.File('../Data/StaticPatches/%s/%d_%d.h5' % (site, _t_point, t[_t_point]), 'r')
-#            f.create_dataset("mat_%d" % _t_point, data=np.array(f2["mat"]))
-#            f.create_dataset("masked_mat_%d" % _t_point, data=np.array(f2["masked_mat"]))
-#            f.create_dataset("position_%d" % _t_point, data=t_positions[_t_point])
-#      
-#      positions = np.stack([t_positions[t_point] for t_point in sorted(t_positions.keys())], 0)
-#      center = np.median(positions, 0)
-#      window = [(int(center[0]) - 128,
-#                 int(center[0]) + 128),
-#                (int(center[1]) - 128,
-#                 int(center[1]) + 128)]
-#      for t_point in sorted(t_positions.keys()):
-#        if not within_range(window, t_positions[t_point]):
-#          break
-#      else:
-#        f_n = '../Data/DynamicPatches/%s/Trajectory%d_fixed.h5' % (site, i)
-#        if not os.path.exists(f_n):
-#          with h5py.File(f_n, 'w') as f:
-#            for _t_point in sorted(t.keys()):
-#              f.create_dataset("position_%d" % _t_point, data=t_positions[_t_point])
-#              img = image_stack[_t_point, :, :, 0]
-#              output_mat = select_window(img, window, padding=-1)
-#              f.create_dataset("mat_%d" % _t_point, data=output_mat)
-#
-#              ### Masking ###
-#              cell_segmentation = np.argmax(segmentation_stack[_t_point, :, :, 0], 2)
-#              window_segmentation = select_window(cell_segmentation, window, padding=-1)
-#
-#              background_pool = img[np.where(segmentation_stack[t_point, :, :, 0, 0] > 0.9)]
-#              background_filling = np.random.choice(np.arange(background_pool.shape[0]), size=(256, 256))
-#              background_filling = np.take(background_pool, background_filling, 0)
-#              remove_mask, target_mask = generate_mask(cell_pixel_assignments[_t_point][0],
-#                                                       cell_pixel_assignments[_t_point][1],
-#                                                       t[_t_point],
-#                                                       window,
-#                                                       window_segmentation)
-#              masked_output_mat = output_mat * (1 - remove_mask) + background_filling * remove_mask
-#              f.create_dataset("masked_mat_%d" % _t_point, data=masked_output_mat)
-#              ################
-
