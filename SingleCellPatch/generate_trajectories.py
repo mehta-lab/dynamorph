@@ -15,6 +15,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2
+import imageio
 from scipy.spatial.distance import cdist
 from scipy.optimize import linear_sum_assignment
 from .extract_patches import within_range, generate_mask, select_window
@@ -32,13 +33,13 @@ def frame_matching(f1, f2, int1, int2, dist_cutoff=100):
   int_dist_mat = int2.reshape((1, -1)) / int1.reshape((-1, 1))
   int_dist_mat = int_dist_mat + 1/int_dist_mat
   int_dist_mat[np.where(int_dist_mat >= 2.5)] = 20.
-  int_dist_mat = int_dist_mat ** 1.5
+  int_dist_mat = (int_dist_mat/2) ** 6
 
   cost_mat[:len(f1), :len(f2)] = dist_mat * int_dist_mat
   for i in range(len(f1)):
-    cost_mat[i, i+len(f2)] = 1.05 * (dist_cutoff ** 2)
+    cost_mat[i, i+len(f2)] = 0.15 * (dist_cutoff ** 2)
   for j in range(len(f2)):
-    cost_mat[len(f1)+j, j] = 1.05 * (dist_cutoff ** 2)
+    cost_mat[len(f1)+j, j] = 0.15 * (dist_cutoff ** 2)
   cost_mat[len(f1):, len(f2):] = np.transpose(dist_mat)
   links = linear_sum_assignment(cost_mat)
   pairs = []
@@ -80,7 +81,10 @@ def trajectory_connection(trajectories,
   dist_mat = cdist(positions_x, positions_y) ** 2
 
   mask_mat = ((np.array(starts).reshape((1, -1)) - np.array(ends).reshape((-1, 1))) == 2)*1 + \
-             ((np.array(starts).reshape((1, -1)) - np.array(ends).reshape((-1, 1))) == 3)*4 # Allow gap up to 3 time intervals
+             ((np.array(starts).reshape((1, -1)) - np.array(ends).reshape((-1, 1))) == 3)*1.5 + \
+             ((np.array(starts).reshape((1, -1)) - np.array(ends).reshape((-1, 1))) == 4)*2. + \
+             ((np.array(starts).reshape((1, -1)) - np.array(ends).reshape((-1, 1))) == 5)*3.2 + \
+             ((np.array(starts).reshape((1, -1)) - np.array(ends).reshape((-1, 1))) == 6)*4 # Allow gap up to 6 time intervals
   mask_mat[np.where(dist_mat>=(dist_cutoff**2))] = 0
   cost_mat_upper_left = mask_mat * dist_mat + (1 - np.sign(mask_mat)) * cost_mat_upper_left
 
@@ -257,7 +261,6 @@ def save_traj_bbox(trajectory, trajectory_positions, image_stack, path):
   for i, k in enumerate(sorted(trajectory.keys())):
     output_images[i] = cv2.resize(image_stack[k, :, :, 0], (512, 512))
   output_images = np.stack([output_images] * 3, 3)
-  
   output_images = output_images / 65535.
 
   for i, k in enumerate(sorted(trajectory.keys())):
@@ -281,7 +284,8 @@ def save_traj_bbox(trajectory, trajectory_positions, image_stack, path):
     y = box_range[1][1]
     y_ = (int(max(y - 1., 0)), int(min(y + 1., 512)))
     output_images[i, int(box_range[0][0]):int(box_range[0][1]), y_[0]:y_[1]] = np.array([1., 0., 0.]).reshape((1, 1, 3))
-  tifffile.imwrite(path, (output_images*255).astype('uint8'))
+  #tifffile.imwrite(path, (output_images*255).astype('uint8'))
+  imageio.mimsave(path, (output_images*255).astype('uint8'))
   return
 
 
@@ -388,20 +392,20 @@ if __name__ == '__main__':
       cell_matchings[t_point] = [(ids1[p1], ids2[p2]) for p1, p2 in pairs]
       
     # Connect to trajectories
-    # mg_trajectories, mg_trajectories_positions = generate_trajectories(mg_matchings, mg_positions_dict, intensities_dict)
+    cell_trajectories, cell_trajectories_positions = generate_trajectories(cell_matchings, cell_positions_dict, intensities_dict)
 
 
     ### Generate segmentation stacks for trajectories
-    if not os.path.exists(path + '/Data/DynamicPatches/%s' % site):
-      os.mkdir(path + '/Data/DynamicPatches/%s' % site)
-    
-    with open(path + '/Data/DynamicPatches/%s/mg_traj.pkl' % site, 'wb') as f:
-      pickle.dump([mg_trajectories, mg_trajectories_positions], f)
-    with open(path + '/Data/DynamicPatches/%s/non_mg_traj.pkl' % site, 'wb') as f:
-      pickle.dump([non_mg_trajectories, non_mg_trajectories_positions], f)
+    with open(path + '/B4-supps/%s/cell_trajs.pkl' % site, 'wb') as f:
+      pickle.dump([cell_trajectories, cell_trajectories_positions], f)
 
-    image_stack = np.load(os.path.join(path, 'Combined', '%s.npy' % site))
-    for i, (t, t_p) in enumerate(zip(mg_trajectories, mg_trajectories_positions)):
-      save_traj_bbox(t, t_p, image_stack, path + '/Data/DynamicPatches/%s/mg_traj_%d.tif' % (site, i))
-    for i, (t, t_p) in enumerate(zip(non_mg_trajectories, non_mg_trajectories_positions)):
-      save_traj_bbox(t, t_p, image_stack, path + '/Data/DynamicPatches/%s/non_mg_traj_%d.tif' % (site, i))
+    try:
+      os.mkdir(path + '/B4-supps/%s/traj_movies' % site)
+    except:
+      pass
+    image_stack = np.load(path + '/%s.npy' % site)
+    for i, (t, t_p) in enumerate(zip(cell_trajectories, cell_trajectories_positions)):
+      if len(t) > 50:
+        save_traj_bbox(t, t_p, image_stack, path + '/B4-supps/%s/traj_movies/cell_traj_%d.gif' % (site, i))
+
+
