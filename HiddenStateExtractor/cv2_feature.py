@@ -16,8 +16,15 @@ import matplotlib.pyplot as plt
 from .naive_imagenet import preprocess, read_file_path, DATA_ROOT, CHANNEL_MAX
 import multiprocessing as mp
 
-# Feature extractor
+
 def extract_features(x, vector_size=32):
+  """ Calculate KAZE features
+
+  x: np.array
+      input mat
+  vector_size: int
+      featurization vector size, default 32
+  """  
   x = x.astype('uint8')
   try:
     dscs = []
@@ -46,13 +53,16 @@ def worker(f_n):
   return y
 
 def get_size(dat):
+  """ Calculate cell size based on mask
+  """
   mask = np.array(dat[:, :, 2])
   contours, _ = cv2.findContours(mask.astype('uint8'), 1, 2)
   areas = [cv2.contourArea(cnt) for cnt in contours]
   return mask.sum(), np.max(areas)
 
 def get_density(dat):
-  """ Return: 2 * (top-1, 95% quantile, average of top-200, sum) """
+  """ Calculate peak phase/retardance values
+  """
   phase = np.array(dat[:, :, 0]) / 65535.
   retardance = np.array(dat[:, :, 1]) / 65535.
   mask = np.array(dat[:, :, 2])
@@ -90,7 +100,8 @@ def get_density(dat):
 #   return w, h, ang
 
 def get_aspect_ratio(dat):
-  """Return: w, h, angle(adjusted) """
+  """ Calcualte aspect ratio (cv2.minAreaRect)
+  """
   contours, _ = cv2.findContours(dat[:, :, 2].astype('uint8'), 1, 2)
   areas = [cv2.contourArea(cnt) for cnt in contours]
   rect = cv2.minAreaRect(contours[np.argmax(areas)])
@@ -101,7 +112,8 @@ def get_aspect_ratio(dat):
   return w, h, ang
 
 def get_aspect_ratio_no_rotation(dat):
-  """ Return: w, h """
+  """ Calcualte aspect ratio (cv2.boundingRect)
+  """
   contours, _ = cv2.findContours(dat[:, :, 2].astype('uint8'), 1, 2)
   areas = [cv2.contourArea(cnt) for cnt in contours]
   rect = cv2.boundingRect(contours[np.argmax(areas)])

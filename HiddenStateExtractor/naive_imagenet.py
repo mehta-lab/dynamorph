@@ -3,11 +3,11 @@ import numpy as np
 import h5py
 import pickle
 
-from classification_models.resnet import ResNet50
-from classification_models.resnet import preprocess_input as preprocess_input_resnet50
-import classification_models.keras_applications as ka
+#from classification_models.resnet import ResNet50
+#from classification_models.resnet import preprocess_input as preprocess_input_resnet50
+#import classification_models.keras_applications as ka
 
-from keras.models import Model
+#from keras.models import Model
 import cv2
 
 DATA_ROOT = '/mnt/comp_micro/Projects/CellVAE'

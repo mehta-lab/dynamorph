@@ -32,7 +32,15 @@ def load_label(file_name):
 
 
 def rotate_image(mat, angle, image_center=None):
-  # angle in degrees
+  """ Rotate image `mat` by `angle`
+
+  mat: np.array
+      target image, size X * Y * C
+  angle: float
+      rotation angle
+  image_center: tuple or None
+      if not specified, center of `mat` is used
+  """
 
   height, width = mat.shape[:2]
   if image_center is None:
@@ -64,6 +72,29 @@ def generate_patches(input_file,
                      mirror=False,
                      seed=None,
                      **kwargs):
+  """ Curate dataset for segmentation
+
+  input_file: str
+      input file path
+  label_file: str
+      label file path
+  label_input: str, 'prob' or 'annotation'
+      label input type, probabilities or discrete annotation
+  n_patches: int
+      number of generated patches required
+  x_size: int
+      size of patch
+  y_size: int
+      size of patch
+  label_value_threshold: float
+      deprecated
+  rotate: bool
+      if randomly rotate patch to augment data
+  mirror: bool
+      if randomly mirror patch to augment data
+  seed
+      random seed
+  """
   input_f = load_input(input_file) #TXYZC
   label_f = load_label(label_file) #TXYZC
   
@@ -128,6 +159,23 @@ def generate_ordered_patches(input_file,
                              label_value_threshold=0.5,
                              time_slices=1,
                              **kwargs):
+  """ Curate dataset for segmentation
+
+  input_file: str
+      input file path
+  label_file: str
+      label file path
+  label_input: str, 'prob' or 'annotation'
+      label input type, probabilities or discrete annotation
+  x_size: int
+      size of patch
+  y_size: int
+      size of patch
+  label_value_threshold: float
+      deprecated
+  time_slices: int
+      deprecated
+  """
   input_f = load_input(input_file)
   label_f = load_label(label_file)
 
@@ -164,11 +212,17 @@ def generate_ordered_patches(input_file,
   return data
 
 def preprocess(patches, n_classes=3, label_input='prob', class_weights=None):
-  """
+  """ Preprocess patches for network training/prediction
+  
   patches: list of (X, y)
-    X: np.array, input_shape
-    y: np.array, input_shape[:2]
+      X: np.array, input_shape
+      y: np.array, input_shape[:2]
+  n_classes: int
+      number of prediction classes
   label_input: str, 'prob' or 'annotation'
+      label input type, probabilities or discrete annotation
+  class_weights: None of list
+      if given, specify training weights for different classes
   """
   Xs = []
   ys = []
@@ -228,6 +282,24 @@ def predict_whole_map(file_path,
                       batch_size=8, 
                       n_supp=5, 
                       time_slices=1):
+  """ Predict on the whole image (patch by patch)
+
+  file_path: str
+      path to target image (np array)
+  model: keras model
+      model used for the prediction
+  out_file_path: str or None
+      if specified, path of output
+  n_classes: int
+      number of prediction classes
+  batch_size: int
+      batch size
+  n_supp: int
+      number of extra prediction rounds
+      (multiple predictions on different offset to alleviate error on edges)
+  time_slices: int
+      deprecated
+  """
   if file_path.__class__ is str:
     inputs = load_input(file_path)
   else:

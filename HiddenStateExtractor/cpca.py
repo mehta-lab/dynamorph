@@ -7,69 +7,107 @@ from matplotlib import cm
 matplotlib.use('AGG')
 import matplotlib.pyplot as plt
 
-dat = pickle.load(open('./save_0005_before.pkl', 'rb'))
-fs = sorted(pickle.load(open('./HiddenStateExtractor/file_paths_bkp.pkl', 'rb')))
+dats = pickle.load(open('./save_0005_bkp4.pkl', 'rb'))
+fs = pickle.load(open('./HiddenStateExtractor/file_paths_bkp.pkl', 'rb'))
 trajs = pickle.load(open('./HiddenStateExtractor/trajectory_in_inds.pkl', 'rb'))
-sizes = pickle.load(open(DATA_ROOT + '/Data/EncodedSizes.pkl', 'rb'))
-densities = pickle.load(open(DATA_ROOT + '/Data/EncodedDensities.pkl', 'rb'))
+site_dat = torch.load('../data_temp/B4_all_adjusted_static_patches.pt')
 
-
-
-sample_in_traj = []
-sample_in_traj_dat = []
-for t in trajs:
-  patches = trajs[t]
-  for i in patches:
-    sample_in_traj.append(fs[i])
-    sample_in_traj_dat.append(dat[fs[i]])
-
-
-
-_sample_in_traj = set(sample_in_traj)
-sample_not_in_traj = []
-sample_not_in_traj_dat = []
-for k in dat:
-  if not k in _sample_in_traj:
-    sample_not_in_traj.append(k)
-    sample_not_in_traj_dat.append(dat[k])
-
-
-sample_in_traj_dat = np.concatenate(sample_in_traj_dat, 0).reshape((len(sample_in_traj), -1))
-sample_not_in_traj_dat = np.concatenate(sample_not_in_traj_dat, 0).reshape((len(sample_not_in_traj), -1))
+B4_dats = pickle.load(open('./save_0005_bkp4_B4.pkl', 'rb'))
+B4_fs = sorted(B4_dats.keys())
+B4_dats = np.stack([B4_dats[f] for f in B4_fs], 0).reshape((len(B4_fs), -1))
+B4_trajs = pickle.load(open('./HiddenStateExtractor/B4_trajectory_in_inds.pkl', 'rb'))
 
 mdl = contrastive.CPCA()
-projected_data, alphas = mdl.fit_transform(sample_in_traj_dat, sample_not_in_traj_dat, return_alphas=True)
+projected_data, alphas = mdl.fit_transform(B4_dats, dats, return_alphas=True)
+
+
+for fold in range(1, 4):
+  #os.mkdir('/data/michaelwu/PC_samples/cpca_alpha%d_PC1' % fold)
+  #os.mkdir('/data/michaelwu/PC_samples/cpca_alpha%d_PC2' % fold)
+  dats_ = projected_data[fold]
+  plt.clf()
+  fig, ax = plt.subplots()
+  ax.scatter(dats_[:, 0], dats_[:, 1], s=0.5, edgecolors='none')
+  plt.savefig('/data/michaelwu/PC_samples/cpca_alpha%d.png' % fold, dpi=300)
+
+  names = []
+  out_paths = []
+  PC1s = dats_[:, 0]
+  for i in range(5):
+    rang = [np.quantile(PC1s, i * 0.2), np.quantile(PC1s, (i+1) * 0.2)]
+    rang_fs = [f for i, f in enumerate(B4_fs) if rang[0] <= PC1s[i] < rang[1]]
+    ct = 0
+    base = np.zeros((128, 128), dtype=float)
+    for j, f in enumerate(rang_fs):
+      ind = B4_fs.index(f)
+      slic = site_dat[ind][0][0].cpu().numpy().astype('float')
+      base = base + slic
+      ct += 1
+    aver = base/ct
+    aver = (aver * 65535).astype('uint16')
+    cv2.imwrite('/data/michaelwu/PC_samples/cpca_alpha%d_PC1_fold%d_aver.png' % (fold, i), enhance_contrast(aver, a=2, b=-50000))
+    for j, f in enumerate(np.random.choice(rang_fs, (20,), replace=False)):
+      names.append(f)
+      out_paths.append('/data/michaelwu/PC_samples/cpca_alpha%d_PC1/PC1_%d_%d_sample%d.png' % (fold, i, i+1, j))
+
+  PC2s = dats_[:, 1]
+  for i in range(5):
+    rang = [np.quantile(PC2s, i * 0.2), np.quantile(PC2s, (i+1) * 0.2)]
+    rang_fs = [f for i, f in enumerate(B4_fs) if rang[0] <= PC2s[i] < rang[1]]
+    ct = 0
+    base = np.zeros((128, 128), dtype=float)
+    for j, f in enumerate(rang_fs):
+      ind = B4_fs.index(f)
+      slic = site_dat[ind][0][0].cpu().numpy().astype('float')
+      base = base + slic
+      ct += 1
+    aver = base/ct
+    aver = (aver * 65535).astype('uint16')
+    cv2.imwrite('/data/michaelwu/PC_samples/cpca_alpha%d_PC2_fold%d_aver.png' % (fold, i), enhance_contrast(aver, a=2, b=-50000))
+    for j, f in enumerate(np.random.choice(rang_fs, (20,), replace=False)):
+      names.append(f)
+      out_paths.append('/data/michaelwu/PC_samples/cpca_alpha%d_PC2/PC2_%d_%d_sample%d.png' % (fold, i, i+1, j))
+
+  for name, out_path in zip(names, out_paths):
+    ind = B4_fs.index(name)
+    slic = (site_dat[ind][0][0].cpu().numpy() * 65535).astype('uint16')
+    cv2.imwrite(out_path, enhance_contrast(slic, a=2, b=-50000))
 
 
 
-ss = [sizes[f][0] for f in sample_in_traj]
-ds = [densities[f][0][1] for f in sample_in_traj]
+# names = []
+# out_paths = []
+# np.random.seed(122)
 
-dats_ = projected_data[2]
-#cmap = matplotlib.cm.get_cmap('BuPu')  
-#range_min = np.log(min(ss))
-#range_max = np.log(max(ss))
-#colors = [cmap(((np.log(s) - range_min)/(range_max - range_min))**1.5) for s in ss]
-plt.clf()
-sns.set_style('white')
-fig, ax = plt.subplots()
-ax.scatter(dats_[:, 0], dats_[:, 1], s=0.5, edgecolors='none')
-plt.xlim(-5, 5)
-plt.ylim(-5, 5)
-plt.savefig('/home/michaelwu/cpca2.png', dpi=300)
-
-
-diffs = []
-for t in trajs:
-  cpca_traj = []
-  for i in trajs[t]:
-    cpca_traj.append(dats_[sample_in_traj.index(fs[i])])
-  cpca_traj = np.stack(cpca_traj)
-  traj_diff = np.linalg.norm(cpca_traj[1:] - cpca_traj[:-1], ord=2, axis=1)
-  diffs.append(traj_diff)
+# PC1s = dats_[:, 0]
+# lower_ = np.quantile(PC1s, 0.2)
+# lower_fs = [f for i, f in enumerate(B4_fs) if PC1s[i] < lower_]
+# upper_ = np.quantile(PC1s, 0.8)
+# upper_fs = [f for i, f in enumerate(B4_fs) if PC1s[i] > upper_]
+# for i, f in enumerate(np.random.choice(lower_fs, (50,), replace=False)):
+#   names.append(f)
+#   out_paths.append('/home/michaelwu/cpca_PC1_lower_sample%d.png' % i)
+# for i, f in enumerate(np.random.choice(upper_fs, (50,), replace=False)):
+#   names.append(f)
+#   out_paths.append('/home/michaelwu/cpca_PC1_upper_sample%d.png' % i)
 
 
-base_diff = np.linalg.norm(dats_[1:] - dats_[0:1], ord=2, axis=1)
-plt.hist(base_diff, bins=np.arange(0, 10, 0.1))
-plt.hist(np.concatenate(diffs), bins=np.arange(0, 10, 0.1))
-plt.savefig('/home/michaelwu/diff_hist.png', dpi=300)
+# PC1_range = (np.quantile(PC1s, 0.4), np.quantile(PC1s, 0.6))
+# PC2s = dats_[:, 1]
+# lower_ = np.quantile(PC2s, 0.2)
+# lower_fs = [f for i, f in enumerate(B4_fs) if PC2s[i] < lower_ and PC1_range[0] < PC1s[i] < PC1_range[1]]
+# upper_ = np.quantile(PC2s, 0.8)
+# upper_fs = [f for i, f in enumerate(B4_fs) if PC2s[i] > upper_ and PC1_range[0] < PC1s[i] < PC1_range[1]]
+# for i, f in enumerate(np.random.choice(lower_fs, (50,), replace=False)):
+#   names.append(f)
+#   out_paths.append('/home/michaelwu/cpca_PC2_lower_sample%d.png' % i)
+# for i, f in enumerate(np.random.choice(upper_fs, (50,), replace=False)):
+#   names.append(f)
+#   out_paths.append('/home/michaelwu/cpca_PC2_upper_sample%d.png' % i)
+
+
+# def enhance_contrast(mat, a=1.5, b=-10000):
+#   mat2 = cv2.addWeighted(mat, a, mat, 0, b)
+#   return mat2
+
+

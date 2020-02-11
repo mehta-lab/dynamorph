@@ -15,31 +15,48 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2
-import imageio
 from scipy.spatial.distance import cdist
 from scipy.optimize import linear_sum_assignment
 from .extract_patches import within_range, generate_mask, select_window
 
-def frame_matching(f1, f2, int1, int2, dist_cutoff=100):
+def frame_matching(f1, f2, int1, int2, dist_cutoff=100, int_eff=1.4):
+  """ Matching cells between two frames
+
+  f1: list of np.array(size 2)
+      cell centroid positions in frame 1
+  f2: list of np.array(size 2)
+      cell centroid positions in frame 2
+  int1: list of int
+      cell sizes in frame 1
+  int2: list of int
+      cell sizes in frame 2
+  dist_cutoff: int
+      cutoff threshold, any pairs with larger distance are neglected
+  int_eff: float
+      intensity contribution on cost mat, default at 1.4
+  """
   f1 = np.array(f1).reshape((-1, 2))
   f2 = np.array(f2).reshape((-1, 2))
   int1 = np.array(int1).reshape((-1, 1))
   int2 = np.array(int2).reshape((-1, 1))
-  
-  cost_mat = np.ones((len(f1)+len(f2), len(f1)+len(f2))) * (dist_cutoff ** 2 * 10)
-  dist_mat = cdist(f1, f2) ** 2
-  dist_mat[np.where(dist_mat>=(dist_cutoff**2))] = (dist_cutoff ** 2 * 10)
-  
+
   int_dist_mat = int2.reshape((1, -1)) / int1.reshape((-1, 1))
   int_dist_mat = int_dist_mat + 1/int_dist_mat
   int_dist_mat[np.where(int_dist_mat >= 2.5)] = 20.
-  int_dist_mat = (int_dist_mat/2) ** 6
+  int_dist_mat = int_dist_mat ** int_eff
+  int_dist_baseline = np.quantile(int_dist_mat, 0.1)
 
+  cost_mat = np.ones((len(f1)+len(f2), len(f1)+len(f2))) * (dist_cutoff ** 2 * 10) * int_dist_baseline
+  dist_mat = cdist(f1, f2) ** 2
+  dist_mat[np.where(dist_mat>=(dist_cutoff**2))] = (dist_cutoff ** 2 * 10)
   cost_mat[:len(f1), :len(f2)] = dist_mat * int_dist_mat
+
+  # Cost of no match placeholder
   for i in range(len(f1)):
-    cost_mat[i, i+len(f2)] = 0.15 * (dist_cutoff ** 2)
+    cost_mat[i, i+len(f2)] = 1.05 * (dist_cutoff ** 2) * int_dist_baseline
   for j in range(len(f2)):
-    cost_mat[len(f1)+j, j] = 0.15 * (dist_cutoff ** 2)
+    cost_mat[len(f1)+j, j] = 1.05 * (dist_cutoff ** 2) * int_dist_baseline
+
   cost_mat[len(f1):, len(f2):] = np.transpose(dist_mat)
   links = linear_sum_assignment(cost_mat)
   pairs = []
@@ -51,6 +68,19 @@ def frame_matching(f1, f2, int1, int2, dist_cutoff=100):
   return pairs, {pairs[i]: costs[i] for i in np.argsort(costs)[-5:]}
 
 def frame_matching_ot(f1, f2, int1, int2, dist_cutoff=50):
+  """ Matching cells between two frames (optimal transport)
+
+  f1: list of np.array(size 2)
+      cell centroid positions in frame 1
+  f2: list of np.array(size 2)
+      cell centroid positions in frame 2
+  int1: list of int
+      cell sizes in frame 1
+  int2: list of int
+      cell sizes in frame 2
+  dist_cutoff: int
+      cutoff threshold, any pairs with larger distance are neglected
+  """
 
   dist_mat = cdist(f1, f2) ** 2
   dist_mat[np.where(dist_mat>=(dist_cutoff**2))] = (dist_cutoff ** 2 * 10)
@@ -66,6 +96,21 @@ def trajectory_connection(trajectories,
                           intensities_dict,
                           dist_cutoff=100,
                           only_gap=True):
+  """ Model gap, split and merge as explained in 
+      "Robust single-particle tracking in live-cell time-lapse sequences"
+
+  trajectories: list
+      list of trajectory (dict of t_point: cell_id)
+  trajectories_positions: list
+      list of trajectory position (dict of t_point: cell center position)
+  intensities_dict: dict
+      dict of cell sizes in each frame
+  dist_cutoff: int
+      cutoff threshold, any fragment trajectory pairs with larger distance are neglected
+  only_gap: bool
+      if True, only model trajectory gaps
+      TODO: add in trajectory merge/split
+  """
   starts = [min(t.keys()) for t in trajectories_positions]
   ends = [max(t.keys()) for t in trajectories_positions]
 
@@ -81,10 +126,7 @@ def trajectory_connection(trajectories,
   dist_mat = cdist(positions_x, positions_y) ** 2
 
   mask_mat = ((np.array(starts).reshape((1, -1)) - np.array(ends).reshape((-1, 1))) == 2)*1 + \
-             ((np.array(starts).reshape((1, -1)) - np.array(ends).reshape((-1, 1))) == 3)*1.5 + \
-             ((np.array(starts).reshape((1, -1)) - np.array(ends).reshape((-1, 1))) == 4)*2. + \
-             ((np.array(starts).reshape((1, -1)) - np.array(ends).reshape((-1, 1))) == 5)*3.2 + \
-             ((np.array(starts).reshape((1, -1)) - np.array(ends).reshape((-1, 1))) == 6)*4 # Allow gap up to 6 time intervals
+             ((np.array(starts).reshape((1, -1)) - np.array(ends).reshape((-1, 1))) == 3)*4 # Allow gap up to 3 time intervals
   mask_mat[np.where(dist_mat>=(dist_cutoff**2))] = 0
   cost_mat_upper_left = mask_mat * dist_mat + (1 - np.sign(mask_mat)) * cost_mat_upper_left
 
@@ -236,9 +278,19 @@ def trajectory_connection(trajectories,
         [np.concatenate([cost_mat_upper_left, cost_mat_upper_middle, cost_mat_upper_right], 1),
          np.concatenate([cost_mat_middle_left, cost_mat_middle_middle, cost_mat_middle_right], 1),
          np.concatenate([cost_mat_lower_left, cost_mat_lower_middle, cost_mat_lower_right], 1)], 0)
-    # TODO: finish off the merge/split process
+    # TODO: finish the merge/split process
 
 def generate_trajectories(matchings, positions_dict, intensities_dict):
+  """ Generate trajectories based on frame-to-frame matchings
+
+  matchings: dict
+      dict of frame-to-frame matching
+  positions_dict: dict
+      dict of cell positions in each frame
+  intensities_dict: dict
+      dict of cell sizes in each frame
+  """
+  # Initial pass of trajectory connection, connect based on `matchings`
   trajectories = []
   for t_point in sorted(matchings.keys()):
     pairs = matchings[t_point]
@@ -249,18 +301,31 @@ def generate_trajectories(matchings, positions_dict, intensities_dict):
           break
       else:
         trajectories.append({t_point:pair[0], t_point+1:pair[1]})
-
   trajectories_positions = [{t_point: positions_dict[t_point][t[t_point]] for t_point in t} for t in trajectories]
+  # Second pass: connect gap, account for cell merging/splitting (TODO)
   trajectories = trajectory_connection(trajectories, trajectories_positions, intensities_dict, dist_cutoff=100., only_gap=True)
+  # Only select long trajectories
   trajectories = [t for t in trajectories if len(t) > 10]
   trajectories_positions = [{t_point: positions_dict[t_point][t[t_point]] for t_point in t} for t in trajectories]
   return trajectories, trajectories_positions
 
 def save_traj_bbox(trajectory, trajectory_positions, image_stack, path):
+  """ Save trajectory as gif
+
+  trajectory: dict
+      dict of t_point: cell ID
+  trajectory_positions: dict
+      dict of t_point: cell center position
+  image_stack: np.array
+      image stack, size N(time points) * 2048 * 2048 * 2
+  path: str
+      image saving path
+  """
   output_images = np.zeros((len(trajectory), 512, 512))
   for i, k in enumerate(sorted(trajectory.keys())):
     output_images[i] = cv2.resize(image_stack[k, :, :, 0], (512, 512))
   output_images = np.stack([output_images] * 3, 3)
+  
   output_images = output_images / 65535.
 
   for i, k in enumerate(sorted(trajectory.keys())):
@@ -284,128 +349,64 @@ def save_traj_bbox(trajectory, trajectory_positions, image_stack, path):
     y = box_range[1][1]
     y_ = (int(max(y - 1., 0)), int(min(y + 1., 512)))
     output_images[i, int(box_range[0][0]):int(box_range[0][1]), y_[0]:y_[1]] = np.array([1., 0., 0.]).reshape((1, 1, 3))
-  #tifffile.imwrite(path, (output_images*255).astype('uint8'))
-  imageio.mimsave(path, (output_images*255).astype('uint8'))
+  tifffile.imwrite(path, (output_images*255).astype('uint8'))
   return
 
 
-if __name__ == '__main__':
+def process_site_build_trajectory(site_path, 
+                                  site_segmentation_path, 
+                                  site_supp_files_folder):
+  """ Wrapper of building trajectory step
 
-  # path = '/mnt/comp_micro/Projects/CellVAE'
-  # sites = ['D%d-Site_%d' % (i, j) for j in range(9) for i in range(3, 6)]
-  # CHANNEL_MAX = [65535., 65535.]
-  
-  # for site in sites:
-  #   print("On site %s" % site)
-  #   cell_positions = pickle.load(open(path + '/Data/StaticPatches/%s/cell_positions.pkl' % site, 'rb'))
-  #   cell_pixel_assignments = pickle.load(open(path + '/Data/StaticPatches/%s/cell_pixel_assignments.pkl' % site, 'rb'))
-  #   t_points = sorted(cell_positions.keys())
-  #   assert np.allclose(np.array(t_points)[1:] - 1, np.array(t_points)[:-1])
+  site_path: str
+      path to image stack
+  site_segmentation_path: str
+      path to image segmentation stack
+  site_supp_files_folder: str
+      path to the folder where supplementary files will be saved
+  """
+  cell_positions = pickle.load(open(os.path.join(site_supp_files_folder, 'cell_positions.pkl'), 'rb'))
+  cell_pixel_assignments = pickle.load(open(os.path.join(site_supp_files_folder, 'cell_pixel_assignments.pkl'), 'rb'))
+  t_points = sorted(cell_positions.keys())
+  assert np.allclose(np.array(t_points)[1:] - 1, np.array(t_points)[:-1])
 
-  #   # Mapping to centroid positions
-  #   mg_positions_dict = {k: dict(cell_positions[k][0]) for k in cell_positions}
-  #   non_mg_positions_dict = {k: dict(cell_positions[k][1]) for k in cell_positions}
+  # Mapping to centroid positions
+  cell_positions_dict = {k: dict(cell_positions[k][0] + cell_positions[k][1] + cell_positions[k][2]) for k in cell_positions}
+  # Mapping to size of segmentation
+  intensities_dict = {}
+  for t_point in t_points:
+    intensities_d = dict(zip(*np.unique(cell_pixel_assignments[t_point][1], return_counts=True)))
+    intensities_d = {p[0]: intensities_d[p[0]] for p in cell_positions[t_point][0] + cell_positions[t_point][1] + cell_positions[t_point][2]}
+    intensities_dict[t_point] = intensities_d
 
-  #   # Mapping to size of segmentation
-  #   intensities_dict = {}
-  #   for t_point in t_points:
-  #     intensities_d = dict(zip(*np.unique(cell_pixel_assignments[t_point][1], return_counts=True)))
-  #     intensities_d = {p[0]: intensities_d[p[0]] for p in cell_positions[t_point][0] + cell_positions[t_point][1]}
-  #     intensities_dict[t_point] = intensities_d
-
-  #   # Generate Frame-frame matching
-  #   mg_matchings = {}
-  #   non_mg_matchings = {}
-  #   for t_point in t_points[:-1]:
-  #     ids1 = sorted(mg_positions_dict[t_point].keys())
-  #     ids2 = sorted(mg_positions_dict[t_point+1].keys())      
-  #     f1 = [mg_positions_dict[t_point][i] for i in ids1]
-  #     f2 = [mg_positions_dict[t_point+1][i] for i in ids2]
-  #     int1 = [intensities_dict[t_point][i] for i in ids1]
-  #     int2 = [intensities_dict[t_point+1][i] for i in ids2]
-  #     pairs = frame_matching(f1, f2, int1, int2, dist_cutoff=150)
-  #     mg_matchings[t_point] = [(ids1[p1], ids2[p2]) for p1, p2 in pairs]
-      
-  #     ids1 = sorted(non_mg_positions_dict[t_point].keys())
-  #     ids2 = sorted(non_mg_positions_dict[t_point+1].keys())
-  #     f1 = [non_mg_positions_dict[t_point][i] for i in ids1]
-  #     f2 = [non_mg_positions_dict[t_point+1][i] for i in ids2]
-  #     int1 = [intensities_dict[t_point][i] for i in ids1]
-  #     int2 = [intensities_dict[t_point+1][i] for i in ids2]
-  #     pairs = frame_matching(f1, f2, int1, int2, dist_cutoff=150)
-  #     non_mg_matchings[t_point] = [(ids1[p1], ids2[p2]) for p1, p2 in pairs]
-      
-      
-  #   # Connect to trajectories
-  #   mg_trajectories, mg_trajectories_positions = generate_trajectories(mg_matchings, mg_positions_dict, intensities_dict)
-  #   non_mg_trajectories, non_mg_trajectories_positions = generate_trajectories(non_mg_matchings, non_mg_positions_dict, intensities_dict)
-
-
-  #   ### Generate segmentation stacks for trajectories
-  #   if not os.path.exists(path + '/Data/DynamicPatches/%s' % site):
-  #     os.mkdir(path + '/Data/DynamicPatches/%s' % site)
+  # Generate Frame-frame matching
+  cell_matchings = {}
+  # TODO: save top cost pairs
+  pairs_to_be_checked = {}
+  for t_point in t_points[:-1]:
+    ids1 = sorted(cell_positions_dict[t_point].keys())
+    ids2 = sorted(cell_positions_dict[t_point+1].keys())      
+    f1 = [cell_positions_dict[t_point][i] for i in ids1]
+    f2 = [cell_positions_dict[t_point+1][i] for i in ids2]
+    int1 = [intensities_dict[t_point][i] for i in ids1]
+    int2 = [intensities_dict[t_point+1][i] for i in ids2]
+    pairs, top_cost_pairs = frame_matching(f1, f2, int1, int2, dist_cutoff=100)
+    for p in top_cost_pairs:
+      pairs_to_be_checked[('%d_%d' % (t_point, ids1[p[0]]), '%d_%d' % (t_point+1, ids2[p[1]]))] = top_cost_pairs[p]
+    cell_matchings[t_point] = [(ids1[p1], ids2[p2]) for p1, p2 in pairs]
     
-  #   with open(path + '/Data/DynamicPatches/%s/mg_traj.pkl' % site, 'wb') as f:
-  #     pickle.dump([mg_trajectories, mg_trajectories_positions], f)
-  #   with open(path + '/Data/DynamicPatches/%s/non_mg_traj.pkl' % site, 'wb') as f:
-  #     pickle.dump([non_mg_trajectories, non_mg_trajectories_positions], f)
+  # Connect to trajectories
+  cell_trajectories, cell_trajectories_positions = generate_trajectories(cell_matchings, cell_positions_dict, intensities_dict)
+  with open(os.path.join(site_supp_files_folder, 'cell_traj.pkl'), 'wb') as f:
+    pickle.dump([cell_trajectories, cell_trajectories_positions], f)
+  return
 
-  #   image_stack = np.load(os.path.join(path, 'Combined', '%s.npy' % site))
-  #   for i, (t, t_p) in enumerate(zip(mg_trajectories, mg_trajectories_positions)):
-  #     save_traj_bbox(t, t_p, image_stack, path + '/Data/DynamicPatches/%s/mg_traj_%d.tif' % (site, i))
-  #   for i, (t, t_p) in enumerate(zip(non_mg_trajectories, non_mg_trajectories_positions)):
-  #     save_traj_bbox(t, t_p, image_stack, path + '/Data/DynamicPatches/%s/non_mg_traj_%d.tif' % (site, i))
-
+if __name__ == '__main__':
   path = '/data/michaelwu/data_temp'
-  sites = ['B4-Site_%d' % i for i in [0, 2, 3, 5, 6]]
-  CHANNEL_MAX = [65535., 65535.]
-  
-  for site in sites:
-    print("On site %s" % site)
-    cell_positions = pickle.load(open(path + '/B4-supps/%s/cell_positions.pkl' % site, 'rb'))
-    cell_pixel_assignments = pickle.load(open(path + '/B4-supps/%s/cell_pixel_assignments.pkl' % site, 'rb'))
-    t_points = sorted(cell_positions.keys())
-    assert np.allclose(np.array(t_points)[1:] - 1, np.array(t_points)[:-1])
-
-    # Mapping to centroid positions
-    cell_positions_dict = {k: dict(cell_positions[k][0] + cell_positions[k][1] + cell_positions[k][2]) for k in cell_positions}
-    # Mapping to size of segmentation
-    intensities_dict = {}
-    for t_point in t_points:
-      intensities_d = dict(zip(*np.unique(cell_pixel_assignments[t_point][1], return_counts=True)))
-      intensities_d = {p[0]: intensities_d[p[0]] for p in cell_positions[t_point][0] + cell_positions[t_point][1] + cell_positions[t_point][2]}
-      intensities_dict[t_point] = intensities_d
-
-    # Generate Frame-frame matching
-    cell_matchings = {}
-    pairs_to_be_checked = {}
-    for t_point in t_points[:-1]:
-      ids1 = sorted(cell_positions_dict[t_point].keys())
-      ids2 = sorted(cell_positions_dict[t_point+1].keys())      
-      f1 = [cell_positions_dict[t_point][i] for i in ids1]
-      f2 = [cell_positions_dict[t_point+1][i] for i in ids2]
-      int1 = [intensities_dict[t_point][i] for i in ids1]
-      int2 = [intensities_dict[t_point+1][i] for i in ids2]
-      pairs, top_cost_pairs = frame_matching(f1, f2, int1, int2, dist_cutoff=75)
-      for p in top_cost_pairs:
-        pairs_to_be_checked[('%d_%d' % (t_point, ids1[p[0]]), '%d_%d' % (t_point+1, ids2[p[1]]))] = top_cost_pairs[p]
-      cell_matchings[t_point] = [(ids1[p1], ids2[p2]) for p1, p2 in pairs]
-      
-    # Connect to trajectories
-    cell_trajectories, cell_trajectories_positions = generate_trajectories(cell_matchings, cell_positions_dict, intensities_dict)
-
-
-    ### Generate segmentation stacks for trajectories
-    with open(path + '/B4-supps/%s/cell_trajs.pkl' % site, 'wb') as f:
-      pickle.dump([cell_trajectories, cell_trajectories_positions], f)
-
-    try:
-      os.mkdir(path + '/B4-supps/%s/traj_movies' % site)
-    except:
-      pass
-    image_stack = np.load(path + '/%s.npy' % site)
-    for i, (t, t_p) in enumerate(zip(cell_trajectories, cell_trajectories_positions)):
-      if len(t) > 50:
-        save_traj_bbox(t, t_p, image_stack, path + '/B4-supps/%s/traj_movies/cell_traj_%d.gif' % (site, i))
-
-
+  sites = ['D%d-Site_%d' % (i, j) for j in range(9) for i in range(3, 6)]
+  for s in sites:
+    site_name = s
+    site_path = os.path.join(path, '%s.npy' % site_name)
+    site_segmentation_path = os.path.join(path, '%s_NNProbabilities.npy' % site_name)
+    site_supp_files_folder = os.path.join(path, 'D-supps', '%s' % site_name)
+    process_site_build_trajectory(site_path, site_segmentation_path, site_supp_files_folder)

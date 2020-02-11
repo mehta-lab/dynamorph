@@ -25,7 +25,6 @@ class VectorQuantizer(nn.Module):
     self.w = nn.Embedding(num_embeddings, embedding_dim)
 
   def forward(self, inputs):
-
     # inputs: Batch * Num_hidden(=embedding_dim) * H * W
     distances = t.sum((inputs.unsqueeze(1) - self.w.weight.reshape((1, self.num_embeddings, self.embedding_dim, 1, 1)))**2, 2)
 
@@ -302,72 +301,6 @@ class VQ_VAE(nn.Module):
             'total_loss': total_loss,
             'perplexity': perplexity}
 
-#class VAE(nn.Module):
-#  def __init__(self,
-#               num_inputs=3,
-#               num_hiddens=16,
-#               num_residual_hiddens=32,
-#               num_residual_layers=2,
-#               commitment_cost=0.25,
-#               channel_var=CHANNEL_VAR,
-#               **kwargs):
-#    super(VAE, self).__init__(**kwargs)
-#    self.num_inputs = num_inputs
-#    self.num_hiddens = num_hiddens
-#    self.num_residual_layers = num_residual_layers
-#    self.num_residual_hiddens = num_residual_hiddens
-#    self.commitment_cost = commitment_cost
-#    self.channel_var = nn.Parameter(t.from_numpy(channel_var).float().reshape((1, 3, 1, 1)), requires_grad=False)
-#    self.enc = nn.Sequential(
-#        nn.Conv2d(self.num_inputs, self.num_hiddens//2, 1),
-#        nn.Conv2d(self.num_hiddens//2, self.num_hiddens//2, 4, stride=2, padding=1),
-#        nn.BatchNorm2d(self.num_hiddens//2),
-#        nn.ReLU(),
-#        nn.Conv2d(self.num_hiddens//2, self.num_hiddens, 4, stride=2, padding=1),
-#        nn.BatchNorm2d(self.num_hiddens),
-#        nn.ReLU(),
-#        nn.Conv2d(self.num_hiddens, self.num_hiddens, 4, stride=2, padding=1),
-#          nn.BatchNorm2d(self.num_hiddens),
-#        nn.ReLU(),
-#        nn.Conv2d(self.num_hiddens, self.num_hiddens*2, 3, padding=1),
-#        nn.BatchNorm2d(self.num_hiddens * 2),
-#        ResidualBlock(self.num_hiddens * 2, self.num_residual_hiddens, self.num_residual_layers)) # For mean and logstd
-#    self.rp = Reparametrize()
-#    self.dec = nn.Sequential(
-#        nn.ConvTranspose2d(self.num_hiddens, self.num_hiddens//2, 4, stride=2, padding=1),
-#        nn.ReLU(),
-#        nn.ConvTranspose2d(self.num_hiddens//2, self.num_hiddens//4, 4, stride=2, padding=1),
-#        nn.ReLU(),
-#        nn.ConvTranspose2d(self.num_hiddens//4, self.num_hiddens//4, 4, stride=2, padding=1),
-#        nn.ReLU(),
-#        nn.Conv2d(self.num_hiddens//4, self.num_inputs, 1))
-#    
-#  def forward(self, inputs, time_matching_mat=None, batch_mask=None):
-#    # inputs: Batch * num_inputs(channel) * H * W, each channel from 0 to 1
-#    z_before = self.enc(inputs)
-#    z_mean = z_before[:, :self.num_hiddens]
-#    z_logstd = z_before[:, self.num_hiddens:]
-#    z_after, KLD = self.rp(z_mean, z_logstd)
-#    decoded = self.dec(z_after)
-#    if batch_mask is None:
-#      batch_mask = t.ones_like(inputs)
-#    recon_loss = t.mean(F.mse_loss(decoded * batch_mask, inputs * batch_mask, reduction='none')/self.channel_var)
-#    total_loss = recon_loss + KLD
-#    time_matching_loss = None
-#    if not time_matching_mat is None:
-#      z_before_ = z_before.reshape((z_before.shape[0], -1))
-#      len_latent = z_before_.shape[1]
-#      sim_mat = t.pow(z_before_.reshape((1, -1, len_latent)) - \
-#                      z_before_.reshape((-1, 1, len_latent)), 2).sum(2)
-#      assert sim_mat.shape == time_matching_mat.shape
-#      time_matching_loss = (sim_mat * time_matching_mat).sum()
-#      total_loss += time_matching_loss
-#    return decoded, \
-#           {'recon_loss': recon_loss,
-#            'KL_loss': KLD,
-#            'time_matching_loss': time_matching_loss,
-#            'total_loss': total_loss,
-#            'perplexity': t.zeros((1,))}
 
 def train(model, dataset, relation_mat=None, mask=None, n_epochs=10, lr=0.001, batch_size=16, gpu=True):
   optimizer = t.optim.Adam(model.parameters(), lr=lr, betas=(.9, .999))
@@ -415,6 +348,18 @@ def train(model, dataset, relation_mat=None, mask=None, n_epochs=10, lr=0.001, b
   return model
 
 def prepare_dataset(fs, cs=[0, 1], input_shape=(128, 128), channel_max=CHANNEL_MAX):
+  """ Prepare input dataset for VAE
+      inputs are individual h5 files
+
+  fs: list
+      list of input files, should be individual h5 files (also used as identifiers)
+  cs: list
+      list of encoded channels
+  input_shape: tuple
+      input shape for VAE
+  channel_max: np.array
+      normalization constant for each channel
+  """
   tensors = []
   for i, f_n in enumerate(fs):
     if i%1000 == 0:
@@ -437,6 +382,22 @@ def prepare_dataset_from_collection(fs,
                                     channel_max=CHANNEL_MAX,
                                     file_path='./',
                                     file_suffix='_all_patches.pkl'):
+  """ Prepare input dataset for VAE
+      inputs are stored in assembled pickle files
+
+  fs: list
+      list of input file IDs, site names will be extracted from IDs
+  cs: list
+      list of encoded channels
+  input_shape: tuple
+      input shape for VAE
+  channel_max: np.array
+      normalization constant for each channel
+  file_path: str
+      path to assembled pickle files
+  file_suffix: str
+      suffix of pickle files
+  """
   tensors = {}
   files = set([f.split('/')[-2] for f in fs])
   for file_name in files:
@@ -454,7 +415,48 @@ def prepare_dataset_from_collection(fs,
   dataset = TensorDataset(t.stack([tensors[f_n] for f_n in fs], 0))
   return dataset
 
+def prepare_dataset_v2(dat_fs, 
+                       cs=[0, 1],
+                       input_shape=(128, 128),
+                       channel_max=CHANNEL_MAX):
+  """ Prepare input dataset for VAE
+      inputs are stored in assembled pickle files
+
+  dat_fs: list
+      list of assembled pickle files
+  cs: list
+      list of encoded channels
+  input_shape: tuple
+      input shape for VAE
+  channel_max: np.array
+      normalization constant for each channel
+  """
+  tensors = {}
+  for dat_f in dat_fs:
+    file_dats = pickle.load(open(dat_f, 'rb'))
+    for k in file_dats:
+      dat = file_dats[k]['masked_mat']
+      if cs is None:
+        cs = np.arange(dat.shape[2])
+      stacks = []
+      for c, m in zip(cs, channel_max):
+        c_slice = cv2.resize(np.array(dat[:, :, c]).astype(float), input_shape)
+        stacks.append(c_slice/m)
+      tensors[k] = t.from_numpy(np.stack(stacks, 0)).float()
+  fs = sorted(tensors.keys())
+  dataset = TensorDataset(t.stack([tensors[f_n] for f_n in fs], 0))
+  return dataset, fs
+
 def reorder_with_trajectories(dataset, relations, seed=None):
+  """ Reorder `dataset` to facilitate training with relation cost
+
+  dataset: TensorDataset
+      input dataset to VAE
+  relations: dict
+      dict of pairwise relationship (adjacent frames, etc.)
+  seed
+      random seed
+  """
   if not seed is None:
     np.random.seed(seed)
   inds_pool = set(range(len(dataset)))
@@ -505,6 +507,8 @@ def reorder_with_trajectories(dataset, relations, seed=None):
   return TensorDataset(new_tensor), relation_mat, inds_in_order
 
 def rescale(dataset):
+  """ Rescale the range of `dataset` to CHANNEL_RANGE
+  """
   tensor = dataset.tensors[0]
   assert len(CHANNEL_RANGE) == tensor.shape[1]
   channel_slices = []
@@ -517,6 +521,8 @@ def rescale(dataset):
   return TensorDataset(new_tensor)
 
 def resscale_backward(tensor):
+  """ Reverse operation of `rescale`
+  """
   assert len(tensor.shape) == 4
   assert len(CHANNEL_RANGE) == tensor.shape[1]
   channel_slices = []
