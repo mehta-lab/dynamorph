@@ -21,6 +21,7 @@ for pipeline steps 1-3
 
 import numpy as np
 import cv2
+import os
 
 
 # 1, 2, 3
@@ -91,56 +92,4 @@ def write_raw_to_npy(path, site, output, multipage=True):
     raw_adjusted = adjust_range(raw)
 
     np.save(output_name, raw_adjusted)
-
-
-# 4
-def segmentation(site_path):
-    '''
-
-    :param path:
-    :return:
-    '''
-
-    pass
-
-
-# 5
-def instance_segmentation(site_path, site_segmentation_path, site_supp_files_folder):
-    '''
-
-    :param site_path:
-    :param site_segmentation_path:
-    :return:
-    '''
-    pass
-
-
-# 6
-def extract_patches(site_path, site_segmentation_path, site_supp_files_folder):
-    '''
-
-    :param site_path:
-    :param site_segmentation_path:
-    :param site_supp_files_folder:
-    :return:
-    '''
-    pass
-
-
-# 7
-def build_trajectories(site_path, site_segmentation_path, site_supp_files_folder):
-    '''
-
-    :param site_path:
-    :param site_segmentation_path:
-    :param site_supp_files_folder:
-    :return:
-    '''
-
-    pass
-
-
-# 8
-def collect_patches():
-    pass
 
