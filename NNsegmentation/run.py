@@ -10,8 +10,8 @@ import numpy as np
 import os
 os.environ['KERAS_BACKEND'] = 'tensorflow'
 import pickle
-from data import generate_patches, generate_ordered_patches, predict_whole_map
-from models import Segment
+from .data import generate_patches, generate_ordered_patches, predict_whole_map
+from .models import Segment
 from sklearn.metrics import roc_auc_score, precision_score, recall_score, f1_score
 import cv2
 
