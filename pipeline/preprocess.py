@@ -54,7 +54,7 @@ def load_raw(path, site, multipage=True):
 
     assert(np.array(ret).shape == np.array(phase).shape)
 
-    out = np.empty(shape=ret.shape + (2,))
+    out = np.empty(shape=np.array(ret).shape + (2,))
     out[:,:,:,0] = np.array(ret)
     out[:,:,:,1] = np.array(phase)
 
