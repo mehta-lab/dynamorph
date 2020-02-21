@@ -51,12 +51,14 @@ def load_raw(path, site, multipage=True):
 
     _, ret = cv2.imreadmulti(fullpath+'/'+multi_tif_retard, flags=cv2.IMREAD_ANYDEPTH)
     _, phase = cv2.imreadmulti(fullpath+'/'+multi_tif_phase, flags=cv2.IMREAD_ANYDEPTH)
+    ret = np.array(ret)
+    phase = np.array(phase)
 
-    assert(np.array(ret).shape == np.array(phase).shape)
+    assert(ret.shape == phase.shape)
 
-    out = np.empty(shape=np.array(ret).shape + (2,))
-    out[:,:,:,0] = np.array(ret)
-    out[:,:,:,1] = np.array(phase)
+    out = np.empty(shape=ret.shape + (2,))
+    out[:,:,:,0] = phase
+    out[:,:,:,1] = ret
 
     return out
 
