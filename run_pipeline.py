@@ -40,7 +40,7 @@ for i in [0, 1, 2, 3, 5, 6, 7]:
                   unet_feat=32,
                   fc_layers=[64, 32],
                   n_classes=3)
-  model.load('NNsegmentation/temp_save_unsaturated/final.h5')
+  model.load('./NNsegmentation/temp_save_unsaturated/final.h5')
   predict_whole_map(site_path, model, n_classes=3, batch_size=8, n_supp=5)
 
   # Extract single cell patches
@@ -73,7 +73,7 @@ torch.save(adjusted_dataset, os.path.join(DATA_ROOT, '%s_all_adjusted_static_pat
 # VAE encoding
 input_dataset = rescale(adjusted_dataset)
 model = VQ_VAE(alpha=0.0005, gpu=True)
-model.load_state_dict(torch.load('HiddenStateExtractor/save_0005_bkp4.pt'))
+model.load_state_dict(torch.load('./HiddenStateExtractor/save_0005_bkp4.pt'))
 z_bs = {}
 for i in range(len(dataset)):
   sample = input_dataset[i:(i+1)][0].cuda()
@@ -85,7 +85,7 @@ with open(os.path.join(DATA_ROOT, '%s_latent_space.pkl' % sites), 'wb') as f:
   pickle.dump(dats, f)
 
 # PCA
-pca = pickle.load(open('HiddenStateExtractor/pca_save.pkl', 'rb'))
+pca = pickle.load(open('./HiddenStateExtractor/pca_save.pkl', 'rb'))
 dats_ = pca.transform(dats)
 with open(os.path.join(DATA_ROOT, '%s_latent_space_PCAed.pkl' % sites), 'wb') as f:
   pickle.dump(dats_, f)

@@ -12,4 +12,4 @@ tensorflow>=1.13
 keras>=2.3.0
 pytorch
 
-segmentation_models>=1.0.0
+segmentation_models==0.2.1

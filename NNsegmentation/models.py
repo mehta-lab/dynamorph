@@ -49,7 +49,7 @@ class Segment(object):
   def build_model(self):
     self.input = Input(shape=self.input_shape, dtype='float32')
     self.pre_conv = Dense(3, activation=None, name='pre_conv')(self.input)
-    
+
     backbone = segmentation_models.backbones.get_backbone(
         'resnet34',
         input_shape=list(self.input_shape[:2]) + [3],
