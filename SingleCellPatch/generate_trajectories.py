@@ -8,7 +8,8 @@ import numpy as np
 import scipy
 import os
 import ot
-import tifffile
+# import tifffile
+import imageio
 import pickle
 import h5py
 import matplotlib
@@ -349,7 +350,8 @@ def save_traj_bbox(trajectory, trajectory_positions, image_stack, path):
     y = box_range[1][1]
     y_ = (int(max(y - 1., 0)), int(min(y + 1., 512)))
     output_images[i, int(box_range[0][0]):int(box_range[0][1]), y_[0]:y_[1]] = np.array([1., 0., 0.]).reshape((1, 1, 3))
-  tifffile.imwrite(path, (output_images*255).astype('uint8'))
+  # tifffile.imwrite(path, (output_images*255).astype('uint8'))
+  imageio.mimwrite(path, (output_images*255).astype('uint8'))
   return
 
 

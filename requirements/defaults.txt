@@ -10,5 +10,6 @@ POT>=0.6.0
 h5py>=2.10.0
 tensorflow>=1.13
 keras>=2.3.0
+pytorch
 
 segmentation_models>=1.0.0
