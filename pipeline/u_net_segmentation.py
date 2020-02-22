@@ -29,7 +29,7 @@ def segmentation(temp_folder, site):
     site_supp_files_folder = os.path.join(temp_folder, '%s-supps' % site[:2], '%s' % site)
 
     if not os.path.exists(site_supp_files_folder):
-        os.mkdir(site_supp_files_folder)
+        os.makedirs(site_supp_files_folder)
 
         # Generate semantic segmentation
     model = Segment(input_shape=(256, 256, 2),
