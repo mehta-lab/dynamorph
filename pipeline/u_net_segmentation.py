@@ -36,7 +36,7 @@ def segmentation(temp_folder, site):
                     unet_feat=32,
                     fc_layers=[64, 32],
                     n_classes=3)
-    model.load('./NNsegmentation/temp_save_unsaturated/final.h5')
+    model.load('NNsegmentation/temp_save_unsaturated/final.h5')
     predict_whole_map(site_path, model, n_classes=3, batch_size=8, n_supp=5)
 
 
@@ -49,5 +49,4 @@ def instance_segmentation(temp_folder, site):
     site_supp_files_folder = os.path.join(temp_folder, '%s-supps' % site[:2], '%s' % site)
 
     process_site_instance_segmentation(site_path, site_segmentation_path, site_supp_files_folder)
-
 
