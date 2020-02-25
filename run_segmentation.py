@@ -19,17 +19,22 @@ DATA_PREP = '/gpfs/CompMicro/Hummingbird/Processed/Galina/VAE/data_temp'
 def main():
 
     # loads: 'NNsegmentation/temp_save_unsaturated/final.h5', 'site.npy' (pre=generated using preprocess.py)
+
     # generates '_NNProbabilities.npy', '
     #           .png',
     #           '_NNpred.png',
     #            '%s-supps' FOLDER
+
     # prints: "Predicting %d" % t
+
     segmentation(DATA_PREP, SITES[0])
 
     # generates 'cell_positions.pkl',
     #           'cell_pixel_assignments.pkl',
     #           'segmentation_%d.png'
+
     # prints 'Clustering time %d' % timepoint
+
     instance_segmentation(DATA_PREP, SITES[0])
 
 

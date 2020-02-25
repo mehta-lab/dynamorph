@@ -18,8 +18,13 @@ DATA_PREP = '/gpfs/CompMicro/Hummingbird/Processed/Galina/VAE/data_temp'
 
 def main():
 
-    # loads 'cell_positions.pkl', 'cell_pixel_assignments.pkl', 'segmentation.'
+    # loads 'Site.npy',
+    #       '_NNProbabilities.npy',
+    #       '/Site-supps/Site/cell_positions.pkl',
+    #       '/Site-supps/site/cell_pixel_assignments.pkl',
+
     # generates 'stacks_%d.pkl' % timepoint
+
     # prints: "writing time %d"
     extract_patches(DATA_PREP, SITES[0])
 
@@ -30,7 +35,10 @@ def main():
     # build_trajectories(DATA_PREP, SITES[0])
 
     # loads 'stacks_%d.pkl' % timepoint in 'site-supps' folder
-    # generates '%s_file_paths.pkl', '%s_all_static_patches.pt', '%s_all_adjusted_static_patches.pt'
+    #
+    # generates '%s_file_paths.pkl',
+    #           '%s_all_static_patches.pt',
+    #           '%s_all_adjusted_static_patches.pt'
     assemble_VAE(DATA_PREP, SITES[0])
 
 

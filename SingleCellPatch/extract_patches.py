@@ -118,7 +118,8 @@ def instance_clustering(cell_segmentation,
                         instance_map=True, 
                         map_path=None, 
                         fg_thr=0.3,
-                        DBSCAN_thr=(10, 250)):
+                        DBSCAN_thr=(10, 250),
+                        label_seg=True):
   """ Perform instance clustering on a static frame
 
   cell_segmentation: np.array, float
@@ -176,6 +177,7 @@ def instance_clustering(cell_segmentation,
     else:
       other_cells.append((cell_id, mean_pos))
 
+  # PLOT SEGMENTATIONS, SAVE AS .PNG
   if instance_map and map_path is not None:
     # bg as -1
     segmented = np.zeros(cell_segmentation.shape[:2]) - 1
@@ -187,18 +189,21 @@ def instance_clustering(cell_segmentation,
       points = positions[np.where(positions_labels == cell_id)[0]]
       for p in points:
         segmented[p[0], p[1]] = cell_id%10
+
     plt.clf()
     cmap = matplotlib.cm.get_cmap('tab10')
     cmap.set_under(color='k')
     plt.imshow(segmented, cmap=cmap, vmin=-0.001, vmax=10.001)
-    font_mg = {'color': 'white', 'size': 4}
-    font_non_mg = {'color': 'red', 'size': 4}
-    for cell_id, mean_pos in mg_cell_positions:
-      plt.text(mean_pos[1], mean_pos[0], str(cell_id), fontdict=font_mg)
-    for cell_id, mean_pos in non_mg_cell_positions:
-      plt.text(mean_pos[1], mean_pos[0], str(cell_id), fontdict=font_non_mg)
+    if label_seg:
+      font_mg = {'color': 'white', 'size': 4}
+      font_non_mg = {'color': 'red', 'size': 4}
+      for cell_id, mean_pos in mg_cell_positions:
+        plt.text(mean_pos[1], mean_pos[0], str(cell_id), fontdict=font_mg)
+      for cell_id, mean_pos in non_mg_cell_positions:
+        plt.text(mean_pos[1], mean_pos[0], str(cell_id), fontdict=font_non_mg)
     plt.axis('off')
-    plt.savefig(map_path, dpi=300)
+    plt.savefig(map_path, dpi=300, bbox_inches='tight', pad_inches=0)
+
   return (mg_cell_positions, non_mg_cell_positions, other_cells), positions, positions_labels
 
 def get_cell_rect_angle(tm):
@@ -240,7 +245,7 @@ def process_site_instance_segmentation(site_path,
     instance_map_path = os.path.join(site_supp_files_folder, 'segmentation_%d.png' % t_point)
 
     # res = (mg_cell_positions, non_mg_cell_positions, other_cells), positions, positions_labels
-    res = instance_clustering(cell_segmentation, instance_map=True, map_path=instance_map_path)
+    res = instance_clustering(cell_segmentation, instance_map=True, map_path=instance_map_path, label_seg=False)
 
     cell_positions[t_point] = res[0] # MG, Non-MG, Chimeric Cells
     cell_pixel_assignments[t_point] = res[1:]
