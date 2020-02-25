@@ -8,8 +8,13 @@
 
 from pipeline.preprocess import write_raw_to_npy
 
+import os
+from multiprocessing import Pool
+
 # ESS from hulk
-NOVEMBER = '/gpfs/CompMicro/Hummingbird/Processed/Galina/2020_01_28/SM_GW22_2020_0128_1143_2hr_fastTimeSeries_1_SM_GW22_2020_0128_1143_2hr_fastTimeSeries_1/blank_bg_stabilized'
+NOVEMBER = '/gpfs/CompMicro/Projects/learningCellState/microglia/20191107_1209_1_GW23/blank_bg_stabilized'
+JANUARY = '/gpfs/CompMicro/Hummingbird/Processed/Galina/2020_01_28/SM_GW22_2020_0128_1404_1_SM_GW22_2020_0128_1404_1/blank_bg_stabilized'
+JANUARY_FAST = '/gpfs/CompMicro/Hummingbird/Processed/Galina/2020_01_28/SM_GW22_2020_0128_1143_2hr_fastTimeSeries_1_SM_GW22_2020_0128_1143_2hr_fastTimeSeries_1/blank_bg_stabilized'
 
 
 # SITES = ['B4-Site_0', 'B4-Site_1',  'B4-Site_2',  'B4-Site_3',  'B4-Site_4', 'B4-Site_5', 'B4-Site_6', 'B4-Site_7', 'B4-Site_8',
@@ -19,14 +24,25 @@ NOVEMBER = '/gpfs/CompMicro/Hummingbird/Processed/Galina/2020_01_28/SM_GW22_2020
 #          'C5-Site_0', 'C5-Site_1',  'C5-Site_2',  'C5-Site_3',  'C5-Site_4', 'C5-Site_5', 'C5-Site_6', 'C5-Site_7', 'C5-Site_8']
 
 
-SITES = ['C5-Site_0']
+NOVEMBER_SITES = [
+    'B2-Site_0', 'B2-Site_1',  'B2-Site_2',  'B2-Site_3',  'B2-Site_4', 'B2-Site_5', 'B2-Site_6', 'B2-Site_7', 'B2-Site_8',
+    'B4-Site_0', 'B4-Site_1',  'B4-Site_2',  'B4-Site_3',  'B4-Site_4', 'B4-Site_5', 'B4-Site_6', 'B4-Site_7', 'B4-Site_8',
+    'B5-Site_0', 'B5-Site_1',  'B5-Site_2',  'B5-Site_3',  'B5-Site_4', 'B5-Site_5', 'B5-Site_6', 'B5-Site_7', 'B5-Site_8',
+    'C4-Site_0', 'C4-Site_1',  'C4-Site_2',  'C4-Site_3',  'C4-Site_4', 'C4-Site_5', 'C4-Site_6', 'C4-Site_7', 'C4-Site_8',
+    'C5-Site_0', 'C5-Site_1',  'C5-Site_2',  'C5-Site_3',  'C5-Site_4', 'C5-Site_5', 'C5-Site_6', 'C5-Site_7', 'C5-Site_8']
 
-DATA_PREP = '/gpfs/CompMicro/Hummingbird/Processed/Galina/VAE/data_temp'
+# DATA_PREP = '/gpfs/CompMicro/Hummingbird/Processed/Galina/VAE/data_temp'
+output = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation'
 
 
 def main():
 
-    write_raw_to_npy(NOVEMBER, SITES[0], DATA_PREP, multipage=True)
+    for site in NOVEMBER_SITES:
+
+        if not os.path.isdir(output+os.sep+'NOVEMBER'+os.sep+site):
+            os.mkdir(output+os.sep+'NOVEMBER'+os.sep+site)
+
+        write_raw_to_npy(NOVEMBER, site, output+os.sep+'NOVEMBER'+os.sep+site, multipage=True)
 
 
 if __name__ == '__main__':
