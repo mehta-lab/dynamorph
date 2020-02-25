@@ -1,7 +1,6 @@
 # bchhun, {2020-02-21}
 
-from pipeline.u_net_segmentation import segmentation, instance_segmentation
-from pipeline.trajectories import extract_patches, build_trajectories, assemble_VAE
+from pipeline.patch_preVAE import extract_patches, build_trajectories, assemble_VAE
 
 
 # ESS from hulk
@@ -19,8 +18,20 @@ DATA_PREP = '/gpfs/CompMicro/Hummingbird/Processed/Galina/VAE/data_temp'
 
 def main():
 
-    segmentation(DATA_PREP, SITES[0])
-    instance_segmentation(DATA_PREP, SITES[0])
+    # loads 'cell_positions.pkl', 'cell_pixel_assignments.pkl', 'segmentation.'
+    # generates 'stacks_%d.pkl' % timepoint
+    # prints: "writing time %d"
+    extract_patches(DATA_PREP, SITES[0])
+
+    # *** NOT USED WITH VAE ***
+    # *** USED IN POST-PCA TRAJ MATCHING ***
+    # loads 'cell_positions.pkl', 'cell_pixel_assignments.pkl'
+    # generates 'cell_traj.pkl'
+    # build_trajectories(DATA_PREP, SITES[0])
+
+    # loads 'stacks_%d.pkl' % timepoint in 'site-supps' folder
+    # generates '%s_file_paths.pkl', '%s_all_static_patches.pt', '%s_all_adjusted_static_patches.pt'
+    assemble_VAE(DATA_PREP, SITES[0])
 
 
 if __name__ == '__main__':

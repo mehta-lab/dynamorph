@@ -1,6 +1,6 @@
 # bchhun, {2020-02-21}
 
-from pipeline.trajectories import extract_patches, build_trajectories, assemble_VAE
+from pipeline.segmentation import segmentation, instance_segmentation
 
 
 # ESS from hulk
@@ -18,9 +18,19 @@ DATA_PREP = '/gpfs/CompMicro/Hummingbird/Processed/Galina/VAE/data_temp'
 
 def main():
 
-    extract_patches(DATA_PREP, SITES[0])
-    build_trajectories(DATA_PREP, SITES[0])
-    assemble_VAE(DATA_PREP, SITES[0])
+    # loads: 'NNsegmentation/temp_save_unsaturated/final.h5', 'site.npy' (pre=generated using preprocess.py)
+    # generates '_NNProbabilities.npy', '
+    #           .png',
+    #           '_NNpred.png',
+    #            '%s-supps' FOLDER
+    # prints: "Predicting %d" % t
+    segmentation(DATA_PREP, SITES[0])
+
+    # generates 'cell_positions.pkl',
+    #           'cell_pixel_assignments.pkl',
+    #           'segmentation_%d.png'
+    # prints 'Clustering time %d' % timepoint
+    instance_segmentation(DATA_PREP, SITES[0])
 
 
 if __name__ == '__main__':
