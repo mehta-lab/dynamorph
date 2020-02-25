@@ -1,6 +1,6 @@
 # bchhun, {2020-02-21}
 
-from pipeline.patch_preVAE import extract_patches, build_trajectories, assemble_VAE
+from pipeline.patch_preVAE import extract_patches, assemble_VAE
 
 
 # ESS from hulk
