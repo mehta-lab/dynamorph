@@ -39,10 +39,14 @@ def main():
 
     for site in NOVEMBER_SITES:
 
-        if not os.path.isdir(output+os.sep+'NOVEMBER'+os.sep+site):
-            os.mkdir(output+os.sep+'NOVEMBER'+os.sep+site)
+        if not os.path.exists(output+os.sep+'NOVEMBER'):
+            # os.mkdir(output+os.sep+'NOVEMBER')
+            os.makedirs(output+os.sep+'NOVEMBER')
 
-        write_raw_to_npy(NOVEMBER, site, output+os.sep+'NOVEMBER'+os.sep+site, multipage=True)
+        out = output+os.sep+'NOVEMBER'
+
+        print(f"writing {site} to {out}")
+        write_raw_to_npy(NOVEMBER, site, out, multipage=True)
 
 
 if __name__ == '__main__':
