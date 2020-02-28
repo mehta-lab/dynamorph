@@ -48,6 +48,13 @@ def segmentation(paths):
         os.makedirs(site_supp_files_folder)
 
     with K.tf.device(f'/gpu:{gpu}'):
+        config = tf.ConfigProto(intra_op_parallelism_threads=4,
+                                inter_op_parallelism_threads=4,
+                                allow_soft_placement=True,
+                                device_count={'CPU': 1, 'GPU': 1})
+        session = tf.Session(config=config)
+        K.set_session(session)
+
         # Generate semantic segmentation
         model = Segment(input_shape=(256, 256, 2),
                         unet_feat=32,
