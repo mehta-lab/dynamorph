@@ -37,8 +37,8 @@ def segmentation(paths):
     :return:
     """
     temp_folder, supp_folder, site, queue = paths[0], paths[1], paths[2], paths[3]
-    gpu = queue.get()
-    print(f'using gpu = {gpu}')
+    # gpu = queue.get()
+    # print(f'using gpu = {gpu}')
 
     site_path = os.path.join(temp_folder+'/'+site+'.npy')
 
@@ -47,23 +47,23 @@ def segmentation(paths):
     if not os.path.exists(site_supp_files_folder):
         os.makedirs(site_supp_files_folder)
 
-    with K.tf.device(f'/gpu:{gpu}'):
-        config = tf.ConfigProto(intra_op_parallelism_threads=4,
-                                inter_op_parallelism_threads=4,
-                                allow_soft_placement=True,
-                                device_count={'CPU': 1, 'GPU': 1})
-        session = tf.Session(config=config)
-        K.set_session(session)
+    # with K.tf.device(f'/gpu:{gpu}'):
+    #     config = tf.ConfigProto(intra_op_parallelism_threads=4,
+    #                             inter_op_parallelism_threads=4,
+    #                             allow_soft_placement=True,
+    #                             device_count={'CPU': 1, 'GPU': 1})
+    #     session = tf.Session(config=config)
+    #     K.set_session(session)
 
-        # Generate semantic segmentation
-        model = Segment(input_shape=(256, 256, 2),
-                        unet_feat=32,
-                        fc_layers=[64, 32],
-                        n_classes=3)
-        model.load('NNsegmentation/temp_save_unsaturated/final.h5')
-        predict_whole_map(site_path, model, n_classes=3, batch_size=8, n_supp=5)
+    # Generate semantic segmentation
+    model = Segment(input_shape=(256, 256, 2),
+                    unet_feat=32,
+                    fc_layers=[64, 32],
+                    n_classes=3)
+    model.load('NNsegmentation/temp_save_unsaturated/final.h5')
+    predict_whole_map(site_path, model, n_classes=3, batch_size=8, n_supp=5)
 
-    queue.put(gpu)
+    # queue.put(gpu)
 
 
 # 5

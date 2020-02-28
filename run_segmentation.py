@@ -21,25 +21,27 @@ INTERMEDIATE = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_seg
 
 def main():
 
-    p = Pool(4)
+    # p = Pool(4)
     # queue is shared and represents GPU ID
-    q = Queue()
-    q.put([0, 1, 2, 3])
+    # q = Queue()
+    # q.put([0, 1, 2, 3])
 
     inputs = []
     for site in SITES:
         # if not os.path.isdir(INTERMEDIATE+os.sep+site):
         #     os.mkdir(INTERMEDIATE+os.sep+site)
-        inputs.append((RAW, INTERMEDIATE+os.sep+site, site, q))
+        inputs.append((RAW, INTERMEDIATE, site, ''))
 
-    # segmentation((RAW, INTERMEDIATE, SITES[0]))
-    # instance_segmentation((RAW, INTERMEDIATE, SITES[0]))
+        # segmentation((RAW, INTERMEDIATE, SITES[0]))
+        # instance_segmentation((RAW, INTERMEDIATE, SITES[0]))
+        segmentation(inputs)
+        instance_segmentation(inputs)
 
-    p.map(segmentation, inputs)
-    p.map(instance_segmentation, inputs)
+    # p.map(segmentation, inputs)
+    # p.map(instance_segmentation, inputs)
 
-    p.close()
-    p.join()
+    # p.close()
+    # p.join()
 
 
 if __name__ == '__main__':
