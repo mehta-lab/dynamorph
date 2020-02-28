@@ -2,6 +2,8 @@
 
 from pipeline.segmentation import segmentation, instance_segmentation
 
+from multiprocessing import Pool
+import os
 
 # ESS from hulk
 
@@ -11,31 +13,41 @@ from pipeline.segmentation import segmentation, instance_segmentation
 #          'C4-Site_0', 'C4-Site_1',  'C4-Site_2',  'C4-Site_3',  'C4-Site_4', 'C4-Site_5', 'C4-Site_6', 'C4-Site_7', 'C4-Site_8',
 #          'C5-Site_0', 'C5-Site_1',  'C5-Site_2',  'C5-Site_3',  'C5-Site_4', 'C5-Site_5', 'C5-Site_6', 'C5-Site_7', 'C5-Site_8']
 
-SITES = ['C5-Site_0']
+SITES = ['C5-Site_0', 'C5-Site_1', 'C5-Site_2', 'C5-Site_3', 'C5-Site_4', 'C5-Site_5', 'C5-Site_6', 'C5-Site_7', 'C5-Site_8']
 
-DATA_PREP = '/gpfs/CompMicro/Hummingbird/Processed/Galina/VAE/data_temp'
+RAW = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation/NOVEMBER/raw'
+INTERMEDIATE = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation/NOVEMBER/supp'
 
 
 def main():
 
-    # loads: 'NNsegmentation/temp_save_unsaturated/final.h5', 'site.npy' (pre=generated using preprocess.py)
+    p = Pool(5)
 
+    # loads: 'NNsegmentation/temp_save_unsaturated/final.h5', 'site.npy' (pre=generated using preprocess.py)
     # generates '_NNProbabilities.npy', '
     #           .png',
     #           '_NNpred.png',
     #            '%s-supps' FOLDER
 
     # prints: "Predicting %d" % t
+    inputs = []
+    for site in SITES:
+        if not os.path.isdir(INTERMEDIATE+os.sep+site):
+            os.mkdir(INTERMEDIATE+os.sep+site)
 
-    segmentation(DATA_PREP, SITES[0])
+        inputs.append((RAW, INTERMEDIATE+os.sep+site, site))
+    # segmentation((RAW, INTERMEDIATE, SITES[0]))
+    p.map(segmentation, inputs)
 
+
+    # loads
     # generates 'cell_positions.pkl',
     #           'cell_pixel_assignments.pkl',
     #           'segmentation_%d.png'
 
     # prints 'Clustering time %d' % timepoint
-
-    instance_segmentation(DATA_PREP, SITES[0])
+    # instance_segmentation((RAW, INTERMEDIATE, SITES[0]))
+    p.map(instance_segmentation, inputs)
 
 
 if __name__ == '__main__':

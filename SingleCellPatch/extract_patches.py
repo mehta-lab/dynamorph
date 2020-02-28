@@ -178,6 +178,7 @@ def instance_clustering(cell_segmentation,
       other_cells.append((cell_id, mean_pos))
 
   # PLOT SEGMENTATIONS, SAVE AS .PNG
+  # INCLUDE BOTH MG and NONMG cells
   if instance_map and map_path is not None:
     # bg as -1
     segmented = np.zeros(cell_segmentation.shape[:2]) - 1

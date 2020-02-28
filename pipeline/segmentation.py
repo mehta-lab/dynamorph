@@ -22,11 +22,12 @@ from SingleCellPatch.extract_patches import process_site_instance_segmentation
 
 
 # 4
-def segmentation(temp_folder, site):
+def segmentation(paths):
+    temp_folder, supp_folder, site = paths[0], paths[1], paths[2]
 
     site_path = os.path.join(temp_folder+'/'+site+'.npy')
 
-    site_supp_files_folder = os.path.join(temp_folder, '%s-supps' % site[:2], '%s' % site)
+    site_supp_files_folder = os.path.join(supp_folder, '%s-supps' % site[:2], '%s' % site)
 
     if not os.path.exists(site_supp_files_folder):
         os.makedirs(site_supp_files_folder)
@@ -41,12 +42,13 @@ def segmentation(temp_folder, site):
 
 
 # 5
-def instance_segmentation(temp_folder, site):
+def instance_segmentation(paths):
+    temp_folder, supp_folder, site = paths[0], paths[1], paths[2]
 
     site_path = os.path.join(temp_folder + '/' + site + '.npy')
 
     site_segmentation_path = os.path.join(temp_folder, '%s_NNProbabilities.npy' % site)
-    site_supp_files_folder = os.path.join(temp_folder, '%s-supps' % site[:2], '%s' % site)
+    site_supp_files_folder = os.path.join(supp_folder, '%s-supps' % site[:2], '%s' % site)
 
     process_site_instance_segmentation(site_path, site_segmentation_path, site_supp_files_folder)
 
