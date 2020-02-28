@@ -2,7 +2,7 @@
 
 from pipeline.segmentation import segmentation, instance_segmentation
 
-from multiprocessing import Pool
+from multiprocessing import Pool, Queue
 import os
 
 # ESS from hulk
@@ -21,33 +21,25 @@ INTERMEDIATE = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_seg
 
 def main():
 
-    p = Pool(5)
+    p = Pool(4)
+    # queue is shared and represents GPU ID
+    q = Queue()
+    q.put([0, 1, 2, 3])
 
-    # loads: 'NNsegmentation/temp_save_unsaturated/final.h5', 'site.npy' (pre=generated using preprocess.py)
-    # generates '_NNProbabilities.npy', '
-    #           .png',
-    #           '_NNpred.png',
-    #            '%s-supps' FOLDER
-
-    # prints: "Predicting %d" % t
     inputs = []
     for site in SITES:
-        if not os.path.isdir(INTERMEDIATE+os.sep+site):
-            os.mkdir(INTERMEDIATE+os.sep+site)
+        # if not os.path.isdir(INTERMEDIATE+os.sep+site):
+        #     os.mkdir(INTERMEDIATE+os.sep+site)
+        inputs.append((RAW, INTERMEDIATE+os.sep+site, site, q))
 
-        inputs.append((RAW, INTERMEDIATE+os.sep+site, site))
     # segmentation((RAW, INTERMEDIATE, SITES[0]))
-    p.map(segmentation, inputs)
-
-
-    # loads
-    # generates 'cell_positions.pkl',
-    #           'cell_pixel_assignments.pkl',
-    #           'segmentation_%d.png'
-
-    # prints 'Clustering time %d' % timepoint
     # instance_segmentation((RAW, INTERMEDIATE, SITES[0]))
+
+    p.map(segmentation, inputs)
     p.map(instance_segmentation, inputs)
+
+    p.close()
+    p.join()
 
 
 if __name__ == '__main__':

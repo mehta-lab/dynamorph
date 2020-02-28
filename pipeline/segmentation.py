@@ -17,13 +17,28 @@
 import os
 from NNsegmentation.models import Segment
 from NNsegmentation.data import predict_whole_map
+from keras import backend as K
+import tensorflow as tf
 
 from SingleCellPatch.extract_patches import process_site_instance_segmentation
 
 
 # 4
 def segmentation(paths):
-    temp_folder, supp_folder, site = paths[0], paths[1], paths[2]
+    """
+    # loads: 'NNsegmentation/temp_save_unsaturated/final.h5', 'site.npy' (pre=generated using preprocess.py)
+    # generates '_NNProbabilities.npy', '
+    #           .png',
+    #           '_NNpred.png',
+    #            '%s-supps' FOLDER
+
+    # prints: "Predicting %d" % t
+    :param paths:
+    :return:
+    """
+    temp_folder, supp_folder, site, queue = paths[0], paths[1], paths[2], paths[3]
+    gpu = queue.get()
+    print(f'using gpu = {gpu}')
 
     site_path = os.path.join(temp_folder+'/'+site+'.npy')
 
@@ -32,18 +47,31 @@ def segmentation(paths):
     if not os.path.exists(site_supp_files_folder):
         os.makedirs(site_supp_files_folder)
 
+    with K.tf.device(f'/gpu:{gpu}'):
         # Generate semantic segmentation
-    model = Segment(input_shape=(256, 256, 2),
-                    unet_feat=32,
-                    fc_layers=[64, 32],
-                    n_classes=3)
-    model.load('NNsegmentation/temp_save_unsaturated/final.h5')
-    predict_whole_map(site_path, model, n_classes=3, batch_size=8, n_supp=5)
+        model = Segment(input_shape=(256, 256, 2),
+                        unet_feat=32,
+                        fc_layers=[64, 32],
+                        n_classes=3)
+        model.load('NNsegmentation/temp_save_unsaturated/final.h5')
+        predict_whole_map(site_path, model, n_classes=3, batch_size=8, n_supp=5)
+
+    queue.put(gpu)
 
 
 # 5
 def instance_segmentation(paths):
-    temp_folder, supp_folder, site = paths[0], paths[1], paths[2]
+    """
+    # loads
+    # generates 'cell_positions.pkl',
+    #           'cell_pixel_assignments.pkl',
+    #           'segmentation_%d.png'
+
+    # prints 'Clustering time %d' % timepoint
+    :param paths:
+    :return:
+    """
+    temp_folder, supp_folder, site, queue = paths[0], paths[1], paths[2], paths[3]
 
     site_path = os.path.join(temp_folder + '/' + site + '.npy')
 
