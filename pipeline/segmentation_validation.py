@@ -23,7 +23,7 @@ def segmentation_validation(paths):
     raw_input_stack = os.path.join(temp_folder + '/' + site + '.npy')
 
     NN_predictions_stack = np.load(temp_folder + '/%s_NNProbabilities.npy' % site)
-    cell_pixels = pickle.load(open(temp_folder + '/D-supps/%s/cell_pixel_assignments.pkl' % site, 'rb'))
+    cell_pixels = pickle.load(open(supp_folder + f"/{site[0]}-supps/{site}/cell_pixel_assignments.pkl", 'rb'))
 
     full_output_stack = os.path.join(target + '/')
 
