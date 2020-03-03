@@ -1,7 +1,7 @@
 import pickle
 import numpy as np
 import os
-# import tifffile
+import tifffile
 import imageio
 
 
@@ -20,13 +20,13 @@ def segmentation_validation(paths):
   temp_folder, supp_folder, target, sites = paths[0], paths[1], paths[2], paths[3]
 
   for site in sites:
+    print(f"building full frame validation for {site} from {temp_folder}")
+
     stack_path = os.path.join(temp_folder + '/' + site + '.npy')
     raw_input_stack = np.load(stack_path)
 
     NN_predictions_stack = np.load(temp_folder + '/%s_NNProbabilities.npy' % site)
     cell_pixels = pickle.load(open(supp_folder + f"/{site[0:2]}-supps/{site}/cell_pixel_assignments.pkl", 'rb'))
-
-    full_output_stack = os.path.join(target + '/')
 
     stack = []
     for t_point in range(len(raw_input_stack)):
@@ -47,5 +47,9 @@ def segmentation_validation(paths):
           mat[(outer_rim[:, 0], outer_rim[:, 1])] = np.array([65535, 0, 0]).reshape((1, 3))
       stack.append(mat)
 
-    imageio.mimwrite(full_output_stack+site+'.tiff', np.stack(stack, 0))
-    # tifffile.imwrite('%s_predictions.tiff' % site, np.stack(stack, 0))
+    if "NOVEMBER" in temp_folder:
+      date = "NOVEMBER"
+    else:
+      date = "JAN_FAST"
+
+    tifffile.imwrite(target+'/'+f'{date}_{site}_predictions.tiff', np.stack(stack, 0))
