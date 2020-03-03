@@ -36,54 +36,45 @@ def segmentation(paths):
     :param paths:
     :return:
     """
-    temp_folder, supp_folder, site, queue = paths[0], paths[1], paths[2], paths[3]
-    # gpu = queue.get()
-    # print(f'using gpu = {gpu}')
+    temp_folder, supp_folder, target, sites = paths[0], paths[1], paths[2], paths[3]
 
-    site_path = os.path.join(temp_folder+'/'+site+'.npy')
+    for site in sites:
+        site_path = os.path.join(temp_folder+'/'+site+'.npy')
 
-    site_supp_files_folder = os.path.join(supp_folder, '%s-supps' % site[:2], '%s' % site)
+        site_supp_files_folder = os.path.join(supp_folder, '%s-supps' % site[:2], '%s' % site)
 
-    if not os.path.exists(site_supp_files_folder):
-        os.makedirs(site_supp_files_folder)
+        if not os.path.exists(site_supp_files_folder):
+            os.makedirs(site_supp_files_folder)
 
-    # with K.tf.device(f'/gpu:{gpu}'):
-    #     config = tf.ConfigProto(intra_op_parallelism_threads=4,
-    #                             inter_op_parallelism_threads=4,
-    #                             allow_soft_placement=True,
-    #                             device_count={'CPU': 1, 'GPU': 1})
-    #     session = tf.Session(config=config)
-    #     K.set_session(session)
-
-    # Generate semantic segmentation
-    model = Segment(input_shape=(256, 256, 2),
-                    unet_feat=32,
-                    fc_layers=[64, 32],
-                    n_classes=3)
-    model.load('NNsegmentation/temp_save_unsaturated/final.h5')
-    predict_whole_map(site_path, model, n_classes=3, batch_size=8, n_supp=5)
-
-    # queue.put(gpu)
+        # Generate semantic segmentation
+        model = Segment(input_shape=(256, 256, 2),
+                        unet_feat=32,
+                        fc_layers=[64, 32],
+                        n_classes=3)
+        model.load('NNsegmentation/temp_save_unsaturated/final.h5')
+        predict_whole_map(site_path, model, n_classes=3, batch_size=8, n_supp=5)
 
 
 # 5
 def instance_segmentation(paths):
     """
     # loads
-    # generates 'cell_positions.pkl',
-    #           'cell_pixel_assignments.pkl',
-    #           'segmentation_%d.png'
+    # generates 'site-supps/cell_positions.pkl',
+    #           'site-supps/cell_pixel_assignments.pkl',
+    #           'site-supps/segmentation_%d.png'
+    #           'site-supps/segmentation_%d.png'
 
     # prints 'Clustering time %d' % timepoint
     :param paths:
     :return:
     """
-    temp_folder, supp_folder, site, queue = paths[0], paths[1], paths[2], paths[3]
+    temp_folder, supp_folder, target, sites = paths[0], paths[1], paths[2], paths[3]
 
-    site_path = os.path.join(temp_folder + '/' + site + '.npy')
+    for site in sites:
+        site_path = os.path.join(temp_folder + '/' + site + '.npy')
 
-    site_segmentation_path = os.path.join(temp_folder, '%s_NNProbabilities.npy' % site)
-    site_supp_files_folder = os.path.join(supp_folder, '%s-supps' % site[:2], '%s' % site)
+        site_segmentation_path = os.path.join(temp_folder, '%s_NNProbabilities.npy' % site)
+        site_supp_files_folder = os.path.join(supp_folder, '%s-supps' % site[:2], '%s' % site)
 
-    process_site_instance_segmentation(site_path, site_segmentation_path, site_supp_files_folder)
+        process_site_instance_segmentation(site_path, site_segmentation_path, site_supp_files_folder)
 
