@@ -3,6 +3,7 @@ import numpy as np
 import os
 from PIL import Image, ImageFilter
 import matplotlib.pyplot as plt
+import skimage.io as io
 
 
 def find_rim(cell_positions):
@@ -62,7 +63,7 @@ def load_and_plot(img_rgb, img_grey, output):
   Image.fromarray(phaseN).save(output)
 
 
-def segmentation_validation_michael(paths):
+def segmentation_validation_michael(paths, id):
 
   temp_folder, supp_folder, target, sites = paths[0], paths[1], paths[2], paths[3]
 
@@ -100,7 +101,12 @@ def segmentation_validation_michael(paths):
       date = "JAN_FAST"
 
     # tifffile.imwrite(target+'/'+f'{date}_{site}_predictions.tiff', np.stack(stack, 0))
-    np.save(target+'/'+f'{date}_{site}_predictions.npy', np.stack(stack, 0))
+    # np.save(target+'/'+f'{date}_{site}_predictions.npy', np.stack(stack, 0))
+
+    # using skimage.io to access tifffile
+    io.imsave(target+'/'+f'{date}_{site}_{id}_predictions.tif',
+              np.stack(stack, 0).astype("uint16"),
+              plugin='tifffile')
 
 
 def segmentation_validation_bryant(paths, id):

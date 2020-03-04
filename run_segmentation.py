@@ -1,7 +1,7 @@
 # bchhun, {2020-02-21}
 
 from pipeline.segmentation import segmentation, instance_segmentation
-from pipeline.segmentation_validation import segmentation_validation_bryant
+from pipeline.segmentation_validation import segmentation_validation_bryant, segmentation_validation_michael
 
 from multiprocessing import Pool, Queue, Process
 import os
@@ -43,7 +43,7 @@ class Worker(Process):
 
         segmentation(self.inputs)
         instance_segmentation(self.inputs)
-        segmentation_validation_bryant(self.inputs, self.gpuid)
+        segmentation_validation_michael(self.inputs, self.gpuid)
 
 
 def main():
