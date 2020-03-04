@@ -1,7 +1,7 @@
 # bchhun, {2020-02-21}
 
 from pipeline.segmentation import segmentation, instance_segmentation
-from pipeline.segmentation_validation import segmentation_validation
+from pipeline.segmentation_validation import segmentation_validation_bryant
 
 from multiprocessing import Pool, Queue, Process
 import os
@@ -16,8 +16,8 @@ import os
 
 SITES_ctrl = ['C5-Site_0', 'C5-Site_4']
 SITES_GBM = ['B2-Site_0', 'B2-Site_4']
-SITES_IL17 = ['B4-Site_0', 'B4-Site_4']
-# SITES_IFbeta=['B5-Site_0', 'B5-Site_4']
+# SITES_IL17 = ['B4-Site_0', 'B4-Site_4']
+SITES_IFbeta=['B5-Site_0', 'B5-Site_4']
 SITES_fast = ['C5-Site_0', 'C5-Site_4']
 
 RAW = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation/NOVEMBER/raw'
@@ -43,7 +43,7 @@ class Worker(Process):
 
         segmentation(self.inputs)
         instance_segmentation(self.inputs)
-        segmentation_validation(self.inputs)
+        segmentation_validation_bryant(self.inputs)
 
 
 def main():
@@ -56,13 +56,13 @@ def main():
     process_2 = Worker(inputs_2, gpuid=1)
     process_2.start()
 
-    inputs_3 = (RAW, INTERMEDIATE_NOV, TARGET, SITES_IL17)
-    process_3 = Worker(inputs_3, gpuid=2)
-    process_3.start()
+    # inputs_3 = (RAW, INTERMEDIATE_NOV, TARGET, SITES_IL17)
+    # process_3 = Worker(inputs_3, gpuid=2)
+    # process_3.start()
 
-    # inputs_4 = (RAW, INTERMEDIATE_NOV, TARGET, SITES_IFbeta)
-    # process_4 = Worker(inputs_4, gpuid=3)
-    # process_4.start()
+    inputs_4 = (RAW, INTERMEDIATE_NOV, TARGET, SITES_IFbeta)
+    process_4 = Worker(inputs_4, gpuid=2)
+    process_4.start()
 
     inputs_4 = (RAW_FAST, INTERMEDIATE_JAN_FAST, TARGET, SITES_fast)
     process_4 = Worker(inputs_4, gpuid=3)
