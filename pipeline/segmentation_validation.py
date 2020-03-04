@@ -144,7 +144,7 @@ def segmentation_validation_bryant(paths, id):
 
       load_and_plot(target + f"/temp_phase_{id}.png",
                     target + f"/temp_seg_{id}.png",
-                    target + f"/{date}/{date}_C5-Site_0_t{tp}.png")
+                    target + f"/{date}/{date}_{site}_{tp}.png")
 
 
 def segmentation_validation_to_tiff(paths):
