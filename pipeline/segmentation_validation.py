@@ -139,3 +139,35 @@ def segmentation_validation_bryant(paths, id):
       load_and_plot(target + f"/temp_phase_{id}.png",
                     target + f"/temp_seg_{id}.png",
                     target + f"/{date}/{date}_C5-Site_0_t{tp}.png")
+
+
+def segmentation_validation_to_tiff(paths):
+    """
+    paths is a tuple of:
+    (target folder, date, sites)
+
+    target folder is the EXPERIMENT folder (not subfolder)
+
+    :param paths:
+    :return:
+    """
+    import tifffile as tf
+    import imageio as io
+
+    target, date, sites = paths[0], paths[1], paths[2]
+
+    for site in sites:
+        png_path = f"{target}/{date}/"
+
+        matched = [file for file in os.listdir(png_path) if f"{date}_{site}" in file]
+        smatched = sorted(matched)
+
+        ref = io.imread(png_path+'/'+smatched[0])
+        x, y, c = ref.shape
+        output = np.empty(shape=(len(smatched), x, y, c))
+        for idx, path in enumerate(smatched):
+            frame = io.imread(png_path+'/'+path)
+            output[idx] = frame
+
+        io.mimwrite(png_path+f'/{date}_{site}_composite.tif', output)
+
