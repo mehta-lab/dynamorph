@@ -52,4 +52,5 @@ def segmentation_validation(paths):
     else:
       date = "JAN_FAST"
 
-    tifffile.imwrite(target+'/'+f'{date}_{site}_predictions.tiff', np.stack(stack, 0))
+    # tifffile.imwrite(target+'/'+f'{date}_{site}_predictions.tiff', np.stack(stack, 0))
+    np.save(target+'/'+f'{date}_{site}_predictions.npy', np.stack(stack, 0))
