@@ -17,7 +17,7 @@ import os
 SITES_ctrl = ['C5-Site_0', 'C5-Site_4']
 SITES_GBM = ['B2-Site_0', 'B2-Site_4']
 SITES_IL17 = ['B4-Site_0', 'B4-Site_4']
-SITES_IFbeta=['B5-Site_0', 'B5-Site_4']
+# SITES_IFbeta=['B5-Site_0', 'B5-Site_4']
 SITES_fast = ['C5-Site_0', 'C5-Site_4']
 
 RAW = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation/NOVEMBER/raw'
@@ -60,9 +60,9 @@ def main():
     process_3 = Worker(inputs_3, gpuid=2)
     process_3.start()
 
-    inputs_4 = (RAW, INTERMEDIATE_NOV, TARGET, SITES_IFbeta)
-    process_4 = Worker(inputs_4, gpuid=3)
-    process_4.start()
+    # inputs_4 = (RAW, INTERMEDIATE_NOV, TARGET, SITES_IFbeta)
+    # process_4 = Worker(inputs_4, gpuid=3)
+    # process_4.start()
 
     inputs_4 = (RAW_FAST, INTERMEDIATE_JAN_FAST, TARGET, SITES_fast)
     process_4 = Worker(inputs_4, gpuid=3)

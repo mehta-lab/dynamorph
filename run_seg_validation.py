@@ -1,6 +1,6 @@
 # bchhun, {2020-03-03}
 
-from pipeline.segmentation_validation import segmentation_validation
+from pipeline.segmentation_validation import segmentation_validation_bryant
 
 from multiprocessing import Pool, Queue, Process
 
@@ -28,7 +28,7 @@ class Worker(Process):
         self.inputs=inputs
 
     def run(self):
-        segmentation_validation(self.inputs)
+        segmentation_validation_bryant(self.inputs)
 
 
 def main():
