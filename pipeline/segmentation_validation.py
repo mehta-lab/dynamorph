@@ -103,7 +103,7 @@ def segmentation_validation_michael(paths):
     np.save(target+'/'+f'{date}_{site}_predictions.npy', np.stack(stack, 0))
 
 
-def segmentation_validation_bryant(paths):
+def segmentation_validation_bryant(paths, id):
   """
   this approach uses the outputted .png segmentations (per frame) and stitches it back with the raw data using PIL
 
@@ -122,11 +122,11 @@ def segmentation_validation_bryant(paths):
     raw_input_stack = np.load(stack_path)
 
     for tp in range(len(raw_input_stack)):
-      seg = Image.open(segmentations_png_path + os.sep + f'segmentation_{t}.png').convert('L')
+      seg = Image.open(segmentations_png_path + os.sep + f'segmentation_{tp}.png').convert('L')
 
       # site[t,:,:,0] is phase channel
-      rescale_plot(site[tp, :, :, 0], target + "/temp_phase.png")
-      rescale_plot(seg, target + "/temp_seg.png")
+      rescale_plot(raw_input_stack[tp, :, :, 0], target + f"/temp_phase_{id}.png")
+      rescale_plot(seg, target + f"/temp_seg_{id}.png")
 
       if "NOVEMBER" in temp_folder:
         date = "NOVEMBER"
@@ -136,6 +136,6 @@ def segmentation_validation_bryant(paths):
       if not os.path.exists(target+'/'+date):
         os.makedirs(target+'/'+date)
 
-      load_and_plot(target + "/temp_phase.png",
-                    target + "/temp_seg.png",
+      load_and_plot(target + f"/temp_phase_{id}.png",
+                    target + f"/temp_seg_{id}.png",
                     target + f"/{date}/{date}_C5-Site_0_t{tp}.png")
