@@ -114,7 +114,7 @@ def generate_mask(positions, positions_labels, cell_id, window, window_segmentat
       target_mask2.reshape((x_size, y_size, 1))
 
 def instance_clustering(cell_segmentation, 
-                        ct_thr=(1000, 15000),
+                        ct_thr=(2000, 30000),
                         instance_map=True, 
                         map_path=None, 
                         fg_thr=0.3,
