@@ -48,21 +48,21 @@ class Worker(Process):
 
 def main():
 
-    inputs_1 = (RAW, INTERMEDIATE_NOV, TARGET, SITES_ctrl)
-    process_1 = Worker(inputs_1, gpuid=0)
-    process_1.start()
+    # inputs_1 = (RAW, INTERMEDIATE_NOV, TARGET, SITES_ctrl)
+    # process_1 = Worker(inputs_1, gpuid=0)
+    # process_1.start()
 
-    inputs_2 = (RAW, INTERMEDIATE_NOV, TARGET, SITES_GBM)
-    process_2 = Worker(inputs_2, gpuid=1)
-    process_2.start()
+    # inputs_2 = (RAW, INTERMEDIATE_NOV, TARGET, SITES_GBM)
+    # process_2 = Worker(inputs_2, gpuid=1)
+    # process_2.start()
 
     # inputs_3 = (RAW, INTERMEDIATE_NOV, TARGET, SITES_IL17)
     # process_3 = Worker(inputs_3, gpuid=2)
     # process_3.start()
 
-    inputs_4 = (RAW, INTERMEDIATE_NOV, TARGET, SITES_IFbeta)
-    process_4 = Worker(inputs_4, gpuid=2)
-    process_4.start()
+    # inputs_4 = (RAW, INTERMEDIATE_NOV, TARGET, SITES_IFbeta)
+    # process_4 = Worker(inputs_4, gpuid=2)
+    # process_4.start()
 
     inputs_4 = (RAW_FAST, INTERMEDIATE_JAN_FAST, TARGET, SITES_fast)
     process_4 = Worker(inputs_4, gpuid=3)

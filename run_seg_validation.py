@@ -54,9 +54,9 @@ def main():
     process_2 = Worker(inputs_2, gpuid=1)
     process_2.start()
 
-    inputs_3 = (RAW, INTERMEDIATE_NOV, TARGET, SITES_IL17)
-    process_3 = Worker(inputs_3, gpuid=2)
-    process_3.start()
+#    inputs_3 = (RAW, INTERMEDIATE_NOV, TARGET, SITES_IL17)
+#    process_3 = Worker(inputs_3, gpuid=2)
+#    process_3.start()
 
     inputs_4 = (RAW, INTERMEDIATE_NOV, TARGET, SITES_IFbeta)
     process_4 = Worker(inputs_4, gpuid=3)
