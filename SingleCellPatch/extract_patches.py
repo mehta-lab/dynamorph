@@ -146,7 +146,8 @@ def instance_clustering(cell_segmentation,
   clustering = DBSCAN(eps=DBSCAN_thr[0], min_samples=DBSCAN_thr[1]).fit(positions)
   positions_labels = clustering.labels_
   cell_ids, point_cts = np.unique(positions_labels, return_counts=True)
-  
+
+  # Further filtering of cell types by ct_thr
   mg_cell_positions = []
   non_mg_cell_positions = []
   other_cells = []

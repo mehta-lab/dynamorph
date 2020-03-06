@@ -76,15 +76,34 @@ def segmentation_validation_michael(paths, id):
     NN_predictions_stack = np.load(temp_folder + '/%s_NNProbabilities.npy' % site)
     cell_pixels = pickle.load(open(supp_folder + f"/{site[0:2]}-supps/{site}/cell_pixel_assignments.pkl", 'rb'))
 
+    # Results of count thresholding are NOT used in the generation of these assignments
+    # the thresholding values are used to filter the "cell_positions.pkl" =
+    #   (mg_cell_positions, non_mg_cell_positions, other_cells)
+    #   each of mg_cell_positions, non_mg_cell_positions ... is of format (cell_id, mean_pos)
+    #   cell_pixels is of shape=(t_points, 2) :: cell_pixels[t_point] = (positions, inds)
+    #   cell_id is a subset of "inds"
+
+    # my attempt to include these
+    (mg_cell_positions, non_mg_cell_positions, other_cells) = np.load(
+        open(supp_folder + f"/{site[0:2]}-supps/{site}/cell_positions.pkl", 'rb'))
+
     stack = []
     for t_point in range(len(raw_input_stack)):
       mat = raw_input_stack[t_point, :, :, 0]
       mat = np.stack([mat] * 3, 2)
+
+      # "inds" should be the same as "position_labels" in instance_clustering
       positions, inds = cell_pixels[t_point]
       for cell_ind in np.unique(inds):
         if cell_ind < 0:
           continue
         cell_positions = positions[np.where(inds == cell_ind)]
+
+        # filter by MG and non MG
+        print('including mg and nonmg that pass count thresholding')
+        cell_positions = cell_positions[np.where(inds == mg_cell_positions)]
+        cell_positions = cell_positions[np.where(inds == non_mg_cell_positions)]
+
         outer_rim = find_rim(cell_positions)
         mask_identities = NN_predictions_stack[t_point][(cell_positions[:, 0], cell_positions[:, 1])].mean(0)
         if mask_identities[1] > mask_identities[2]:
@@ -103,7 +122,7 @@ def segmentation_validation_michael(paths, id):
     # tifffile.imwrite(target+'/'+f'{date}_{site}_predictions.tiff', np.stack(stack, 0))
     # np.save(target+'/'+f'{date}_{site}_predictions.npy', np.stack(stack, 0))
 
-    # using skimage.io to access tifffile
+    # using skimage.io to access tifffile on IBM machines
     io.imsave(target+'/'+f'{date}_{site}_{id}_predictions.tif',
               np.stack(stack, 0).astype("uint16"),
               plugin='tifffile')
