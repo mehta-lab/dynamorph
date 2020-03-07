@@ -91,13 +91,14 @@ def segmentation_validation_michael(paths, id):
     #   cell_id is a subset of "inds"
 
     # my attempt to include these
-    (mg_cell_positions, non_mg_cell_positions, other_cells) = pickle.load(
+    filtered_positions = pickle.load(
         open(supp_folder + f"/{site[0:2]}-supps/{site}/cell_positions.pkl", 'rb'))
 
     stack = []
     for t_point in range(len(raw_input_stack)):
       mat = raw_input_stack[t_point, :, :, 0]
       mat = np.stack([mat] * 3, 2)
+      (mg_cell_positions, non_mg_cell_positions, other_cells) = filtered_positions[t_point]
 
       # "inds" should be the same as "position_labels" in instance_clustering
       positions, inds = cell_pixels[t_point]
