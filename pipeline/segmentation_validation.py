@@ -105,7 +105,7 @@ def segmentation_validation_michael(paths, id):
       for cell_ind in np.unique(inds):
         if cell_ind < 0:
           continue
-        
+            
         ForkedPdb().set_trace()
         cell_positions = positions[np.where(inds == cell_ind)]
 
