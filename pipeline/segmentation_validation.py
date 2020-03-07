@@ -67,6 +67,13 @@ def segmentation_validation_michael(paths, id):
 
   temp_folder, supp_folder, target, sites = paths[0], paths[1], paths[2], paths[3]
 
+  if "NOVEMBER" in temp_folder:
+      date = "NOVEMBER"
+  elif "JANUARY" in temp_folder:
+      date = "JANUARY"
+  else:
+      date = "JAN_FAST"
+
   for site in sites:
     print(f"building full frame validation for {site} from {temp_folder}")
 
@@ -113,11 +120,6 @@ def segmentation_validation_michael(paths, id):
           c = 'r'
           mat[(outer_rim[:, 0], outer_rim[:, 1])] = np.array([65535, 0, 0]).reshape((1, 3))
       stack.append(mat)
-
-    if "NOVEMBER" in temp_folder:
-      date = "NOVEMBER"
-    else:
-      date = "JAN_FAST"
 
     # tifffile.imwrite(target+'/'+f'{date}_{site}_predictions.tiff', np.stack(stack, 0))
     # np.save(target+'/'+f'{date}_{site}_predictions.npy', np.stack(stack, 0))
