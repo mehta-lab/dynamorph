@@ -91,7 +91,7 @@ def segmentation_validation_michael(paths, id):
     #   cell_id is a subset of "inds"
 
     # my attempt to include these
-    (mg_cell_positions, non_mg_cell_positions, other_cells) = np.load(
+    (mg_cell_positions, non_mg_cell_positions, other_cells) = pickle.load(
         open(supp_folder + f"/{site[0:2]}-supps/{site}/cell_positions.pkl", 'rb'))
 
     stack = []
