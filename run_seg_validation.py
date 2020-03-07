@@ -46,7 +46,7 @@ def main():
     # p.map(segmentation, inputs)
     # p.map(instance_segmentation, inputs)
 
-    inputs_1 = (RAW, INTERMEDIATE_NOV, TARGET, SITES_ctrl)
+    inputs_1 = (RAW, INTERMEDIATE_NOV, TARGET, SITES_ctrl, 'mg')
     process_1 = Worker(inputs_1, gpuid=0)
     process_1.start()
 

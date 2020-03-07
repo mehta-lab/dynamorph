@@ -63,7 +63,7 @@ def load_and_plot(img_rgb, img_grey, output):
     Image.fromarray(phaseN).save(output)
 
 
-def segmentation_validation_michael(paths, category, gpu_id):
+def segmentation_validation_michael(paths, gpu_id):
     """
 
     :param paths:
@@ -73,7 +73,7 @@ def segmentation_validation_michael(paths, category, gpu_id):
     :return:
     """
 
-    temp_folder, supp_folder, target, sites = paths[0], paths[1], paths[2], paths[3]
+    temp_folder, supp_folder, target, sites, category = paths[0], paths[1], paths[2], paths[3], paths[4]
 
     if "NOVEMBER" in temp_folder:
         date = "NOVEMBER"
