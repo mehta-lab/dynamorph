@@ -105,6 +105,8 @@ def segmentation_validation_michael(paths, id):
       for cell_ind in np.unique(inds):
         if cell_ind < 0:
           continue
+        
+        ForkedPdb().set_trace()
         cell_positions = positions[np.where(inds == cell_ind)]
 
         # filter by MG and non MG
@@ -199,3 +201,19 @@ def segmentation_validation_to_tiff(paths):
 
         io.mimwrite(png_path+f'/{date}_{site}_composite.tif', output)
 
+import sys
+import pdb
+
+
+class ForkedPdb(pdb.Pdb):
+    """A Pdb subclass that may be used
+    from a forked multiprocessing child
+
+    """
+    def interaction(self, *args, **kwargs):
+        _stdin = sys.stdin
+        try:
+            sys.stdin = open('/dev/stdin')
+            pdb.Pdb.interaction(self, *args, **kwargs)
+        finally:
+            sys.stdin = _stdin
