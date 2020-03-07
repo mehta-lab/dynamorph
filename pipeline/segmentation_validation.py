@@ -105,14 +105,14 @@ def segmentation_validation_michael(paths, id):
       for cell_ind in np.unique(inds):
         if cell_ind < 0:
           continue
-            
+
         ForkedPdb().set_trace()
         cell_positions = positions[np.where(inds == cell_ind)]
 
         # filter by MG and non MG
         print('including mg and nonmg that pass count thresholding')
-        cell_positions = cell_positions[np.where(inds == mg_cell_positions)]
-        cell_positions = cell_positions[np.where(inds == non_mg_cell_positions)]
+        cell_positions = cell_positions[np.where(inds == mg_cell_positions[0])]
+        cell_positions = cell_positions[np.where(inds == non_mg_cell_positions[0])]
 
         outer_rim = find_rim(cell_positions)
         mask_identities = NN_predictions_stack[t_point][(cell_positions[:, 0], cell_positions[:, 1])].mean(0)
