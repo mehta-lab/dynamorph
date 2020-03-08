@@ -63,7 +63,7 @@ def load_and_plot(img_rgb, img_grey, output):
     Image.fromarray(phaseN).save(output)
 
 
-def segmentation_validation_michael(paths, gpu_id):
+def segmentation_validation_michael(paths, gpu_id, category):
     """
 
     :param paths:
@@ -73,7 +73,7 @@ def segmentation_validation_michael(paths, gpu_id):
     :return:
     """
 
-    temp_folder, supp_folder, target, sites, category = paths[0], paths[1], paths[2], paths[3], paths[4]
+    temp_folder, supp_folder, target, sites = paths[0], paths[1], paths[2], paths[3]
 
     if "NOVEMBER" in temp_folder:
         date = "NOVEMBER"
@@ -112,17 +112,20 @@ def segmentation_validation_michael(paths, gpu_id):
                     if new_mat:
                         stack.append(new_mat)
             elif 'both' in category:
-                for both_cell_id, _ in np.unique(mg_cell_positions.extend(non_mg_cell_positions)):
+                ids = [i for i, _ in mg_cell_positions.extend(non_mg_cell_positions)]
+                for both_cell_id, _ in np.unique(ids):
                     new_mat = _append_segmentation(positions, inds, both_cell_id, NN_predictions_stack, t_point, mat)
                     if new_mat:
                         stack.append(new_mat)
             elif 'mg' in category:
-                for mg_cell_id, _ in np.unique(mg_cell_positions):
+                ids = [i for i, _ in mg_cell_positions]
+                for mg_cell_id, _ in np.unique(ids):
                     new_mat = _append_segmentation(positions, inds, mg_cell_id, NN_predictions_stack, t_point, mat)
                     if new_mat:
                         stack.append(new_mat)
             elif 'nonmg' in category:
-                for non_mg_cell_id, _ in np.unique(non_mg_cell_positions):
+                ids = [i for i, _ in non_mg_cell_positions]
+                for non_mg_cell_id, _ in np.unique(ids):
                     new_mat = _append_segmentation(positions, inds, non_mg_cell_id, NN_predictions_stack, t_point, mat)
                     if new_mat:
                         stack.append(new_mat)
@@ -139,6 +142,16 @@ def segmentation_validation_michael(paths, gpu_id):
 
 
 def _append_segmentation(positions_, inds_, cell_id_, NN_predictions_stack_, t_point_, output_mat_):
+    """
+    adds boundary positions for a supplied cell
+    :param positions_:
+    :param inds_:
+    :param cell_id_:
+    :param NN_predictions_stack_:
+    :param t_point_:
+    :param output_mat_:
+    :return:
+    """
     if cell_id_ < 0:
         return None
 

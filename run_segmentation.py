@@ -69,7 +69,7 @@ class Worker(Process):
 
         segmentation(self.inputs)
         instance_segmentation(self.inputs)
-        segmentation_validation_michael(self.inputs, self.gpuid)
+        segmentation_validation_michael(self.inputs, self.gpuid, 'mg')
 
 
 def main():

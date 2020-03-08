@@ -28,7 +28,7 @@ class Worker(Process):
         self.inputs=inputs
 
     def run(self):
-        segmentation_validation_michael(self.inputs, self.gpuid)
+        segmentation_validation_michael(self.inputs, self.gpuid, 'mg')
 
 
 def main():
@@ -46,7 +46,7 @@ def main():
     # p.map(segmentation, inputs)
     # p.map(instance_segmentation, inputs)
 
-    inputs_1 = (RAW, INTERMEDIATE_NOV, TARGET, SITES_ctrl, 'mg')
+    inputs_1 = (RAW, INTERMEDIATE_NOV, TARGET, SITES_ctrl)
     process_1 = Worker(inputs_1, gpuid=0)
     process_1.start()
 
