@@ -109,33 +109,49 @@ def segmentation_validation_michael(paths, gpu_id, category):
             if 'unfiltered' in category:
                 for cell_ind in np.unique(inds):
                     new_mat = _append_segmentation(positions, inds, cell_ind, NN_predictions_stack, t_point, mat)
-                    if new_mat:
-                        stack.append(new_mat)
+                    if new_mat is not None:
+                        mat = new_mat
             elif 'both' in category:
-                ids = [i for i, _ in mg_cell_positions.extend(non_mg_cell_positions)]
-                for both_cell_id, _ in np.unique(ids):
+                if mg_cell_positions is None:
+                    if non_mg_cell_positions is None:
+                        continue
+                    else:
+                        ids = non_mg_cell_positions
+                else:
+                    if non_mg_cell_positions is None:
+                        ids = mg_cell_positions
+                    else:
+                        # ForkedPdb().set_trace()
+                        ids = [i for i, _ in mg_cell_positions+non_mg_cell_positions]
+            
+                for both_cell_id in ids:
                     new_mat = _append_segmentation(positions, inds, both_cell_id, NN_predictions_stack, t_point, mat)
-                    if new_mat:
-                        stack.append(new_mat)
+                    if new_mat is not None:
+                        mat = new_mat
+
             elif 'mg' in category:
+                # ForkedPdb().set_trace()
                 ids = [i for i, _ in mg_cell_positions]
-                for mg_cell_id, _ in np.unique(ids):
+                for mg_cell_id in ids:
                     new_mat = _append_segmentation(positions, inds, mg_cell_id, NN_predictions_stack, t_point, mat)
-                    if new_mat:
-                        stack.append(new_mat)
+                    if new_mat is not None:
+                        mat = new_mat
             elif 'nonmg' in category:
                 ids = [i for i, _ in non_mg_cell_positions]
-                for non_mg_cell_id, _ in np.unique(ids):
+                for non_mg_cell_id in ids:
                     new_mat = _append_segmentation(positions, inds, non_mg_cell_id, NN_predictions_stack, t_point, mat)
-                    if new_mat:
-                        stack.append(new_mat)
+                    if new_mat is not None:
+                        mat = new_mat
             else:
                 raise NotImplementedError(f"rendering category of type {category} is not impemented")
+            
+            stack.append(mat)
 
         # tifffile.imwrite(target+'/'+f'{date}_{site}_predictions.tiff', np.stack(stack, 0))
         # np.save(target+'/'+f'{date}_{site}_predictions.npy', np.stack(stack, 0))
 
         # using skimage.io to access tifffile on IBM machines
+        ForkedPdb().set_trace()
         io.imsave(target+'/'+f'{date}_{site}_{gpu_id}_predictions.tif',
                   np.stack(stack, 0).astype("uint16"),
                   plugin='tifffile')

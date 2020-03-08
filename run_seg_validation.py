@@ -28,7 +28,7 @@ class Worker(Process):
         self.inputs=inputs
 
     def run(self):
-        segmentation_validation_michael(self.inputs, self.gpuid, 'mg')
+        segmentation_validation_michael(self.inputs, self.gpuid, 'both')
 
 
 def main():
