@@ -77,10 +77,10 @@ def segmentation_validation_michael(paths, gpu_id, category):
 
     if "NOVEMBER" in temp_folder:
         date = "NOVEMBER"
-    elif "JANUARY" in temp_folder:
-        date = "JANUARY"
+    elif "JANUARY_FAST" in temp_folder:
+        date = "JANUARY_FAST"
     else:
-        date = "JAN_FAST"
+        date = "JANUARY"
 
     for site in sites:
         print(f"building full frame validation for {site} from {temp_folder}")
@@ -151,7 +151,7 @@ def segmentation_validation_michael(paths, gpu_id, category):
         # np.save(target+'/'+f'{date}_{site}_predictions.npy', np.stack(stack, 0))
 
         # using skimage.io to access tifffile on IBM machines
-        ForkedPdb().set_trace()
+        # ForkedPdb().set_trace()
         io.imsave(target+'/'+f'{date}_{site}_{gpu_id}_predictions.tif',
                   np.stack(stack, 0).astype("uint16"),
                   plugin='tifffile')
