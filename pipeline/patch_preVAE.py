@@ -24,7 +24,7 @@ def extract_patches(paths):
         site_supp_files_folder = os.path.join(supp_folder, '%s-supps' % site[:2], '%s' % site)
 
         process_site_extract_patches(site_path, site_segmentation_path, site_supp_files_folder,
-                                     window_size=256, cells=['mg', 'non_mg'])
+                                     window_size=256)
 
 
 # 7

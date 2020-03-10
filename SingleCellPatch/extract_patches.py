@@ -114,12 +114,11 @@ def generate_mask(positions, positions_labels, cell_id, window, window_segmentat
       target_mask2.reshape((x_size, y_size, 1))
 
 def instance_clustering(cell_segmentation, 
-                        ct_thr=(500, 12000),
+                        ct_thr=(500, 12000), 
                         instance_map=True, 
                         map_path=None, 
-                        fg_thr=0.1,
-                        DBSCAN_thr=(10, 250),
-                        label_seg=True):
+                        fg_thr=0.3,
+                        DBSCAN_thr=(10, 250)):
   """ Perform instance clustering on a static frame
 
   cell_segmentation: np.array, float
@@ -146,8 +145,7 @@ def instance_clustering(cell_segmentation,
   clustering = DBSCAN(eps=DBSCAN_thr[0], min_samples=DBSCAN_thr[1]).fit(positions)
   positions_labels = clustering.labels_
   cell_ids, point_cts = np.unique(positions_labels, return_counts=True)
-
-  # Further filtering of cell types by ct_thr
+  
   mg_cell_positions = []
   non_mg_cell_positions = []
   other_cells = []
@@ -178,8 +176,6 @@ def instance_clustering(cell_segmentation,
     else:
       other_cells.append((cell_id, mean_pos))
 
-  # PLOT SEGMENTATIONS, SAVE AS .PNG
-  # INCLUDE BOTH MG and NONMG cells
   if instance_map and map_path is not None:
     # bg as -1
     segmented = np.zeros(cell_segmentation.shape[:2]) - 1
@@ -191,21 +187,18 @@ def instance_clustering(cell_segmentation,
       points = positions[np.where(positions_labels == cell_id)[0]]
       for p in points:
         segmented[p[0], p[1]] = cell_id%10
-
     plt.clf()
     cmap = matplotlib.cm.get_cmap('tab10')
     cmap.set_under(color='k')
     plt.imshow(segmented, cmap=cmap, vmin=-0.001, vmax=10.001)
-    if label_seg:
-      font_mg = {'color': 'white', 'size': 4}
-      font_non_mg = {'color': 'red', 'size': 4}
-      for cell_id, mean_pos in mg_cell_positions:
-        plt.text(mean_pos[1], mean_pos[0], str(cell_id), fontdict=font_mg)
-      for cell_id, mean_pos in non_mg_cell_positions:
-        plt.text(mean_pos[1], mean_pos[0], str(cell_id), fontdict=font_non_mg)
+    font_mg = {'color': 'white', 'size': 4}
+    font_non_mg = {'color': 'red', 'size': 4}
+    for cell_id, mean_pos in mg_cell_positions:
+      plt.text(mean_pos[1], mean_pos[0], str(cell_id), fontdict=font_mg)
+    for cell_id, mean_pos in non_mg_cell_positions:
+      plt.text(mean_pos[1], mean_pos[0], str(cell_id), fontdict=font_non_mg)
     plt.axis('off')
-    plt.savefig(map_path, dpi=300, bbox_inches='tight', pad_inches=0)
-
+    plt.savefig(map_path, dpi=300)
   return (mg_cell_positions, non_mg_cell_positions, other_cells), positions, positions_labels
 
 def get_cell_rect_angle(tm):
@@ -245,13 +238,9 @@ def process_site_instance_segmentation(site_path,
     print("\tClustering time %d" % t_point)
     cell_segmentation = segmentation_stack[t_point, :, :]
     instance_map_path = os.path.join(site_supp_files_folder, 'segmentation_%d.png' % t_point)
-
-    # res = (mg_cell_positions, non_mg_cell_positions, other_cells), positions, positions_labels
-    res = instance_clustering(cell_segmentation, instance_map=True, map_path=instance_map_path, label_seg=False)
-
+    res = instance_clustering(cell_segmentation, instance_map=True, map_path=instance_map_path)
     cell_positions[t_point] = res[0] # MG, Non-MG, Chimeric Cells
     cell_pixel_assignments[t_point] = res[1:]
-
   with open(os.path.join(site_supp_files_folder, 'cell_positions.pkl'), 'wb') as f:
     pickle.dump(cell_positions, f)
   with open(os.path.join(site_supp_files_folder, 'cell_pixel_assignments.pkl'), 'wb') as f:
@@ -261,8 +250,7 @@ def process_site_instance_segmentation(site_path,
 def process_site_extract_patches(site_path, 
                                  site_segmentation_path, 
                                  site_supp_files_folder,
-                                 window_size=256,
-                                 cells=['mg']):
+                                 window_size=256):
   """ Wrapper of extract single cell patches step
 
   site_path: str
@@ -273,8 +261,6 @@ def process_site_extract_patches(site_path,
       path to the folder where supplementary files will be saved
   window_size: int
       window around the cell, default is 256
-  cells: list
-      list of which cells to include in patch generation ['mg', 'non_mg', 'other']
   """
   # Load data
   image_stack = np.load(site_path)
@@ -289,8 +275,8 @@ def process_site_extract_patches(site_path,
     print("\tWriting time %d" % t_point)
     raw_image = image_stack[t_point, :, :]
     cell_segmentation = segmentation_stack[t_point, :, :]
-
-    positions, positions_labels = cell_pixel_assignments[t_point]
+    
+    positions, positions_labels = cell_pixel_assignments[t_point]      
     mg_cells, non_mg_cells, other_cells = cell_positions[t_point]
 
     # Define fillings for the masked pixels in this slice
@@ -298,46 +284,21 @@ def process_site_extract_patches(site_path,
     background_pool = np.median(background_pool, 0)
     background_filling = np.ones((window_size, window_size, 1)) * background_pool.reshape((1, 1, -1))
 
-    if 'mg' in cells:
-        for cell_id, cell_position in mg_cells:
-
-            window = [(cell_position[0]-window_size//2, cell_position[0]+window_size//2),
-                    (cell_position[1]-window_size//2, cell_position[1]+window_size//2)]
-            window_segmentation = select_window(cell_segmentation, window, padding=-1)
-            remove_mask, tm, tm2 = generate_mask(positions,
-                                               positions_labels,
-                                               cell_id,
-                                               window,
-                                               window_segmentation)
-            output_mat = select_window(raw_image, window, padding=0)
-            masked_output_mat = output_mat * (1 - remove_mask) + background_filling * remove_mask
-            # Just to prevent backward compatibility issue cast to int64 and float 64 respectively
-            output_mat = np.concatenate([output_mat, tm, tm2], 2).astype('int64')
-            masked_output_mat = np.concatenate([masked_output_mat, tm, tm2], 2).astype('float64')
-            if os.path.join(site_supp_files_folder, '%d_%d.h5' % (t_point, cell_id)) in site_data.keys():
-              raise KeyError("cell by that ID and time point already exists in patch stack")
-            else:
-              site_data[os.path.join(site_supp_files_folder, '%d_%d.h5' % (t_point, cell_id))] = {"mat": output_mat, "masked_mat": masked_output_mat}
-    if 'non_mg' in cells:
-        for cell_id, cell_position in non_mg_cells:
-            window = [(cell_position[0]-window_size//2, cell_position[0]+window_size//2),
-                    (cell_position[1]-window_size//2, cell_position[1]+window_size//2)]
-            window_segmentation = select_window(cell_segmentation, window, padding=-1)
-            remove_mask, tm, tm2 = generate_mask(positions,
-                                               positions_labels,
-                                               cell_id,
-                                               window,
-                                               window_segmentation)
-            output_mat = select_window(raw_image, window, padding=0)
-            masked_output_mat = output_mat * (1 - remove_mask) + background_filling * remove_mask
-            # Just to prevent backward compatibility issue cast to int64 and float 64 respectively
-            output_mat = np.concatenate([output_mat, tm, tm2], 2).astype('int64')
-            masked_output_mat = np.concatenate([masked_output_mat, tm, tm2], 2).astype('float64')
-            if os.path.join(site_supp_files_folder, '%d_%d.h5' % (t_point, cell_id)) in site_data.keys():
-              raise KeyError("cell by that ID and time point already exists in patch stack")
-            else:
-                site_data[os.path.join(site_supp_files_folder, '%d_%d.h5' % (t_point, cell_id))] = {"mat": output_mat, "masked_mat": masked_output_mat}
-
+    for cell_id, cell_position in mg_cells:
+      window = [(cell_position[0]-window_size//2, cell_position[0]+window_size//2),
+                (cell_position[1]-window_size//2, cell_position[1]+window_size//2)]
+      window_segmentation = select_window(cell_segmentation, window, padding=-1)
+      remove_mask, tm, tm2 = generate_mask(positions, 
+                                           positions_labels, 
+                                           cell_id, 
+                                           window, 
+                                           window_segmentation)
+      output_mat = select_window(raw_image, window, padding=0)
+      masked_output_mat = output_mat * (1 - remove_mask) + background_filling * remove_mask
+      # Just to prevent backward compatibility issue cast to int64 and float 64 respectively
+      output_mat = np.concatenate([output_mat, tm, tm2], 2).astype('int64')
+      masked_output_mat = np.concatenate([masked_output_mat, tm, tm2], 2).astype('float64')
+      site_data[os.path.join(site_supp_files_folder, '%d_%d.h5' % (t_point, cell_id))] = {"mat": output_mat, "masked_mat": masked_output_mat}
     with open(os.path.join(site_supp_files_folder, 'stacks_%d.pkl' % t_point), 'wb') as f:
       pickle.dump(site_data, f)
 
