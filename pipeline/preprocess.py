@@ -66,11 +66,18 @@ def load_raw(path, site, multipage=True):
 
 # 2
 def adjust_range(arr):
+    phase_mean_range = [32500, 33000]
+    phase_std_range = [1600, 2000]
+    retard_mean_range = [1400, 1600]
+    retard_std_range = [1500, 1800]
 
-    arr_adjusted = arr
-    # nothing implemented right now
-
-    return arr_adjusted
+    mean_c0 = arr[:, :, :, 0].mean()
+    mean_c1 = arr[:, :, :, 1].mean()
+    std_c0 = arr[:, :, :, 0].std()
+    std_c1 = arr[:, :, :, 1].std()
+    print("\tPhase: %d plus/minus %d" % (mean_c0, std_c0))
+    print("\tRetardance: %d plus/minus %d" % (mean_c1, std_c1))
+    return arr
 
 
 # 3
@@ -92,4 +99,5 @@ def write_raw_to_npy(path, site, output, multipage=True):
     raw_adjusted = adjust_range(raw)
 
     np.save(output_name, raw_adjusted)
+
 
