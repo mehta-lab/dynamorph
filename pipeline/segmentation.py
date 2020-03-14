@@ -37,6 +37,11 @@ def segmentation(paths):
     :return:
     """
     temp_folder, supp_folder, target, sites = paths[0], paths[1], paths[2], paths[3]
+    model = Segment(input_shape=(256, 256, 2),
+                    unet_feat=32,
+                    fc_layers=[64, 32],
+                    n_classes=3)
+    model.load('NNsegmentation/temp_save_unsaturated/final.h5')
 
     for site in sites:
         site_path = os.path.join(temp_folder+'/'+site+'.npy')
@@ -45,14 +50,11 @@ def segmentation(paths):
 
         if not os.path.exists(site_supp_files_folder):
             os.makedirs(site_supp_files_folder)
-
-        # Generate semantic segmentation
-        model = Segment(input_shape=(256, 256, 2),
-                        unet_feat=32,
-                        fc_layers=[64, 32],
-                        n_classes=3)
-        model.load('NNsegmentation/temp_save_unsaturated/final.h5')
-        predict_whole_map(site_path, model, n_classes=3, batch_size=8, n_supp=5)
+        try:
+            # Generate semantic segmentation
+            predict_whole_map(site_path, model, n_classes=3, batch_size=8, n_supp=5)
+        except Exception as e:
+            print("Error in predicting site %s" % site, flush=True)
 
 
 # 5

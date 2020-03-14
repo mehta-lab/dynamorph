@@ -11,7 +11,7 @@ import h5py
 from matplotlib.patches import Rectangle
 from matplotlib import cm
 import imageio
-import tifffile
+#import tifffile
 
 def generate_cell_sizes(fs, out_path=None):
   sizes = {}
@@ -142,7 +142,9 @@ def Kmean_on_short_traj_diffs(vs, trajs, length=5, n_clusters=4):
 
 def save_traj(k, output_path=None):
   input_path = DATA_ROOT + '/Data/DynamicPatches/%s/mg_traj_%s.tif' % (k.split('/')[0], k.split('/')[1])
-  images = tifffile.imread(input_path)
+  # images = tifffile.imread(input_path)
+  _, images = cv2.imreadmulti(input_path, flags=cv2.IMREAD_ANYDEPTH)
+  images = np.array(images)
   if output_path is None:
     output_path = './%s.gif' % (t, k[:9] + '_' + k[10:])
   imageio.mimsave(output_path, images)
@@ -270,5 +272,6 @@ if __name__ == '__main__':
 #  range2 = [range2[0] - (range2[1] - range2[0]) * 0.2, range2[1] + (range2[1] - range2[0]) * 0.2]
 #  plt.xlim(range0)
 #  plt.ylim(range1)
+
 
 

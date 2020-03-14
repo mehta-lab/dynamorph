@@ -13,7 +13,7 @@ from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from matplotlib import cm
 import imageio
-import tifffile
+# import tifffile
 import statsmodels.api as sm
 from .naive_imagenet import DATA_ROOT
 
@@ -72,9 +72,11 @@ def generate_short_traj_collections(trajectories_positions, length=5, raw=False)
 
 def save_traj(k, output_path=None):
   input_path = DATA_ROOT + '/Data/DynamicPatches/%s/mg_traj_%s.tif' % (k.split('/')[0], k.split('/')[1])
-  images = tifffile.imread(input_path)
+  # images = tifffile.imread(input_path)
+  _, images = cv2.imreadmulti(input_path, flags=cv2.IMREAD_ANYDEPTH)
+  images = np.array(images)
   if output_path is None:
-    output_path = './%s.gif' % (k[:9] + '_' + k[10:])
+    output_path = './%s.gif' % (t, k[:9] + '_' + k[10:])
   imageio.mimsave(output_path, images)
   return
 
@@ -198,3 +200,4 @@ if __name__ == '__main__':
   plt.ylabel("distance^2")
   plt.savefig("/home/michaelwu/all_non_microglia_combined.png", dpi=300)
   
+

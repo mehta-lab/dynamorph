@@ -29,6 +29,7 @@ sites_JANUARY = [
     'B2-Site_0', 'B2-Site_1', 'B2-Site_2', 'B2-Site_3', 'B2-Site_4', 'B2-Site_5', 'B2-Site_6', 'B2-Site_7', 'B2-Site_8',
     'B4-Site_0', 'B4-Site_1', 'B4-Site_2', 'B4-Site_3', 'B4-Site_4', 'B4-Site_5', 'B4-Site_6', 'B4-Site_7', 'B4-Site_8',
     'B5-Site_0', 'B5-Site_1', 'B5-Site_2', 'B5-Site_3', 'B5-Site_4', 'B5-Site_5', 'B5-Site_6', 'B5-Site_7', 'B5-Site_8',
+    'C3-Site_0', 'C3-Site_1', 'C3-Site_2', 'C3-Site_3', 'C3-Site_4', 'C3-Site_5', 'C3-Site_6', 'C3-Site_7', 'C3-Site_8',
     'C4-Site_0', 'C4-Site_1', 'C4-Site_2', 'C4-Site_3', 'C4-Site_4', 'C4-Site_5', 'C4-Site_6', 'C4-Site_7', 'C4-Site_8',
     'C5-Site_0', 'C5-Site_1', 'C5-Site_2', 'C5-Site_3', 'C5-Site_4', 'C5-Site_5', 'C5-Site_6', 'C5-Site_7', 'C5-Site_8'
 ]
@@ -58,8 +59,11 @@ def main():
 
         out = output
 
-        print(f"writing {site} to {out}", flush=True)
-        write_raw_to_npy(path, site, out, multipage=True)
+        try:
+            print(f"writing {site} to {out}", flush=True)
+            write_raw_to_npy(path, site, out, multipage=True)
+        except Exception as e:
+            print(f"\terror in writing {site}", flush=True)
 
 
 if __name__ == '__main__':

@@ -65,12 +65,9 @@ def load_raw(path, site, multipage=True):
 
 
 # 2
+#     a. phase: 32767 plus/minus 1600~2000
+#     b. retardance: 1400~1600 plus/minus 1500~1800
 def adjust_range(arr):
-    phase_mean_range = [32500, 33000]
-    phase_std_range = [1600, 2000]
-    retard_mean_range = [1400, 1600]
-    retard_std_range = [1500, 1800]
-
     mean_c0 = arr[:, :, :, 0].mean()
     mean_c1 = arr[:, :, :, 1].mean()
     std_c0 = arr[:, :, :, 0].std()
