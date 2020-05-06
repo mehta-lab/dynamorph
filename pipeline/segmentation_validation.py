@@ -97,6 +97,7 @@ def segmentation_validation_michael(paths, gpu_id, category):
 
         stack = []
         for t_point in range(len(raw_input_stack)):
+            print(f"\tprocessing t {t_point}")
             mat = raw_input_stack[t_point, :, :, 0]
             mat = np.stack([mat] * 3, 2)
 

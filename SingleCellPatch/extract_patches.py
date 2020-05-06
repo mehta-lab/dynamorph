@@ -271,12 +271,19 @@ def process_site_extract_patches(site_path,
     cell_pixel_assignments = pickle.load(f)
 
   for t_point in range(image_stack.shape[0]):
-    site_data = {}
+    if os.path.exists(os.path.join(site_supp_files_folder, 'stacks_%d.pkl' % t_point)):
+      try:
+        site_data = pickle.load(open(os.path.join(site_supp_files_folder, 'stacks_%d.pkl' % t_point), 'rb'))
+      except Exception as e:
+        print(e)
+        site_data = {}
+    else:
+      site_data = {}
     print("\tWriting time %d" % t_point)
     raw_image = image_stack[t_point, :, :]
     cell_segmentation = segmentation_stack[t_point, :, :]
     
-    positions, positions_labels = cell_pixel_assignments[t_point]      
+    positions, positions_labels = cell_pixel_assignments[t_point]
     mg_cells, non_mg_cells, other_cells = cell_positions[t_point]
 
     # Define fillings for the masked pixels in this slice
@@ -284,7 +291,10 @@ def process_site_extract_patches(site_path,
     background_pool = np.median(background_pool, 0)
     background_filling = np.ones((window_size, window_size, 1)) * background_pool.reshape((1, 1, -1))
 
-    for cell_id, cell_position in mg_cells:
+    for cell_id, cell_position in mg_cells + non_mg_cells + other_cells:
+      cell_name = os.path.join(site_supp_files_folder, '%d_%d.h5' % (t_point, cell_id))
+      if cell_name in site_data:
+        continue
       window = [(cell_position[0]-window_size//2, cell_position[0]+window_size//2),
                 (cell_position[1]-window_size//2, cell_position[1]+window_size//2)]
       window_segmentation = select_window(cell_segmentation, window, padding=-1)
@@ -298,7 +308,7 @@ def process_site_extract_patches(site_path,
       # Just to prevent backward compatibility issue cast to int64 and float 64 respectively
       output_mat = np.concatenate([output_mat, tm, tm2], 2).astype('int64')
       masked_output_mat = np.concatenate([masked_output_mat, tm, tm2], 2).astype('float64')
-      site_data[os.path.join(site_supp_files_folder, '%d_%d.h5' % (t_point, cell_id))] = {"mat": output_mat, "masked_mat": masked_output_mat}
+      site_data[cell_name] = {"mat": output_mat, "masked_mat": masked_output_mat}
     with open(os.path.join(site_supp_files_folder, 'stacks_%d.pkl' % t_point), 'wb') as f:
       pickle.dump(site_data, f)
 
@@ -338,7 +348,7 @@ def process_site_extract_patches_align_axis(site_path,
 
     # Define fillings for the masked pixels in this slice
     background_pool = raw_image[np.where(cell_segmentation[:, :, 0] > 0.9)]
-    background_pool = np.median(background_pool, 0)
+    background_pool = np.median(background_pool, 0 )
     background_filling = np.ones((window_size, window_size, 1)) * background_pool.reshape((1, 1, -1))
 
     for cell_id, cell_position in mg_cells:

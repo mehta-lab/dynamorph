@@ -12,6 +12,7 @@ import scipy
 import pickle
 import random
 import os
+import cmath
 import matplotlib.pyplot as plt
 from .naive_imagenet import preprocess, read_file_path, DATA_ROOT, CHANNEL_MAX
 import multiprocessing as mp
@@ -56,7 +57,7 @@ def get_size(dat):
   """ Calculate cell size based on mask
   """
   mask = np.array(dat[:, :, 2])
-  contours, _ = cv2.findContours(mask.astype('uint8'), 1, 2)
+  _, contours, _ = cv2.findContours(mask.astype('uint8'), 1, 2)
   areas = [cv2.contourArea(cnt) for cnt in contours]
   return mask.sum(), np.max(areas)
 
@@ -75,34 +76,22 @@ def get_density(dat):
   peak_phase = ((phase - bg_phase) * mask).max()
   sum_phase = ((phase - bg_phase) * mask).sum()
   phase_vals = (phase - bg_phase)[np.where(mask)]
-  quantile_phase = np.quantile(phase_vals, 0.95)
+  quantile_phase = np.percentile(phase_vals, 95)
   top200_phase = np.mean(sorted(phase_vals)[-200:])
 
   peak_retardance = ((retardance - bg_retardance) * mask).max()
   sum_retardance = ((retardance - bg_retardance) * mask).sum()
   retardance_vals = (retardance - bg_retardance)[np.where(mask)]
-  quantile_retardance = np.quantile(retardance_vals, 0.95)
+  quantile_retardance = np.percentile(retardance_vals, 95)
   top200_retardance = np.mean(sorted(retardance_vals)[-200:])
 
   return (peak_phase, quantile_phase, top200_phase, sum_phase), \
          (peak_retardance, quantile_retardance, top200_retardance, sum_retardance)
 
-# def get_aspect_ratio(dat):
-#   """Return: w, h, angle(adjusted) """
-#   contours, _ = cv2.findContours(dat[:, :, 2].astype('uint8'), 1, 2)
-#   areas = [cv2.contourArea(cnt) for cnt in contours]
-#   rect = cv2.minAreaRect(contours[np.argmax(areas)])
-#   w, h = rect[1]
-#   if w < h:
-#     ang = rect[2] + 180
-#   else:
-#     ang = rect[2] + 90
-#   return w, h, ang
-
 def get_aspect_ratio(dat):
-  """ Calcualte aspect ratio (cv2.minAreaRect)
+  """ Calcualte aspect ratio (cv2.minAreaRect), deprecated
   """
-  contours, _ = cv2.findContours(dat[:, :, 2].astype('uint8'), 1, 2)
+  _, contours, _ = cv2.findContours(dat[:, :, 2].astype('uint8'), 1, 2)
   areas = [cv2.contourArea(cnt) for cnt in contours]
   rect = cv2.minAreaRect(contours[np.argmax(areas)])
   w, h = rect[1]
@@ -111,10 +100,47 @@ def get_aspect_ratio(dat):
     ang = ang - 90
   return w, h, ang
 
+def rotate_bound(image, angle):
+    # grab the dimensions of the image and then determine the
+    # center
+    (h, w) = image.shape[:2]
+    (cX, cY) = (w // 2, h // 2)
+    # grab the rotation matrix (applying the negative of the
+    # angle to rotate clockwise), then grab the sine and cosine
+    # (i.e., the rotation components of the matrix)
+    M = cv2.getRotationMatrix2D((cX, cY), -angle, 1.0)
+    cos = np.abs(M[0, 0])
+    sin = np.abs(M[0, 1])
+    # compute the new bounding dimensions of the image
+    nW = int((h * sin) + (w * cos))
+    nH = int((h * cos) + (w * sin))
+    # adjust the rotation matrix to take into account translation
+    M[0, 2] += (nW / 2) - cX
+    M[1, 2] += (nH / 2) - cY
+    # perform the actual rotation and return the image
+    return cv2.warpAffine(image, M, (nW, nH))
+
+def get_angle_apr(dat):
+  y, x = np.nonzero(dat[:, :, 2])
+  x = x - np.mean(x)
+  y = y - np.mean(y)
+  coords = np.stack([x, y], 0)
+  cov = np.cov(coords)
+  evals, evecs = np.linalg.eig(cov)
+  main_axis = evecs[:, np.argmax(evals)]  # Eigenvector with largest eigenvalue
+  angle = cmath.polar(complex(*main_axis))[1]
+    
+  rotated = rotate_bound(dat[:, :, 2], -angle/np.pi * 180)
+  _, contours, _ = cv2.findContours(rotated.astype('uint8'), 1, 2)
+  areas = [cv2.contourArea(cnt) for cnt in contours]
+  rect = cv2.boundingRect(contours[np.argmax(areas)])
+  aps = rect[2]/rect[3]
+  return aps, angle
+
 def get_aspect_ratio_no_rotation(dat):
   """ Calcualte aspect ratio (cv2.boundingRect)
   """
-  contours, _ = cv2.findContours(dat[:, :, 2].astype('uint8'), 1, 2)
+  _, contours, _ = cv2.findContours(dat[:, :, 2].astype('uint8'), 1, 2)
   areas = [cv2.contourArea(cnt) for cnt in contours]
   rect = cv2.boundingRect(contours[np.argmax(areas)])
   return rect[2], rect[3]

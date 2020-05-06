@@ -13,12 +13,17 @@ import keras
 import tempfile
 import os
 import scipy
+from scipy.special import logsumexp
 from copy import deepcopy
 from keras import backend as K
 from keras.models import Model, load_model
 from keras.layers import Dense, Layer, Input, BatchNormalization, Conv2D, Lambda
 from .layers import weighted_binary_cross_entropy, ValidMetrics, Reshape, MergeOnZ
 from .data import load_input, preprocess
+
+def _softmax(arr, axis=-1):
+  softmax_arr = np.exp(arr - logsumexp(arr, axis=axis, keepdims=True))
+  return softmax_arr
 
 class Segment(object):
   def __init__(self,
@@ -116,7 +121,7 @@ class Segment(object):
       y_pred = self.model.predict(patches)
     else:
       raise ValueError("Input format not supported")
-    y_pred = scipy.special.softmax(y_pred, -1)
+    y_pred = _softmax(y_pred, -1)
     return y_pred
   
   # def evaluate(self, patches, label_input='prob'):

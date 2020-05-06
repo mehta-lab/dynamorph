@@ -14,7 +14,7 @@ from sklearn.decomposition import PCA
 from matplotlib import cm
 import imageio
 # import tifffile
-import statsmodels.api as sm
+# import statsmodels.api as sm
 from .naive_imagenet import DATA_ROOT
 
 def generate_MSD_distri(trajectories_positions):

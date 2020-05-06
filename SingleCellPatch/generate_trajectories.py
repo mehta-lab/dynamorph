@@ -7,7 +7,7 @@ Created on Thu Jul 11 14:22:51 2019
 import numpy as np
 import scipy
 import os
-import ot
+#import ot
 # import tifffile
 import imageio
 import pickle
@@ -45,7 +45,7 @@ def frame_matching(f1, f2, int1, int2, dist_cutoff=100, int_eff=1.4):
   int_dist_mat = int_dist_mat + 1/int_dist_mat
   int_dist_mat[np.where(int_dist_mat >= 2.5)] = 20.
   int_dist_mat = int_dist_mat ** int_eff
-  int_dist_baseline = np.quantile(int_dist_mat, 0.1)
+  int_dist_baseline = np.percentile(int_dist_mat, 10)
 
   cost_mat = np.ones((len(f1)+len(f2), len(f1)+len(f2))) * (dist_cutoff ** 2 * 10) * int_dist_baseline
   dist_mat = cdist(f1, f2) ** 2
@@ -68,29 +68,29 @@ def frame_matching(f1, f2, int1, int2, dist_cutoff=100, int_eff=1.4):
       costs.append(cost_mat[pair[0], pair[1]])
   return pairs, {pairs[i]: costs[i] for i in np.argsort(costs)[-5:]}
 
-def frame_matching_ot(f1, f2, int1, int2, dist_cutoff=50):
-  """ Matching cells between two frames (optimal transport)
+# def frame_matching_ot(f1, f2, int1, int2, dist_cutoff=50):
+#   """ Matching cells between two frames (optimal transport)
 
-  f1: list of np.array(size 2)
-      cell centroid positions in frame 1
-  f2: list of np.array(size 2)
-      cell centroid positions in frame 2
-  int1: list of int
-      cell sizes in frame 1
-  int2: list of int
-      cell sizes in frame 2
-  dist_cutoff: int
-      cutoff threshold, any pairs with larger distance are neglected
-  """
+#   f1: list of np.array(size 2)
+#       cell centroid positions in frame 1
+#   f2: list of np.array(size 2)
+#       cell centroid positions in frame 2
+#   int1: list of int
+#       cell sizes in frame 1
+#   int2: list of int
+#       cell sizes in frame 2
+#   dist_cutoff: int
+#       cutoff threshold, any pairs with larger distance are neglected
+#   """
 
-  dist_mat = cdist(f1, f2) ** 2
-  dist_mat[np.where(dist_mat>=(dist_cutoff**2))] = (dist_cutoff ** 2 * 10)
+#   dist_mat = cdist(f1, f2) ** 2
+#   dist_mat[np.where(dist_mat>=(dist_cutoff**2))] = (dist_cutoff ** 2 * 10)
 
-  int1 = np.array(int1)/np.sum(int1)
-  int2 = np.array(int2)/np.sum(int2)
-  ot_mat = ot.sinkhorn(int1, int2, dist_mat, 10.)
+#   int1 = np.array(int1)/np.sum(int1)
+#   int2 = np.array(int2)/np.sum(int2)
+#   ot_mat = ot.sinkhorn(int1, int2, dist_mat, 10.)
 
-  return ot_mat
+#   return ot_mat
 
 def trajectory_connection(trajectories,
                           trajectories_positions,
