@@ -14,6 +14,7 @@ from .naive_imagenet import DATA_ROOT, read_file_path
 CHANNEL_RANGE = [(0.3, 0.8), (0., 0.6)] 
 CHANNEL_VAR = np.array([0.0475, 0.0394]) # After normalized to CHANNEL_RANGE
 CHANNEL_MAX = np.array([65535., 65535.])
+eps = 1e-9
 
 class VectorQuantizer(nn.Module):
   def __init__(self, embedding_dim=128, num_embeddings=128, commitment_cost=0.25, gpu=True):
@@ -68,6 +69,21 @@ class Reparametrize(nn.Module):
     z = z_mean + z_std * eps    
     KLD = -0.5 * t.sum(1 + z_logstd - z_mean.pow(2) - z_logstd.exp())
     return z, KLD
+
+class Reparametrize_IW(nn.Module):
+  def __init__(self, k=5, **kwargs):
+    super(Reparametrize_IW, self).__init__(**kwargs)
+    self.k = k
+    
+  def forward(self, z_mean, z_logstd):
+    z_std = t.exp(0.5 * z_logstd)
+    epss = [t.randn_like(z_std) for _ in range(self.k)]
+    zs = [z_mean + z_std * eps for eps in epss]
+    return zs, epss
+
+class Flatten(nn.Module):
+    def forward(self, input):
+        return input.view(input.size(0), -1)
 
 class ResidualBlock(nn.Module):
   def __init__(self,
@@ -301,6 +317,231 @@ class VQ_VAE(nn.Module):
             'total_loss': total_loss,
             'perplexity': perplexity}
 
+  def predict(self, inputs):
+    return self.forward(inputs)
+
+class VAE(nn.Module):
+  def __init__(self,
+               num_inputs=2,
+               num_hiddens=16,
+               num_residual_hiddens=32,
+               num_residual_layers=2,
+               channel_var=CHANNEL_VAR,
+               alpha=0.005,
+               **kwargs):
+    super(VAE, self).__init__(**kwargs)
+    self.num_inputs = num_inputs
+    self.num_hiddens = num_hiddens
+    self.num_residual_layers = num_residual_layers
+    self.num_residual_hiddens = num_residual_hiddens
+    self.channel_var = nn.Parameter(t.from_numpy(channel_var).float().reshape((1, num_inputs, 1, 1)), requires_grad=False)
+    self.alpha = alpha
+    self.enc = nn.Sequential(
+        nn.Conv2d(self.num_inputs, self.num_hiddens//2, 1),
+        nn.Conv2d(self.num_hiddens//2, self.num_hiddens//2, 4, stride=2, padding=1),
+        nn.BatchNorm2d(self.num_hiddens//2),
+        nn.ReLU(),
+        nn.Conv2d(self.num_hiddens//2, self.num_hiddens, 4, stride=2, padding=1),
+        nn.BatchNorm2d(self.num_hiddens),
+        nn.ReLU(),
+        nn.Conv2d(self.num_hiddens, self.num_hiddens, 4, stride=2, padding=1),
+        nn.BatchNorm2d(self.num_hiddens),
+        nn.ReLU(),
+        nn.Conv2d(self.num_hiddens, self.num_hiddens, 3, padding=1),
+        nn.BatchNorm2d(self.num_hiddens),
+        ResidualBlock(self.num_hiddens, self.num_residual_hiddens, self.num_residual_layers),
+        nn.Conv2d(self.num_hiddens, 2*self.num_hiddens, 1))
+    self.rp = Reparametrize()
+    self.dec = nn.Sequential(
+        nn.ConvTranspose2d(self.num_hiddens, self.num_hiddens//2, 4, stride=2, padding=1),
+        nn.ReLU(),
+        nn.ConvTranspose2d(self.num_hiddens//2, self.num_hiddens//4, 4, stride=2, padding=1),
+        nn.ReLU(),
+        nn.ConvTranspose2d(self.num_hiddens//4, self.num_hiddens//4, 4, stride=2, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(self.num_hiddens//4, self.num_inputs, 1))
+    
+  def forward(self, inputs, time_matching_mat=None, batch_mask=None):
+    # inputs: Batch * num_inputs(channel) * H * W, each channel from 0 to 1
+    z_before = self.enc(inputs)
+    z_mean = z_before[:, :self.num_hiddens]
+    z_logstd = z_before[:, self.num_hiddens:]
+    z_after, KLD = self.rp(z_mean, z_logstd)
+    
+    decoded = self.dec(z_after)
+    if batch_mask is None:
+      batch_mask = t.ones_like(inputs)
+    recon_loss = t.sum(F.mse_loss(decoded * batch_mask, inputs * batch_mask, reduction='none')/self.channel_var)
+    total_loss = recon_loss + KLD
+    time_matching_loss = None
+    if not time_matching_mat is None:
+      z_before_ = z_mean.reshape((z_mean.shape[0], -1))
+      len_latent = z_before_.shape[1]
+      sim_mat = t.pow(z_before_.reshape((1, -1, len_latent)) - \
+                      z_before_.reshape((-1, 1, len_latent)), 2).mean(2)
+      assert sim_mat.shape == time_matching_mat.shape
+      time_matching_loss = (sim_mat * time_matching_mat).sum()
+      total_loss += time_matching_loss * self.alpha
+    return decoded, \
+           {'recon_loss': recon_loss/(inputs.shape[0] * 32768),
+            'KLD': KLD,
+            'time_matching_loss': time_matching_loss,
+            'total_loss': total_loss,
+            'perplexity': t.zeros(())}
+
+  def predict(self, inputs):
+    # inputs: Batch * num_inputs(channel) * H * W, each channel from 0 to 1
+    z_before = self.enc(inputs)
+    z_mean = z_before[:, :self.num_hiddens]
+    decoded = self.dec(z_mean)
+    recon_loss = t.mean(F.mse_loss(decoded, inputs, reduction='none')/self.channel_var)
+    return decoded, {'recon_loss': recon_loss}
+
+class IWAE(VAE):
+  def __init__(self, k=5, **kwargs):
+    super(IWAE, self).__init__(**kwargs)
+    self.k = k
+    self.rp = Reparametrize_IW(k=self.k)
+
+  def forward(self, inputs, time_matching_mat=None, batch_mask=None):
+    z_before = self.enc(inputs)
+    z_mean = z_before[:, :self.num_hiddens]
+    z_logstd = z_before[:, self.num_hiddens:]
+    z_afters, epss = self.rp(z_mean, z_logstd)
+
+    if batch_mask is None:
+      batch_mask = t.ones_like(inputs)
+    time_matching_loss = 0.
+    if not time_matching_mat is None:
+      z_before_ = z_mean.reshape((z_mean.shape[0], -1))
+      len_latent = z_before_.shape[1]
+      sim_mat = t.pow(z_before_.reshape((1, -1, len_latent)) - \
+                      z_before_.reshape((-1, 1, len_latent)), 2).mean(2)
+      assert sim_mat.shape == time_matching_mat.shape
+      time_matching_loss = (sim_mat * time_matching_mat).sum()
+
+    log_ws = []
+    recon_losses = []
+    for z, eps in zip(z_afters, epss):
+      decoded = self.dec(z)
+      log_p_x_z = - t.sum(F.mse_loss(decoded * batch_mask, inputs * batch_mask, reduction='none')/self.channel_var, dim=(1, 2, 3))
+
+      log_p_z = - t.sum(0.5 * z ** 2, dim=(1, 2, 3)) #- 0.5 * t.numel(z[0]) * np.log(2 * np.pi)
+      log_q_z_x = - t.sum(0.5 * eps ** 2 + z_logstd, dim=(1, 2, 3)) #- 0.5 * t.numel(z[0]) * np.log(2 * np.pi) 
+      log_w_unnormed = log_p_x_z  + log_p_z - log_q_z_x
+      log_ws.append(log_w_unnormed)
+      recon_losses.append(-log_p_x_z)
+    log_ws = t.stack(log_ws, 1)
+    log_ws_minus_max = log_ws - t.max(log_ws, dim=1, keepdim=True)[0]
+    ws = t.exp(log_ws_minus_max)
+    normalized_ws = ws / t.sum(ws, dim=1, keepdim=True)
+    loss = -(normalized_ws.detach() * log_ws).sum()
+    total_loss = loss + time_matching_loss
+    
+    recon_losses = t.stack(recon_losses, 1)
+    recon_loss = (normalized_ws.detach() * recon_losses).sum()
+    return None, \
+           {'recon_loss': recon_loss/(inputs.shape[0] * 32768),
+            'time_matching_loss': time_matching_loss,
+            'total_loss': total_loss,
+            'perplexity': t.zeros(())}
+
+class AAE(nn.Module):
+  def __init__(self,
+               num_inputs=2,
+               num_hiddens=16,
+               num_residual_hiddens=32,
+               num_residual_layers=2,
+               channel_var=CHANNEL_VAR,
+               alpha=0.005,
+               **kwargs):
+    super(AAE, self).__init__(**kwargs)
+    self.num_inputs = num_inputs
+    self.num_hiddens = num_hiddens
+    self.num_residual_layers = num_residual_layers
+    self.num_residual_hiddens = num_residual_hiddens
+    self.channel_var = nn.Parameter(t.from_numpy(channel_var).float().reshape((1, num_inputs, 1, 1)), requires_grad=False)
+    self.alpha = alpha
+    self.enc = nn.Sequential(
+        nn.Conv2d(self.num_inputs, self.num_hiddens//2, 1),
+        nn.Conv2d(self.num_hiddens//2, self.num_hiddens//2, 4, stride=2, padding=1),
+        nn.BatchNorm2d(self.num_hiddens//2),
+        nn.ReLU(),
+        nn.Conv2d(self.num_hiddens//2, self.num_hiddens, 4, stride=2, padding=1),
+        nn.BatchNorm2d(self.num_hiddens),
+        nn.ReLU(),
+        nn.Conv2d(self.num_hiddens, self.num_hiddens, 4, stride=2, padding=1),
+        nn.BatchNorm2d(self.num_hiddens),
+        nn.ReLU(),
+        nn.Conv2d(self.num_hiddens, self.num_hiddens, 3, padding=1),
+        nn.BatchNorm2d(self.num_hiddens),
+        ResidualBlock(self.num_hiddens, self.num_residual_hiddens, self.num_residual_layers))
+    self.enc_d = nn.Sequential(
+        nn.Conv2d(self.num_hiddens, self.num_hiddens//2, 1),
+        nn.Conv2d(self.num_hiddens//2, self.num_hiddens//2, 4, stride=2, padding=1),
+        nn.BatchNorm2d(self.num_hiddens//2),
+        nn.ReLU(),
+        nn.Conv2d(self.num_hiddens//2, self.num_hiddens//2, 4, stride=2, padding=1),
+        nn.BatchNorm2d(self.num_hiddens//2),
+        nn.ReLU(),
+        nn.Conv2d(self.num_hiddens//2, self.num_hiddens//2, 4, stride=2, padding=1),
+        nn.BatchNorm2d(self.num_hiddens//2),
+        nn.ReLU(),
+        Flatten(),
+        nn.Linear(self.num_hiddens * 2, self.num_hiddens * 8),
+        nn.Dropout(0.25),
+        nn.ReLU(),
+        nn.Linear(self.num_hiddens * 8, self.num_hiddens),
+        nn.Dropout(0.25),
+        nn.ReLU(),
+        nn.Linear(self.num_hiddens, 1),
+        nn.Sigmoid())
+    self.dec = nn.Sequential(
+        nn.ConvTranspose2d(self.num_hiddens, self.num_hiddens//2, 4, stride=2, padding=1),
+        nn.ReLU(),
+        nn.ConvTranspose2d(self.num_hiddens//2, self.num_hiddens//4, 4, stride=2, padding=1),
+        nn.ReLU(),
+        nn.ConvTranspose2d(self.num_hiddens//4, self.num_hiddens//4, 4, stride=2, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(self.num_hiddens//4, self.num_inputs, 1))
+    
+  def forward(self, inputs, time_matching_mat=None, batch_mask=None):
+    # inputs: Batch * num_inputs(channel) * H * W, each channel from 0 to 1
+    z = self.enc(inputs)
+    decoded = self.dec(z)
+    if batch_mask is None:
+      batch_mask = t.ones_like(inputs)
+    recon_loss = t.mean(F.mse_loss(decoded * batch_mask, inputs * batch_mask, reduction='none')/self.channel_var)
+    total_loss = recon_loss
+    time_matching_loss = None
+    if not time_matching_mat is None:
+      z_ = z.reshape((z.shape[0], -1))
+      len_latent = z_.shape[1]
+      sim_mat = t.pow(z_.reshape((1, -1, len_latent)) - \
+                      z_.reshape((-1, 1, len_latent)), 2).mean(2)
+      assert sim_mat.shape == time_matching_mat.shape
+      time_matching_loss = (sim_mat * time_matching_mat).sum()
+      total_loss += time_matching_loss * self.alpha
+    return decoded, \
+           {'recon_loss': recon_loss,
+            'time_matching_loss': time_matching_loss,
+            'total_loss': total_loss,
+            'perplexity': t.zeros(())}
+
+  def adversarial_loss(self, inputs):
+    # inputs: Batch * num_inputs(channel) * H * W, each channel from 0 to 1
+    z_data = self.enc(inputs)
+    z_prior = t.randn_like(z_data)
+    _z_data = self.enc_d(z_data)
+    _z_prior = self.enc_d(z_prior)
+    g_loss = -t.mean(t.log(_z_data + eps))
+    d_loss = -t.mean(t.log(_z_prior + eps) + t.log(1 - _z_data.detach() + eps))
+    return {'generator_loss': g_loss,
+          'descriminator_loss': d_loss,
+          'score': t.mean(_z_data)}
+
+  def predict(self, inputs):
+    return self.forward(inputs)
 
 def train(model, dataset, relation_mat=None, mask=None, n_epochs=10, lr=0.001, batch_size=16, gpu=True):
   optimizer = t.optim.Adam(model.parameters(), lr=lr, betas=(.9, .999))
@@ -345,6 +586,68 @@ def train(model, dataset, relation_mat=None, mask=None, n_epochs=10, lr=0.001, b
       perplexities.append(loss_dict['perplexity'])
     print('epoch %d recon loss: %f perplexity: %f' % \
         (epoch, sum(recon_loss).item()/len(recon_loss), sum(perplexities).item()/len(perplexities)))
+  return model
+
+def train_adversarial(model, 
+                      dataset, 
+                      relation_mat=None, 
+                      mask=None, 
+                      n_epochs=10, 
+                      lr_recon=0.001, 
+                      lr_dis=0.001, 
+                      lr_gen=0.001, 
+                      batch_size=16, 
+                      gpu=True):
+  optim_enc = t.optim.Adam(model.enc.parameters(), lr_recon)
+  optim_dec = t.optim.Adam(model.dec.parameters(), lr_recon)
+  optim_enc_g = t.optim.Adam(model.enc.parameters(), lr_gen)
+  optim_enc_d = t.optim.Adam(model.enc_d.parameters(), lr_dis)
+  model.zero_grad()
+
+  n_batches = int(np.ceil(len(dataset)/batch_size))
+  for epoch in range(n_epochs):
+    recon_loss = []
+    scores = []
+    print('start epoch %d' % epoch) 
+    for i in range(n_batches):
+      # Input data
+      batch = dataset[i*batch_size:(i+1)*batch_size][0]
+      if gpu:
+        batch = batch.cuda()
+        
+      # Relation (trajectory, adjacent)
+      if not relation_mat is None:
+        batch_relation_mat = relation_mat[i*batch_size:(i+1)*batch_size, i*batch_size:(i+1)*batch_size]
+        batch_relation_mat = batch_relation_mat.todense()
+        batch_relation_mat = t.from_numpy(batch_relation_mat).float()
+        if gpu:
+          batch_relation_mat = batch_relation_mat.cuda()
+      else:
+        batch_relation_mat = None
+      
+      # Reconstruction mask
+      if not mask is None:
+        batch_mask = mask[i*batch_size:(i+1)*batch_size][0][:, 1:2, :, :] # Hardcoded second slice (large mask)
+        batch_mask = (batch_mask + 1.)/2.
+        if gpu:
+          batch_mask = batch_mask.cuda()
+      else:
+        batch_mask = None
+        
+      _, loss_dict = model(batch, time_matching_mat=batch_relation_mat, batch_mask=batch_mask)
+      loss_dict['total_loss'].backward()
+      optim_enc.step()
+      optim_dec.step()
+      loss_dict2 = model.adversarial_loss(batch)
+      loss_dict2['descriminator_loss'].backward()
+      optim_enc_d.step()
+      loss_dict2['generator_loss'].backward()
+      optim_enc_g.step()
+      model.zero_grad()
+
+      recon_loss.append(loss_dict['recon_loss'])
+      scores.append(loss_dict2['score'])
+    print('epoch %d recon loss: %f pred score: %f' % (epoch, sum(recon_loss).item()/len(recon_loss), sum(scores).item()/len(scores)))
   return model
 
 def prepare_dataset(fs, cs=[0, 1], input_shape=(128, 128), channel_max=CHANNEL_MAX):
@@ -573,7 +876,7 @@ if __name__ == '__main__':
                 gpu=gpu)
   t.save(model.state_dict(), 'save_small.pt')
   
-  ### Check used prior vectors ###=bcdmoprst
+  ### Check used prior vectors ###
   
   used_indices = []
   for i in range(500):
