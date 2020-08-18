@@ -38,15 +38,15 @@ class Worker(Process):
     def run(self):
         #os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         #os.environ["CUDA_VISIBLE_DEVICES"] = str(self.gpuid)
-        assemble_VAE(self.inputs)
+        #assemble_VAE(self.inputs)
         process_VAE(self.inputs)
-        trajectory_matching(self.inputs)
+        #trajectory_matching(self.inputs)
 
 
 def main():
-    sites = sites_JANUARY
-    inputs = RAW_JANUARY
-    outputs = INTERMEDIATE_JANUARY
+    sites = sites_NOVEMBER
+    inputs = RAW_NOVEMBER
+    outputs = INTERMEDIATE_NOVEMBER
     
     wells = set(s[:2] for s in sites)
     process = []

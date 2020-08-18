@@ -62,6 +62,11 @@ class VectorQuantizer(nn.Module):
     encoding_indices = t.argmax(-distances, 1)
     return encoding_indices
 
+  def decode_inputs(self, encoding_indices):
+    quantized = self.w(encoding_indices).transpose(2, 3).transpose(1, 2)
+    return quantized
+      
+
 class Reparametrize(nn.Module):
   def forward(self, z_mean, z_logstd):
     z_std = t.exp(0.5 * z_logstd)

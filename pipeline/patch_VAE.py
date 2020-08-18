@@ -105,19 +105,30 @@ def process_VAE(paths):
     model.load_state_dict(torch.load('HiddenStateExtractor/save_0005_bkp4.pt'))
  
     z_bs = {}
+    z_as = {}
     for i in range(len(dataset)):
       sample = dataset[i:(i+1)][0].cuda()
       z_b = model.enc(sample)
+      z_a, _, _ = model.vq(z_b)
       f_n = fs[i]
       z_bs[f_n] = z_b.cpu().data.numpy()
+      z_as[f_n] = z_a.cpu().data.numpy()      
+    
+    pca = pickle.load(open('HiddenStateExtractor/pca_save.pkl', 'rb'))
 
     dats = np.stack([z_bs[f] for f in fs], 0).reshape((len(dataset), -1))
     with open(os.path.join(temp_folder, '%s_latent_space.pkl' % well), 'wb') as f:
       pickle.dump(dats, f)
-    
-    pca = pickle.load(open('HiddenStateExtractor/pca_save.pkl', 'rb'))
     dats_ = pca.transform(dats)
     with open(os.path.join(temp_folder, '%s_latent_space_PCAed.pkl' % well), 'wb') as f:
+      pickle.dump(dats_, f)
+
+    
+    dats = np.stack([z_as[f] for f in fs], 0).reshape((len(dataset), -1))
+    with open(os.path.join(temp_folder, '%s_latent_space_after.pkl' % well), 'wb') as f:
+      pickle.dump(dats, f)
+    dats_ = pca.transform(dats)
+    with open(os.path.join(temp_folder, '%s_latent_space_after_PCAed.pkl' % well), 'wb') as f:
       pickle.dump(dats_, f)
     
     return
