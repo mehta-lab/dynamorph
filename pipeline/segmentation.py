@@ -1,41 +1,31 @@
 # bchhun, {2020-02-21}
 
-
-# pipeline:
-# 1. check input: (n_frames * 2048 * 2048 * 2) channel 0 - phase, channel 1 - retardance
-# 2. adjust channel range
-#     a. phase: 32767 plus/minus 1600~2000
-#     b. retardance: 1400~1600 plus/minus 1500~1800
-# 3. save as '$SITE_NAME.npy' numpy array, dtype=uint16
-# 4. run segmentation using saved model: `/data/michaelwu/CellVAE/NNSegmentation/temp_save_unsaturated/final.h5`
-# 5. run instance segmentation
-# 6. save individual cell patches
-# 7. connect individual cells into trajectories
-# 8. collect patches and assemble for VAE encoding
-# 9. PCA of VAE encoded latent vectors
-
 import os
 from NNsegmentation.models import Segment
 from NNsegmentation.data import predict_whole_map
 from keras import backend as K
 import tensorflow as tf
-
 from SingleCellPatch.extract_patches import process_site_instance_segmentation
 
 
-# 4
 def segmentation(paths):
-    """
-    # loads: 'NNsegmentation/temp_save_unsaturated/final.h5', 'site.npy' (pre=generated using preprocess.py)
-    # generates '_NNProbabilities.npy', '
-    #           .png',
-    #           '_NNpred.png',
-    #            '%s-supps' FOLDER
+    """ Wrapper method for semantic segmentation
 
-    # prints: "Predicting %d" % t
-    :param paths:
-    :return:
+    This function loads a saved model at:
+        "NNsegmentation/temp_save_unsaturated/final.h5"
+    and performs predicion on all specified sites included in the input paths.
+    
+    Resulting segmentation results and sample segentation image will be saved.
+
+    Args:
+        paths (list): list of paths, containing:
+            0 - folder for raw data and segmentation results (in .npy)
+            1 - folder for supplementary data
+            2 - deprecated
+            3 - list of site names
+
     """
+        
     temp_folder, supp_folder, target, sites = paths[0], paths[1], paths[2], paths[3]
     model = Segment(input_shape=(256, 256, 2),
                     unet_feat=32,
@@ -56,19 +46,26 @@ def segmentation(paths):
             print("Error in predicting site %s" % site, flush=True)
 
 
-# 5
 def instance_segmentation(paths):
-    """
-    # loads
-    # generates 'site-supps/cell_positions.pkl',
-    #           'site-supps/cell_pixel_assignments.pkl',
-    #           'site-supps/segmentation_%d.png'
-    #           'site-supps/segmentation_%d.png'
+    """ Helper function for instance segmentation
 
-    # prints 'Clustering time %d' % timepoint
-    :param paths:
-    :return:
+    Wrapper method `process_site_instance_segmentation` will be called, which
+    loads "*_NNProbabilities.npy" files and performs instance segmentation.
+
+    Results will be saved in supplementary data folder, including:
+        "cell_positions.pkl": list of cells in each frame (IDs and positions);
+        "cell_pixel_assignments.pkl": pixel compositions of cells;
+        "segmentation_*.png": image of instance segmentation results.
+
+    Args:
+        paths (list): list of paths, containing:
+            0 - folder for raw data and segmentation results (in .npy)
+            1 - folder for supplementary data
+            2 - deprecated
+            3 - list of site names
+
     """
+
     temp_folder, supp_folder, target, sites = paths[0], paths[1], paths[2], paths[3]
 
     for site in sites:
@@ -84,4 +81,3 @@ def instance_segmentation(paths):
             os.makedirs(site_supp_files_folder)
 
         process_site_instance_segmentation(site_path, site_segmentation_path, site_supp_files_folder)
-
