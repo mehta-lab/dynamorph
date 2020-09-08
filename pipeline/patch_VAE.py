@@ -212,28 +212,45 @@ def process_VAE(paths):
 
 
 def trajectory_matching(paths):
+    """ Helper function for assembling frame IDs to trajectories
 
-  temp_folder, supp_folder, target, sites = paths[0], paths[1], paths[2], paths[3]
-  
-  wells = set(site[:2] for site in sites)
-  assert len(wells) == 1
-  well = list(wells)[0]
+    This function loads saved static frame identifiers ("*_file_paths.pkl") and 
+    cell trajectories ("cell_traj.pkl" in supplementary data folder) and assembles
+    list of frame IDs for each trajectory
+
+    Results will be saved in segmentation result folder, including:
+        "*_trajectories.pkl": list of frame IDs
+
+    Args:
+        paths (list): list of paths, containing:
+            0 - folder for raw data and segmentation results (in .npy)
+            1 - folder for supplementary data
+            2 - deprecated
+            3 - list of site names, sites should be from a single well
+
+    """
+
+    temp_folder, supp_folder, target, sites = paths[0], paths[1], paths[2], paths[3]
     
-  fs = pickle.load(open(os.path.join(temp_folder, '%s_file_paths.pkl' % well), 'rb'))
+    wells = set(site[:2] for site in sites)
+    assert len(wells) == 1
+    well = list(wells)[0]
+      
+    fs = pickle.load(open(os.path.join(temp_folder, '%s_file_paths.pkl' % well), 'rb'))
 
-  site_trajs = {}
-  for site in sites:
-      site_supp_files_folder = os.path.join(supp_folder, '%s-supps' % well, '%s' % site)
-      trajs = pickle.load(open(os.path.join(site_supp_files_folder, 'cell_traj.pkl'), 'rb'))
-      for i, t in enumerate(trajs[0]):
-          name = site + '/' + str(i)
-          traj = []
-          for t_point in sorted(t.keys()):
-              frame_name = os.path.join(site_supp_files_folder, '%d_%d.h5' % (t_point, t[t_point]))
-              if frame_name in fs:
-                  traj.append(fs.index(frame_name))
-          if len(traj) > 0.95 * len(t):
-              site_trajs[name] = traj
-        
-  with open(os.path.join(temp_folder, '%s_trajectories.pkl' % well), 'wb') as f:
-      pickle.dump(site_trajs, f)
+    site_trajs = {}
+    for site in sites:
+        site_supp_files_folder = os.path.join(supp_folder, '%s-supps' % well, '%s' % site)
+        trajs = pickle.load(open(os.path.join(site_supp_files_folder, 'cell_traj.pkl'), 'rb'))
+        for i, t in enumerate(trajs[0]):
+            name = site + '/' + str(i)
+            traj = []
+            for t_point in sorted(t.keys()):
+                frame_name = os.path.join(site_supp_files_folder, '%d_%d.h5' % (t_point, t[t_point]))
+                if frame_name in fs:
+                    traj.append(fs.index(frame_name))
+            if len(traj) > 0.95 * len(t):
+                site_trajs[name] = traj
+          
+    with open(os.path.join(temp_folder, '%s_trajectories.pkl' % well), 'wb') as f:
+        pickle.dump(site_trajs, f)
