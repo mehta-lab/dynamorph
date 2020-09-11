@@ -36,10 +36,26 @@ DynaMorph is developed and tested under Python 3.7, packages below are required.
 ## DynaMorph Pipeline
 
 ### Label-free Imaging
+(for pipeline, can use data acquired from any microscopy source -- file format as .tif)
+(in dynamorph paper, we use phase and retardance)
+(collect polarization-resolved label-free images using method in <reference to virtual staining paper> )
 
 ### Cell Segmentation and Tracking
 
+(1 - train a classifier -- unet, rforest, or combination) `NNsegmentation.run`  
+(2 - semantic segmention using classifier in 1 to get Probabilities) `run_segmentation.py` (with "segmentation" uncommented)  
+(3 - instance segmentation to generate cell positions/assignments) `run_segmentation.py` (with "instance_segmentation" uncommented)  
+(4 - extract patches from instance segmentation) `run_patch.py` (with "extract_patches" uncommented)  
+(5 - extract trajectories from instance segmentation) `run_patch.py` (with "build_trajectories" uncommented)
+
 ### Latent Representations of Morphology
+
+(6 - train vae) `HiddenStateExtractor.vq_vae`  
+(7 - gather dataset for model prediction) `run_VAE` (with "assemble_VAE" uncommented)  
+(8 - generate latent space predictions for each cell) `run_VAE` (with "process_VAE" uncommented)
+(9 - build trajectories from patches) `run_VAE` (with "trajectory_matching" uncommented)
+
+(use outputs of 8 and 9 for plots, analysis -- such as those in dynamorph paper figure<letter>)
 
 ## Citing DynaMorph
 
