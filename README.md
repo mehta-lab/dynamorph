@@ -34,6 +34,9 @@ DynaMorph is developed and tested under Python 3.7, packages below are required.
 % Overview of the tool %
 
 ## DynaMorph Pipeline
+
+DynaMorph starts with raw image files from cell imaging experiments and sequentially applies a set of segmentation and encoding tools. Codes for the main processing steps are wrapped into methods (saved under `pipeline` folder). Below we briefly introduced their functionalities.
+
 1. `pipeline.preprocess.write_raw_to_npy` performs the transformation of raw multipage tiff files into numpy arrays. Resulting arrays (saved as `.npy` files) contain the full trajectories for each field of view.
 
     - e.g. `D3-Site_1.npy` contains the raw inputs as a numpy array with shape (100, 2048, 2048, 2): this site has 100 frames and a 2048 by 2048 field of view, two channels are available.
