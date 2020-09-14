@@ -1,7 +1,5 @@
 # DynaMorph
 
-% Overview %
-
 ### Table of contents:
 
 - [Requirements](#requirements)
@@ -25,13 +23,13 @@ DynaMorph is developed and tested under Python 3.7, packages below are required.
 - [SciPy](https://www.scipy.org/)
 - [scikit-learn](https://scikit-learn.org/)
 - [segmentation-models](https://github.com/qubvel/segmentation_models)
-  - Dynamorph requires segmentation-models v0.2.1
+  - DynaMorph requires segmentation-models v0.2.1
 - [TensorFlow](https://www.tensorflow.org/)
 - [tifffile](https://pypi.org/project/tifffile/)
 
 ## Getting Started
 
-% Overview of the tool %
+DynaMorph utilizes a broad set of deep learning and machine learning tools to analyze cell imaging data, [pipeline](https://github.com/czbiohub/dynamorph/tree/master/pipeline) folder contains wrapper methods for easy access to the functionalities of DynaMorph. We also maintained some example scripts `run_preproc.py`, `run_segmentation.py`, `run_patch.py` and `run_VAE.py` to facilitate parallelization of data processing. Check [section](#dynamorph-pipeline) below for a brief overview of the pipeline.
 
 ## DynaMorph Pipeline
 
@@ -41,7 +39,6 @@ DynaMorph starts with raw image files from cell imaging experiments and sequenti
 (for pipeline, can use data acquired from any microscopy source -- file format as .tif)
 (in dynamorph paper, we use phase and retardance)
 (collect polarization-resolved label-free images using method in <reference to virtual staining paper> )
-
 
 ### Cell Segmentation and Tracking
 
@@ -55,7 +52,7 @@ To generate segmentation and tracking from scratch, follow steps below:
 
 2. (optional) train a classifier, see scripts in `NNsegmentation/run.py`
 
-3. prepare inputs as 4-D numpy arrays of shape (N<sub>time frames<sub>, height, width, N<sub>channels<sub>), see method `pipeline.preprocess.write_raw_to_npy` for an example
+3. prepare inputs as 4-D numpy arrays of shape (n<sub>time frames</sub>, height, width, n<sub>channels</sub>), see method `pipeline.preprocess.write_raw_to_npy` for an example
 
 4. apply trained model for semantic segmentation, see method `pipeline.segmentation.segmentation` or `run_segmentation.py` (uncomment [line "segmentation"](https://github.com/czbiohub/dynamorph/blob/8965b5d7b21895d95d548cc3ef6c1a397cee8255/run_segmentation.py#L71))
 
