@@ -1,5 +1,7 @@
 # DynaMorph
 
+This is a repo storing codes and scripts for **DynaMorph: learning morphodynamic states of human cells with live imaging and sc-RNAseq**, manuscript of this work can be accessed [here](https://www.biorxiv.org/content/10.1101/2020.07.20.213074v1). Analyzing pipeline of DynaMorph and structure of this repo are introduced below.
+
 ### Table of contents:
 
 - [Requirements](#requirements)
@@ -29,7 +31,7 @@ DynaMorph is developed and tested under Python 3.7, packages below are required.
 
 ## Getting Started
 
-DynaMorph utilizes a broad set of deep learning and machine learning tools to analyze cell imaging data, [pipeline](https://github.com/czbiohub/dynamorph/tree/master/pipeline) folder contains wrapper methods for easy access to the functionalities of DynaMorph. We also maintained some example scripts `run_preproc.py`, `run_segmentation.py`, `run_patch.py` and `run_VAE.py` to facilitate parallelization of data processing. Check [section](#dynamorph-pipeline) below for a brief overview of the pipeline.
+DynaMorph utilizes a broad set of deep learning and machine learning tools to analyze cell imaging data, [pipeline](https://github.com/czbiohub/dynamorph/tree/master/pipeline) folder contains wrapper methods for easy access to the functionalities of DynaMorph. We also maintained some example scripts `run_preproc.py`, `run_segmentation.py`, `run_patch.py` and `run_VAE.py` to facilitate parallelization of data processing. Check [section](#cell-segmentation-and-tracking) below for functionalities this repo provides.
 
 ## DynaMorph Pipeline
 
@@ -41,6 +43,8 @@ DynaMorph starts with raw image files from cell imaging experiments and sequenti
 (collect polarization-resolved label-free images using method in <reference to virtual staining paper> )
 
 ### Cell Segmentation and Tracking
+
+![pipeline_fig](pipeline.jpg)
 
 Scripts under `NNsegmentation` folder contain codes for U-Net based cell segmentation model. `NNsegmentation/run.py` provides an example on the model training procedure. Usage of the segmentation model in the whole pipeline can be found in `pipeline/segmentation.py`.
 
@@ -54,18 +58,18 @@ To generate segmentation and tracking from scratch, follow steps below:
 
 3. prepare inputs as 4-D numpy arrays of shape (n<sub>time frames</sub>, height, width, n<sub>channels</sub>), see method `pipeline.preprocess.write_raw_to_npy` for an example
 
-4. apply trained model for semantic segmentation, see method `pipeline.segmentation.segmentation` or `run_segmentation.py` (uncomment [line "segmentation"](https://github.com/czbiohub/dynamorph/blob/8965b5d7b21895d95d548cc3ef6c1a397cee8255/run_segmentation.py#L71))
+4. apply trained model for semantic segmentation (step **C**), see method `pipeline.segmentation.segmentation` or `run_segmentation.py` (uncomment [line "segmentation"](https://github.com/czbiohub/dynamorph/blob/8965b5d7b21895d95d548cc3ef6c1a397cee8255/run_segmentation.py#L71))
 
-5. use predicted class probabilities for instance segmentation, see method `pipeline.segmentation.instance_segmentation` or `run_segmentation.py` (uncomment [line "instance_segmentation"](https://github.com/czbiohub/dynamorph/blob/8965b5d7b21895d95d548cc3ef6c1a397cee8255/run_segmentation.py#L72))
+5. use predicted class probabilities for instance segmentation (step **D**), see method `pipeline.segmentation.instance_segmentation` or `run_segmentation.py` (uncomment [line "instance_segmentation"](https://github.com/czbiohub/dynamorph/blob/8965b5d7b21895d95d548cc3ef6c1a397cee8255/run_segmentation.py#L72))
 
-6. connect static cell frames to trajectories, see method `pipeline.patch_VAE.build_trajectories` or `run_patch.py` (uncomment [line "build_trajectories"](https://github.com/czbiohub/dynamorph/blob/8965b5d7b21895d95d548cc3ef6c1a397cee8255/run_patch.py#L45))
+6. connect static cell frames to trajectories (step **F**), see method `pipeline.patch_VAE.build_trajectories` or `run_patch.py` (uncomment [line "build_trajectories"](https://github.com/czbiohub/dynamorph/blob/8965b5d7b21895d95d548cc3ef6c1a397cee8255/run_patch.py#L45))
 
 ### Latent Representations of Morphology
 DynaMorph uses VQ-VAE to encode and reconstruct cell image patches, from which latent vectors are used as morphology descriptor. Codes for building and training VAE models are stored in `HiddenStateExtractor/vq_vae.py`.
 
 To extract single cell patches and employ morphology encoding, follow steps below:
 
-7. extract cell patches based on instance segmentation, see method `pipeline.patch_VAE.extract_patches` or `run_patch.py` (uncomment [line "extract_patches"](https://github.com/czbiohub/dynamorph/blob/8965b5d7b21895d95d548cc3ef6c1a397cee8255/run_patch.py#L44))  
+7. extract cell patches based on instance segmentation (step **E**), see method `pipeline.patch_VAE.extract_patches` or `run_patch.py` (uncomment [line "extract_patches"](https://github.com/czbiohub/dynamorph/blob/8965b5d7b21895d95d548cc3ef6c1a397cee8255/run_patch.py#L44))  
 
 8. (optional) train a VAE for cell patch reconstruction, see the [main block](https://github.com/czbiohub/dynamorph/blob/8965b5d7b21895d95d548cc3ef6c1a397cee8255/HiddenStateExtractor/vq_vae.py#L1041) of `HiddenStateExtractor/vq_vae.py` for reference.
 
@@ -86,3 +90,9 @@ To cite DynaMorph, please use the bibtex entry below:
   publisher={Cold Spring Harbor Laboratory}
 }
 ```
+
+## Contact Us
+
+If you have any questions regarding this work or codes in this repo, feel free to raise an issue or reach out to us through:
+- Zhenqin Wu <zqwu@stanford.edu>
+- Bryant Chhun <bryant.chhun@czbiohub.org>
