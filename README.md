@@ -79,6 +79,10 @@ To extract single cell patches and employ morphology encoding, follow steps belo
 
 10. apply trained VAE models on cell patches, see method `pipeline.patch_VAE.process_VAE` or `run_VAE.py` (uncomment [line "process_VAE"](https://github.com/czbiohub/dynamorph/blob/8965b5d7b21895d95d548cc3ef6c1a397cee8255/run_VAE.py#L42))
 
+## Usage
+
+> placeholder
+
 ## Citing DynaMorph
 
 To cite DynaMorph, please use the bibtex entry below:
