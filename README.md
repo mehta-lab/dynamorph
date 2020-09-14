@@ -1,4 +1,4 @@
-﻿# DynaMorph
+# DynaMorph
 
 % Overview %
 
@@ -35,52 +35,46 @@ DynaMorph is developed and tested under Python 3.7, packages below are required.
 
 ## DynaMorph Pipeline
 
-DynaMorph starts with raw image files from cell imaging experiments and sequentially applies a set of segmentation and encoding tools. Codes for the main processing steps are wrapped into methods (saved under `pipeline` folder). Below we briefly introduced their functionalities.
-
-1. `pipeline.preprocess.write_raw_to_npy` performs the transformation of raw multipage tiff files into numpy arrays. Resulting arrays (saved as `.npy` files) contain the full trajectories for each field of view.
-
-    - e.g. `D3-Site_1.npy` contains the raw inputs as a numpy array with shape (100, 2048, 2048, 2): this site has 100 frames and a 2048 by 2048 field of view, two channels are available.
-
-2. `pipeline.segmentation.segmentation` loads the trained U-Net model and applies it to saved image stacks, predicted class probabilities will be saved as `_NNProbabilities.npy` files.
-
-    - e.g. `D3-Site_1_NNProbabilities.npy` contains a numpy array with shape (100, 2048, 2048, 3), the last dimension represents a probability distribution over 3 classes.
-
-3. `pipeline.segmentation.instance_segmentation` performs instance segmentation based on each frame's semantic class mask. A list of cells with their compositions and centroid coordinates will be saved.
-
-4. `pipeline.patch_VAE.extract_patches` extracts single cell patches from image stacks based on instance segmentation results. 
-
-5. `pipeline.patch_VAE.build_trajectories` reads cell properties (of different time steps) and connects them into trajectories.
-
-6. `pipeline.patch_VAE.assemble_VAE` and `pipeline.patch_VAE.process_VAE` load a trained VQ-VAE model and perform cell encoding by extracting latent vectors of single cell patches.
+DynaMorph starts with raw image files from cell imaging experiments and sequentially applies a set of segmentation and encoding tools. Below we briefly introduced the main processing steps.
 
 ### Label-free Imaging
 (for pipeline, can use data acquired from any microscopy source -- file format as .tif)
 (in dynamorph paper, we use phase and retardance)
 (collect polarization-resolved label-free images using method in <reference to virtual staining paper> )
 
+
 ### Cell Segmentation and Tracking
 
 Scripts under `NNsegmentation` folder contain codes for U-Net based cell segmentation model. `NNsegmentation/run.py` provides an example on the model training procedure. Usage of the segmentation model in the whole pipeline can be found in `pipeline/segmentation.py`.
 
-Instance segmentation in this work is done by clustering, related methods can be found in `SingleCellPatch/extract_patches.py`.
+Instance segmentation in this work is based on clustering, related methods can be found in `SingleCellPatch/extract_patches.py`. Following cell tracking methods can be found in `SingleCellPatch/generate_trajectories.py`.
 
-To generate a prediction from scratch, follow steps below:
-  1. (optional) prepare training images and labels
-  2. (optional) train a classifier, see scripts in `NNsegmentation/run.py`
-  3. prepare inputs as numpy arrays
-  4. apply trained model for semantic segmentation, see method `pipeline.segmentation.segmentation` or `run_segmentation.py` (uncomment line 71, "segmentation")
-  5. use predicted class probabilities for instance segmentation, see method `pipeline.segmentation.instance_segmentation` or `run_segmentation.py` (uncomment line 72, "instance_segmentation")
-  6. extract cell patches based on instance segmentation, see method `pipeline.patch_VAE.extract_patches` or `run_patch.py` (uncomment line 44, "extract_patches")  
-  7. connect static cell frames to trajectories, see method `pipeline.patch_VAE.build_trajectories` or `run_patch.py` (uncomment line 45, "build_trajectories")
+To generate segmentation and tracking from scratch, follow steps below:
+
+1. (optional) prepare training images and labels
+
+2. (optional) train a classifier, see scripts in `NNsegmentation/run.py`
+
+3. prepare inputs as 4-D numpy arrays of shape (N<sub>time frames<sub>, height, width, N<sub>channels<sub>), see method `pipeline.preprocess.write_raw_to_npy` for an example
+
+4. apply trained model for semantic segmentation, see method `pipeline.segmentation.segmentation` or `run_segmentation.py` (uncomment [line "segmentation"](https://github.com/czbiohub/dynamorph/blob/8965b5d7b21895d95d548cc3ef6c1a397cee8255/run_segmentation.py#L71))
+
+5. use predicted class probabilities for instance segmentation, see method `pipeline.segmentation.instance_segmentation` or `run_segmentation.py` (uncomment [line "instance_segmentation"](https://github.com/czbiohub/dynamorph/blob/8965b5d7b21895d95d548cc3ef6c1a397cee8255/run_segmentation.py#L72))
+
+6. connect static cell frames to trajectories, see method `pipeline.patch_VAE.build_trajectories` or `run_patch.py` (uncomment [line "build_trajectories"](https://github.com/czbiohub/dynamorph/blob/8965b5d7b21895d95d548cc3ef6c1a397cee8255/run_patch.py#L45))
 
 ### Latent Representations of Morphology
+DynaMorph uses VQ-VAE to encode and reconstruct cell image patches, from which latent vectors are used as morphology descriptor. Codes for building and training VAE models are stored in `HiddenStateExtractor/vq_vae.py`.
 
-(6 - train vae) `HiddenStateExtractor.vq_vae`  
-(7 - gather dataset for model prediction) `run_VAE` (with "assemble_VAE" uncommented)  
-(8 - generate latent space predictions for each cell) `run_VAE` (with "process_VAE" uncommented)
-(9 - build trajectories from patches) `run_VAE` (with "trajectory_matching" uncommented)
+To extract single cell patches and employ morphology encoding, follow steps below:
 
-(use outputs of 8 and 9 for plots, analysis -- such as those in dynamorph paper figure<letter>)
+7. extract cell patches based on instance segmentation, see method `pipeline.patch_VAE.extract_patches` or `run_patch.py` (uncomment [line "extract_patches"](https://github.com/czbiohub/dynamorph/blob/8965b5d7b21895d95d548cc3ef6c1a397cee8255/run_patch.py#L44))  
+
+8. (optional) train a VAE for cell patch reconstruction, see the [main block](https://github.com/czbiohub/dynamorph/blob/8965b5d7b21895d95d548cc3ef6c1a397cee8255/HiddenStateExtractor/vq_vae.py#L1041) of `HiddenStateExtractor/vq_vae.py` for reference.
+
+9. assemble cell patches generate from step 7 to model-compatible datasets, see method `pipeline.patch_VAE.assemble_VAE` or `run_VAE.py` (uncomment [line "assemble_VAE"](https://github.com/czbiohub/dynamorph/blob/8965b5d7b21895d95d548cc3ef6c1a397cee8255/run_VAE.py#L41)) 
+
+10. apply trained VAE models on cell patches, see method `pipeline.patch_VAE.process_VAE` or `run_VAE.py` (uncomment [line "process_VAE"](https://github.com/czbiohub/dynamorph/blob/8965b5d7b21895d95d548cc3ef6c1a397cee8255/run_VAE.py#L42))
 
 ## Citing DynaMorph
 
