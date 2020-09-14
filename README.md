@@ -42,7 +42,7 @@ DynaMorph is developed and tested under Python 3.7, packages below are required.
 
 ### Cell Segmentation and Tracking
 
-(1 - train a classifier -- unet, rforest, or combination) `NNsegmentation.run`  
+(1 - train a classifier -- unet, rforest, or combination) `NNsegmentation.run.py`  
 (2 - semantic segmention using classifier in 1 to get Probabilities) `run_segmentation.py` (with "segmentation" uncommented)  
 (3 - instance segmentation to generate cell positions/assignments) `run_segmentation.py` (with "instance_segmentation" uncommented)  
 (4 - extract patches from instance segmentation) `run_patch.py` (with "extract_patches" uncommented)  
@@ -50,10 +50,10 @@ DynaMorph is developed and tested under Python 3.7, packages below are required.
 
 ### Latent Representations of Morphology
 
-(6 - train vae) `HiddenStateExtractor.vq_vae`  
-(7 - gather dataset for model prediction) `run_VAE` (with "assemble_VAE" uncommented)  
-(8 - generate latent space predictions for each cell) `run_VAE` (with "process_VAE" uncommented)
-(9 - build trajectories from patches) `run_VAE` (with "trajectory_matching" uncommented)
+(6 - train vae) `HiddenStateExtractor.vq_vae.py`  
+(7 - gather dataset for model prediction) `run_VAE.py` (with "assemble_VAE" uncommented)  
+(8 - generate latent space predictions for each cell) `run_VAE.py` (with "process_VAE" uncommented)  
+(9 - build trajectories from patches) `run_VAE.py` (with "trajectory_matching" uncommented)
 
 (use outputs of 8 and 9 for plots, analysis -- such as those in dynamorph paper figure<letter>)
 

@@ -10,6 +10,9 @@ from pipeline.preprocess import write_raw_to_npy
 import os
 import time
 
+import argparse
+import logging
+
 # Paths of RAW experiment data (ESS from hulk)
 path_NOVEMBER = '/gpfs/CompMicro/Projects/learningCellState/microglia/20191107_1209_1_GW23/blank_bg_stabilized'
 path_JANUARY = '/gpfs/CompMicro/Hummingbird/Processed/Galina/2020_01_28/SM_GW22_2020_0128_1404_1_SM_GW22_2020_0128_1404_1/blank_bg_stabilized'
@@ -47,27 +50,71 @@ output_JANUARY = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_s
 output_JANUARY_FAST = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation/JANUARY_FAST/raw'
 
 
-def main():
+def main(arguments):
 
-  for sites, output, path in zip([sites_NOVEMBER, sites_JANUARY, sites_JANUARY_FAST],
-                                 [output_NOVEMBER, output_JANUARY, output_JANUARY_FAST],
-                                 [path_NOVEMBER, path_JANUARY, path_JANUARY_FAST]):
-    for site in sites:
+    if not arguments.input or not arguments.output:
+        print('no input or output supplied, using hard coded paths')
 
-        if not os.path.exists(output):
-            os.makedirs(output)
+        for sites, output, path in zip([sites_NOVEMBER, sites_JANUARY, sites_JANUARY_FAST],
+                                     [output_NOVEMBER, output_JANUARY, output_JANUARY_FAST],
+                                     [path_NOVEMBER, path_JANUARY, path_JANUARY_FAST]):
+            for site in sites:
 
-        out = output
+                if not os.path.exists(output):
+                    os.makedirs(output)
 
-        try:
-            print(f"writing {site} to {out}", flush=True)
-            write_raw_to_npy(path, site, out, multipage=True)
-        except Exception as e:
-            print(f"\terror in writing {site}", flush=True)
+                out = output
+
+                try:
+                    print(f"writing {site} to {out}", flush=True)
+                    write_raw_to_npy(path, site, out, multipage=True)
+                except Exception as e:
+                    print(f"\terror in writing {site}", flush=True)
+
+    else:
+        path = arguments.input
+        output = arguments.output
+        sites = os.listdir(path)
+
+        for site in sites:
+            if not os.path.exists(output):
+                os.makedirs(output)
+
+            out = output
+
+            try:
+                print(f"writing {site} to {out}", flush=True)
+                write_raw_to_npy(path, site, out, multipage=True)
+            except Exception as e:
+                print(f"\terror in writing {site}", flush=True)
+
+
+def parse_args():
+    """
+    Parse command line arguments for CLI.
+
+    :return: namespace containing the arguments passed.
+    """
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        '-i', '--input',
+        type=str,
+        required=False,
+        help="Path to multipage-tiff file of format [t, x, y]",
+    )
+    parser.add_argument(
+        '-o', '--output',
+        type=str,
+        required=False,
+        help="Path to write results",
+    )
+    return parser.parse_args()
 
 
 if __name__ == '__main__':
     print(time.asctime(time.localtime(time.time())), flush=True)
-    main()
+    args = parse_args()
+    main(args)
     print(time.asctime(time.localtime(time.time())), flush=True)
 
