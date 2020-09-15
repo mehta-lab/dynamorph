@@ -4,13 +4,13 @@ import os
 import argparse
 
 
-RAW_NOVEMBER = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation/NOVEMBER/raw'
-RAW_JANUARY = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation/JANUARY/raw'
-RAW_JANUARY_FAST = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation/JANUARY_FAST/raw'
+RAW_NOVEMBER = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/NOVEMBER/raw'
+RAW_JANUARY = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/JANUARY/raw'
+RAW_JANUARY_FAST = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/JANUARY_FAST/raw'
 
-INTERMEDIATE_NOVEMBER = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation/NOVEMBER/supp'
-INTERMEDIATE_JANUARY = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation/JANUARY/supp'
-INTERMEDIATE_JANUARY_FAST = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation/JANUARY_FAST/supp'
+INTERMEDIATE_NOVEMBER = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/NOVEMBER/supp'
+INTERMEDIATE_JANUARY = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/JANUARY/supp'
+INTERMEDIATE_JANUARY_FAST = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/JANUARY_FAST/supp'
 
 sites_NOVEMBER = [
     'B2-Site_0', 'B2-Site_1', 'B2-Site_2', 'B2-Site_5', 

@@ -209,25 +209,25 @@ class Segment_with_time(Segment):
     def build_model(self):
         """ Define model structure and compile """
 
-      self.input = Input(shape=tuple([self.n_time_slice] + list(self.input_shape)), dtype='float32')
+        self.input = Input(shape=tuple([self.n_time_slice] + list(self.input_shape)), dtype='float32')
 
-      # Combine time slice dimension and batch dimension
-      inp = Reshape([-1] + list(self.input_shape))(self.input)
-      pre_conv = Dense(3, activation=None, name='pre_conv')(inp)
-      
-      backbone = segmentation_models.backbones.get_backbone(
+        # Combine time slice dimension and batch dimension
+        inp = Reshape([-1] + list(self.input_shape))(self.input)
+        pre_conv = Dense(3, activation=None, name='pre_conv')(inp)
+
+        backbone = segmentation_models.backbones.get_backbone(
           'resnet34',
           input_shape=list(self.input_shape[:2]) + [3],
           weights='imagenet',
           include_top=False)
-      
-      if self.freeze_encoder:
+
+        if self.freeze_encoder:
           for layer in backbone.layers:
               if not isinstance(layer, BatchNormalization):
                   layer.trainable=False
 
-      skip_connection_layers = segmentation_models.backbones.get_feature_layers('resnet34', n=4)
-      self.unet = segmentation_models.unet.builder.build_unet(
+        skip_connection_layers = segmentation_models.backbones.get_feature_layers('resnet34', n=4)
+        self.unet = segmentation_models.unet.builder.build_unet(
           backbone,
           self.unet_feat,
           skip_connection_layers,
@@ -238,13 +238,13 @@ class Segment_with_time(Segment):
           upsample_rates=(2, 2, 2, 2, 2),
           use_batchnorm=True)
 
-      output = self.unet(pre_conv)
+        output = self.unet(pre_conv)
 
-      # Split time slice dimension and merge to channel dimension
-      output = MergeOnZ(self.n_time_slice, self.unet_feat)(output)
-      output = Dense(self.unet_feat, activation='relu')(output)
-      output = Dense(self.n_classes, activation=None)(output)
-      self.model = Model(self.input, output)
-      self.model.compile(optimizer='Adam', 
+        # Split time slice dimension and merge to channel dimension
+        output = MergeOnZ(self.n_time_slice, self.unet_feat)(output)
+        output = Dense(self.unet_feat, activation='relu')(output)
+        output = Dense(self.n_classes, activation=None)(output)
+        self.model = Model(self.input, output)
+        self.model.compile(optimizer='Adam',
                          loss=self.loss_func,
                          metrics=[])

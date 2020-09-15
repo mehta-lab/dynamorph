@@ -996,15 +996,15 @@ def reorder_with_trajectories(dataset, relations, seed=None):
 
 
 def rescale(dataset):
-  """ Rescale value range of image patches in `dataset` to CHANNEL_RANGE
+    """ Rescale value range of image patches in `dataset` to CHANNEL_RANGE
 
-  Args:
+    Args:
       dataset (TensorDataset): dataset before rescaling
 
-  Returns:
+    Returns:
       TensorDataset: dataset after rescaling
 
-  """
+    """
     tensor = dataset.tensors[0]
     assert len(CHANNEL_RANGE) == tensor.shape[1]
     channel_slices = []
