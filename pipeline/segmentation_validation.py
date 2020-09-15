@@ -88,8 +88,8 @@ def segmentation_validation_michael(paths, gpu_id, category):
         stack_path = os.path.join(temp_folder + '/' + site + '.npy')
         raw_input_stack = np.load(stack_path)
 
-        NN_predictions_stack = np.load(temp_folder + '/%s_NNProbabilities.npy' % site)
-        cell_pixels = pickle.load(open(supp_folder + f"/{site[0:2]}-supps/{site}/cell_pixel_assignments.pkl", 'rb'))
+        NN_predictions_stack = np.load(os.path.join(temp_folder, '%s_NNProbabilities.npy' % site))
+        cell_pixels = pickle.load(open(os.path.join(supp_folder, f"{site[0:2]}-supps/{site}/cell_pixel_assignments.pkl", 'rb')))
 
         # option to include filtered positions
         filtered_positions = pickle.load(

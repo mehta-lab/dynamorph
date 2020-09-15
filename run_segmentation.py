@@ -114,8 +114,10 @@ def main(arguments_):
         n_gpu = arguments_.gpus
         method = arguments_.method
 
-        if method == 'segmentation_validation':
-            TARGET = outputs
+        if method == 'segmentation_validation' and arguments_.validation:
+            TARGET = arguments_.validation
+        elif method == 'segmentation_validation' and not arguments_.validation:
+            raise AttributeError("validation flag must be specified when method=segmentation_validation")
         else:
             TARGET = ''
 
@@ -158,6 +160,12 @@ def parse_args():
         type=str,
         required=False,
         help="Path to write results",
+    )
+    parser.add_argument(
+        '-v', '--validation',
+        type=str,
+        required=False,
+        help="Path to write validation images",
     )
     parser.add_argument(
         '-m', '--method',
