@@ -5,6 +5,7 @@ from multiprocessing import Pool, Queue, Process
 import os
 from run_preproc import sites_NOVEMBER, sites_JANUARY, sites_JANUARY_FAST
 import numpy as np
+import argparse
 
 # ESS from hulk
 
@@ -31,49 +32,142 @@ INTERMEDIATE_JANUARY_FAST = '/gpfs/CompMicro/Projects/learningCellState/microgli
 #TARGET = '/gpfs/CompMicro/Projects/learningCellState/microglia/segmentation_experiments/expt_001'
 TARGET = '/data_sm/home/michaelwu/VALIDATION'
 
+
 class Worker(Process):
-    def __init__(self, inputs, gpuid=0):
+    def __init__(self, inputs, gpuid=0, method='extract_patches'):
         super().__init__()
-        self.gpuid=gpuid
-        self.inputs=inputs
+        self.gpuid = gpuid
+        self.inputs = inputs
+        self.method = method
 
     def run(self):
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         os.environ["CUDA_VISIBLE_DEVICES"] = str(self.gpuid)
 
-        #extract_patches(self.inputs)
-        build_trajectories(self.inputs)
+        if self.method == 'extract_patches':
+            extract_patches(self.inputs)
+        elif self.method == 'build_trajectories':
+            build_trajectories(self.inputs)
 
 
-def main():
+def main(arguments):
 
-    # loads 'Site.npy',
-    #       '_NNProbabilities.npy',
-    #       '/Site-supps/Site/cell_positions.pkl',
-    #       '/Site-supps/site/cell_pixel_assignments.pkl',
+    if not arguments.input or arguments.output:
+        print('no input or output supplied, using hard coded paths')
+        # loads 'Site.npy',
+        #       '_NNProbabilities.npy',
+        #       '/Site-supps/Site/cell_positions.pkl',
+        #       '/Site-supps/site/cell_pixel_assignments.pkl',
 
-    # generates 'stacks_%d.pkl' % timepoint
+        # generates 'stacks_%d.pkl' % timepoint
 
-    # prints: "writing time %d"
-    n_gpu = 1
-    for sites, inputs, outputs in zip([sites_NOVEMBER, sites_JANUARY, sites_JANUARY_FAST],
-                            [RAW_NOVEMBER, RAW_JANUARY, RAW_JANUARY_FAST],
-                            [INTERMEDIATE_NOVEMBER, INTERMEDIATE_JANUARY, INTERMEDIATE_JANUARY_FAST]):
+        # prints: "writing time %d"
+        n_gpu = 1
+        for sites, inputs, outputs in zip([sites_NOVEMBER, sites_JANUARY, sites_JANUARY_FAST],
+                                [RAW_NOVEMBER, RAW_JANUARY, RAW_JANUARY_FAST],
+                                [INTERMEDIATE_NOVEMBER, INTERMEDIATE_JANUARY, INTERMEDIATE_JANUARY_FAST]):
+
+            # if probabilities and formatted stack exist
+            segment_sites = [site for site in sites if os.path.exists(os.path.join(inputs, "%s.npy" % site)) and \
+                                         os.path.exists(os.path.join(inputs, "%s_NNProbabilities.npy" % site))]
+
+            # process each site on a different GPU if using multi-gpu
+            sep = np.linspace(0, len(segment_sites), n_gpu+1).astype(int)
+
+            processes = []
+            for i in range(n_gpu):
+                _sites = segment_sites[sep[i]:sep[i+1]]
+                args = (inputs, outputs, TARGET, _sites)
+                p = Worker(args, gpuid=i)
+                p.start()
+                processes.append(p)
+            for p in processes:
+                p.join()
+
+        # *** NOT USED WITH VAE ***
+        # *** USED IN POST-PCA TRAJ MATCHING ***
+        # loads 'cell_positions.pkl', 'cell_pixel_assignments.pkl'
+        # generates 'cell_traj.pkl'
+    else:
+        print("CLI arguments provided")
+        inputs = arguments.input
+        outputs = arguments.output
+
+        # results are written to subfolder "supp"
+        outputs = os.path.join(outputs, "supp")
+        if not os.path.isdir(outputs):
+            os.mkdir(outputs)
+
+        n_gpu = arguments.gpus
+        method = arguments.method
+
+        #todo: check that the TARGET variable is used for appropriate method
+
+        if arguments.sites:
+            sites = arguments.sites
+        else:
+            sites = [site for site in os.listdir(inputs) if os.path.isdir(site)]
+
+        # if probabilities and formatted stack exist
         segment_sites = [site for site in sites if os.path.exists(os.path.join(inputs, "%s.npy" % site)) and \
-                                     os.path.exists(os.path.join(inputs, "%s_NNProbabilities.npy" % site))]
-        sep = np.linspace(0, len(segment_sites), n_gpu+1).astype(int)
-        
-        process = []
-        for i in range(n_gpu):
-            _sites = segment_sites[sep[i]:sep[i+1]]
-            args = (inputs, outputs, TARGET, _sites)
-            p = Worker(args, gpuid=i)
-            p.start()
+                         os.path.exists(os.path.join(inputs, "%s_NNProbabilities.npy" % site))]
 
-    # *** NOT USED WITH VAE ***
-    # *** USED IN POST-PCA TRAJ MATCHING ***
-    # loads 'cell_positions.pkl', 'cell_pixel_assignments.pkl'
-    # generates 'cell_traj.pkl'
+        # process each site on a different GPU if using multi-gpu
+        sep = np.linspace(0, len(segment_sites), n_gpu + 1).astype(int)
+
+        processes = []
+        for i in range(n_gpu):
+            _sites = segment_sites[sep[i]:sep[i + 1]]
+            args = (inputs, outputs, TARGET, _sites)
+            p = Worker(args, gpuid=i, method=method)
+            p.start()
+            processes.append(p)
+        for p in processes:
+            p.join()
+
+
+def parse_args():
+    """
+    Parse command line arguments for CLI.
+
+    :return: namespace containing the arguments passed.
+    """
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        '-i', '--input',
+        type=str,
+        required=False,
+        help="Path to multipage-tiff file of format [t, x, y]",
+    )
+    parser.add_argument(
+        '-o', '--output',
+        type=str,
+        required=False,
+        help="Path to write results",
+    )
+    parser.add_argument(
+        '-m', '--method',
+        type=str,
+        required=False,
+        choices=['extract_patches', 'build_trajectories'],
+        help="Method: one of 'extract_patches', 'build_trajectories'",
+    )
+    parser.add_argument(
+        '-g', '--gpus',
+        type=int,
+        required=False,
+        help="Number of GPS to use",
+    )
+    parser.add_argument(
+        '-s', '--sites',
+        type=list,
+        required=False,
+        help="list of field-of-views to process (subfolders in raw data directory)",
+    )
+    return parser.parse_args()
+
 
 if __name__ == '__main__':
-    main()
+    args = parse_args()
+    main(args)

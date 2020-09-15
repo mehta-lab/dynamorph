@@ -1,7 +1,8 @@
 from pipeline.patch_VAE import assemble_VAE, process_VAE, trajectory_matching
 from multiprocessing import Pool, Queue, Process
 import os
-import numpy as np
+import argparse
+
 
 RAW_NOVEMBER = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation/NOVEMBER/raw'
 RAW_JANUARY = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation/JANUARY/raw'
@@ -29,34 +30,105 @@ sites_JANUARY = [
 
 TARGET = None
 
+
 class Worker(Process):
-    def __init__(self, inputs, gpuid=0):
+    def __init__(self, inputs, gpuid=0, method='assemble'):
         super().__init__()
-        self.gpuid=gpuid
-        self.inputs=inputs
+        self.gpuid = gpuid
+        self.inputs = inputs
+        self.method = method
 
     def run(self):
         #os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         #os.environ["CUDA_VISIBLE_DEVICES"] = str(self.gpuid)
-        #assemble_VAE(self.inputs)
-        process_VAE(self.inputs)
-        #trajectory_matching(self.inputs)
+
+        if self.method == 'assemble':
+            assemble_VAE(self.inputs)
+        elif self.method == 'process':
+            process_VAE(self.inputs)
+        elif self.method == 'trajectory_matching':
+            trajectory_matching(self.inputs)
 
 
-def main():
-    sites = sites_NOVEMBER
-    inputs = RAW_NOVEMBER
-    outputs = INTERMEDIATE_NOVEMBER
-    
-    wells = set(s[:2] for s in sites)
-    process = []
-    for i, well in enumerate(wells):
-        well_sites = [s for s in sites if s[:2] == well]
-        print(well_sites)
-        args = (inputs, outputs, TARGET, well_sites)
-        p = Worker(args, gpuid=i)
-        p.start()
-        p.join()
+def main(arguments_):
+
+    if not arguments_.input or not arguments_.output:
+        print('no input or output supplied, using hard coded paths')
+
+        sites = sites_NOVEMBER
+        inputs = RAW_NOVEMBER
+        outputs = INTERMEDIATE_NOVEMBER
+
+        wells = set(s[:2] for s in sites)
+        for i, well in enumerate(wells):
+            well_sites = [s for s in sites if s[:2] == well]
+            print(well_sites)
+            args = (inputs, outputs, TARGET, well_sites)
+            p = Worker(args, gpuid=i)
+            p.start()
+            p.join()
+    else:
+        print("CLI arguments provided")
+        inputs = arguments_.input
+        outputs = arguments_.output
+
+        # results are written to subfolder "supp"
+        outputs = os.path.join(outputs, "supp")
+        if not os.path.isdir(outputs):
+            os.mkdir(outputs)
+
+        if arguments_.sites:
+            sites = arguments_.sites
+        else:
+            sites = [site for site in os.listdir(inputs) if os.path.isdir(site)]
+
+        method = arguments_.method
+        wells = set(s[:2] for s in sites)
+        for i, well in enumerate(wells):
+            well_sites = [s for s in sites if s[:2] == well]
+            print(well_sites)
+            args = (inputs, outputs, TARGET, well_sites)
+            p = Worker(args, gpuid=i, method=method)
+            p.start()
+            p.join()
+
+
+def parse_args():
+    """
+    Parse command line arguments for CLI.
+
+    :return: namespace containing the arguments passed.
+    """
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        '-i', '--input',
+        type=str,
+        required=False,
+        help="Path to multipage-tiff file of format [t, x, y]",
+    )
+    parser.add_argument(
+        '-o', '--output',
+        type=str,
+        required=False,
+        help="Path to write results",
+    )
+    parser.add_argument(
+        '-m', '--method',
+        type=str,
+        required=False,
+        choices=['assemble', 'process', 'trajectory_matching'],
+        help="Method: one of 'assemble', 'process', or 'trajectory_matching'",
+    )
+    parser.add_argument(
+        '-s', '--sites',
+        type=list,
+        required=False,
+        help="list of field-of-views to process (subfolders in raw data directory)",
+    )
+    return parser.parse_args()
+
 
 if __name__ == '__main__':
-    main()
+    arguments = parse_args()
+    main(arguments)
