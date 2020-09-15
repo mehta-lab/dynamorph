@@ -78,12 +78,12 @@ def main(arguments_):
         # files are written to subfolder "raw"
         outputs = os.path.join(outputs, 'raw')
         if not os.path.isdir(outputs):
-            os.mkdir(outputs)
+            os.makedirs(outputs, exist_ok=True)
 
         if arguments_.sites:
             sites = arguments_.sites
         else:
-            sites = [site for site in os.listdir(path) if os.path.isdir(site)]
+            sites = [site for site in os.listdir(path) if os.path.isdir(os.path.join(path, site))]
 
         for site in sites:
             if not os.path.exists(outputs):
@@ -118,9 +118,10 @@ def parse_args():
         required=False,
         help="Path to write results",
     )
+    # sites argument is a list of strings
     parser.add_argument(
         '-s', '--sites',
-        type=list,
+        type=lambda s: [str(item.strip(' ').strip("'")) for item in s.split(',')],
         required=False,
         help="list of field-of-views to process (subfolders in raw data directory)",
     )

@@ -101,12 +101,10 @@ def main(arguments):
         n_gpu = arguments.gpus
         method = arguments.method
 
-        #todo: check that the TARGET variable is used for appropriate method
-
         if arguments.sites:
             sites = arguments.sites
         else:
-            sites = [site for site in os.listdir(inputs) if os.path.isdir(site)]
+            sites = [site for site in os.listdir(inputs) if os.path.isdir(os.path.join(inputs, site))]
 
         # if probabilities and formatted stack exist
         segment_sites = [site for site in sites if os.path.exists(os.path.join(inputs, "%s.npy" % site)) and \
@@ -115,6 +113,7 @@ def main(arguments):
         # process each site on a different GPU if using multi-gpu
         sep = np.linspace(0, len(segment_sites), n_gpu + 1).astype(int)
 
+        # TARGET is never used in either extract_patches or build_trajectory
         processes = []
         for i in range(n_gpu):
             _sites = segment_sites[sep[i]:sep[i + 1]]
@@ -151,17 +150,19 @@ def parse_args():
         type=str,
         required=False,
         choices=['extract_patches', 'build_trajectories'],
+        default='extract_patches',
         help="Method: one of 'extract_patches', 'build_trajectories'",
     )
     parser.add_argument(
         '-g', '--gpus',
         type=int,
         required=False,
+        default=1,
         help="Number of GPS to use",
     )
     parser.add_argument(
         '-s', '--sites',
-        type=list,
+        type=lambda s: [str(item.strip(' ').strip("'")) for item in s.split(',')],
         required=False,
         help="list of field-of-views to process (subfolders in raw data directory)",
     )

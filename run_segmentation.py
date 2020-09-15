@@ -109,7 +109,7 @@ def main(arguments_):
         # probabilities are written to subfolder "supp"
         outputs = os.path.join(outputs, "supp")
         if not os.path.isdir(outputs):
-            os.mkdir(outputs)
+            os.makedirs(outputs, exist_ok=True)
 
         n_gpu = arguments_.gpus
         method = arguments_.method
@@ -122,7 +122,7 @@ def main(arguments_):
         if arguments_.sites:
             sites = arguments_.sites
         else:
-            sites = [site for site in os.listdir(inputs) if os.path.isdir(site)]
+            sites = [site for site in os.listdir(inputs) if os.path.isdir(os.path.join(inputs, site))]
 
         segment_sites = [site for site in sites if os.path.exists(os.path.join(inputs, "%s.npy" % site)) and \
                          os.path.exists(os.path.join(inputs, "%s_NNProbabilities.npy" % site))]
@@ -164,19 +164,21 @@ def parse_args():
         type=str,
         required=False,
         choices=['segmentation', 'instance_segmentation', 'segmentation_validation'],
+        default='segmentation',
         help="Method: one of 'segmentation', 'instance_segmentation', or 'segmentation_validation'",
     )
     parser.add_argument(
         '-g', '--gpus',
         type=int,
         required=False,
+        default=1,
         help="Number of GPS to use",
     )
     parser.add_argument(
         '-s', '--sites',
-        type=list,
+        type=lambda s: [str(item.strip(' ').strip("'")) for item in s.split(',')],
         required=False,
-        help="list of field-of-views to process (subfolders in raw data directory)",
+        help="comma-delimited list of FOVs (subfolders in raw data directory)",
     )
     return parser.parse_args()
 

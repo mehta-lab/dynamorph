@@ -75,12 +75,12 @@ def main(arguments_):
         # results are written to subfolder "supp"
         outputs = os.path.join(outputs, "supp")
         if not os.path.isdir(outputs):
-            os.mkdir(outputs)
+            os.makedirs(outputs, exist_ok=True)
 
         if arguments_.sites:
             sites = arguments_.sites
         else:
-            sites = [site for site in os.listdir(inputs) if os.path.isdir(site)]
+            sites = [site for site in os.listdir(inputs) if os.path.isdir(os.path.join(inputs, site))]
 
         method = arguments_.method
         wells = set(s[:2] for s in sites)
@@ -118,11 +118,12 @@ def parse_args():
         type=str,
         required=False,
         choices=['assemble', 'process', 'trajectory_matching'],
+        default='assemble',
         help="Method: one of 'assemble', 'process', or 'trajectory_matching'",
     )
     parser.add_argument(
         '-s', '--sites',
-        type=list,
+        type=lambda s: [str(item.strip(' ').strip("'")) for item in s.split(',')],
         required=False,
         help="list of field-of-views to process (subfolders in raw data directory)",
     )
