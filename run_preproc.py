@@ -83,6 +83,7 @@ def main(arguments_):
         if arguments_.sites:
             sites = arguments_.sites
         else:
+            # assume all subdirectories are site/FOVs
             sites = [site for site in os.listdir(path) if os.path.isdir(os.path.join(path, site))]
 
         for site in sites:

@@ -121,10 +121,13 @@ def main(arguments_):
         else:
             TARGET = ''
 
+        # segmentation methods all require
         if arguments_.sites:
             sites = arguments_.sites
         else:
-            sites = [site for site in os.listdir(inputs) if os.path.isdir(os.path.join(inputs, site))]
+            # get all "XX-SITE_#" identifiers in raw data directory
+            sites = [os.path.splitext(site)[0][0:9].split('_NN')[0] for site in os.listdir(inputs) if site.endswith(".npy")]
+            sites = list(set(sites))
 
         segment_sites = [site for site in sites if os.path.exists(os.path.join(inputs, "%s.npy" % site)) and \
                          os.path.exists(os.path.join(inputs, "%s_NNProbabilities.npy" % site))]

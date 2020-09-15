@@ -80,7 +80,10 @@ def main(arguments_):
         if arguments_.sites:
             sites = arguments_.sites
         else:
-            sites = [site for site in os.listdir(inputs) if os.path.isdir(os.path.join(inputs, site))]
+            # get all "XX-SITE_#" identifiers in raw data directory
+            sites = [os.path.splitext(site)[0][0:9].split('_NN')[0] for site in os.listdir(inputs) if
+                     site.endswith(".npy")]
+            sites = list(set(sites))
 
         method = arguments_.method
         wells = set(s[:2] for s in sites)
