@@ -6,6 +6,7 @@ Created on Wed Aug 14 16:19:26 2019
 @author: michaelwu
 """
 import pickle
+import os
 from .naive_imagenet import read_file_path, DATA_ROOT
 
 # Support script for generating relation dict, which is used for 
