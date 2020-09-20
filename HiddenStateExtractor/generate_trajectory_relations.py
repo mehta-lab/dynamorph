@@ -8,43 +8,61 @@ Created on Wed Aug 14 16:19:26 2019
 import pickle
 from .naive_imagenet import read_file_path, DATA_ROOT
 
-
 # Support script for generating relation dict, which is used for 
 # dataset re-ordering (necessary for matching loss)
 
 # `relations` is a dict recording relations (2 - adjacent frame, 1 - same 
 # trajectory) of pairs of frames
 
-fs = read_file_path(DATA_ROOT + '/Data/StaticPatches')
-relations = {}
-sites = ['D%d-Site_%d' % (i, j) for j in range(9) for i in range(3, 6)]
+def generate_trajectory_relations(sites, raw_folder, supp_folder):
+    """ Find pair relations (adjacent frame, same trajectory) in static patches
 
-path = '/mnt/comp_micro/Projects/CellVAE'
-for site in sites:
-    print(site)
-    trajectories = pickle.load(open(path + '/Data/DynamicPatches/%s/mg_traj.pkl' % site, 'rb'))[0]
-    for t in trajectories:
-        keys = sorted(t.keys())
-        t_inds = []
-        for k in keys:
-            a_name = path + '/Data/StaticPatches/%s/%d_%d.h5' % (site, k, t[k])
-            t_inds.append(fs.index(a_name))
+    Results will be saved under `raw_folder`
 
-            # Adjacent frames
-            if k-1 in keys:
-                a_name = path + '/Data/StaticPatches/%s/%d_%d.h5' % (site, k, t[k])
-                b_name = path + '/Data/StaticPatches/%s/%d_%d.h5' % (site, k-1, t[k-1])
-                relations[(fs.index(a_name), fs.index(b_name))] = 2
-            if k+1 in keys:
-                a_name = path + '/Data/StaticPatches/%s/%d_%d.h5' % (site, k, t[k])
-                b_name = path + '/Data/StaticPatches/%s/%d_%d.h5' % (site, k+1, t[k+1])
-                relations[(fs.index(a_name), fs.index(b_name))] = 2
-        
-        # Same trajectory
-        for i in t_inds:
-            for j in t_inds:
-                if not (i, j) in relations:
-                    relations[(i, j)] = 1
-        
-with open(path + '/Data/StaticPatchesAllRelations.pkl', 'wb') as f:
-    pickle.dump(relations, f)
+    Args:
+        sites (list of str): sites from the same well
+        raw_folder (str): path to save image stacks, segmentation stacks, etc.
+        supp_folder (str): path to save supplementary data
+
+    """
+    assert len(set(s[:2] for s in sites)) == 1
+    well = sites[0][:2]
+    fs = pickle.load(open(os.path.join(raw_folder, "%s_file_paths.pkl" % well), 'rb'))
+    relations = {}
+
+    def find_key(fs, key):
+        inds = []
+        for i, f in enumerate(fs):
+            if key in f:
+                inds.append(i)
+        return inds[0] if len(inds) == 1 else None
+
+    for site in sites:
+        print(site)
+        trajectories = pickle.load(open(
+            os.path.join(supp_folder, "%s-supps" % well, site, "cell_traj.pkl"), 'rb'))[0]
+
+        for t in trajectories:
+            keys = sorted(t.keys())
+            t_inds = []
+            for k in keys:
+                a_ind = find_key(fs, '/%s/%d_%d.' % (site, k, t[k]))
+                assert not a_ind is None
+                t_inds.append(a_ind)
+                # Adjacent frames
+                if k-1 in keys:
+                    b_ind = find_key(fs, '/%s/%d_%d.' % (site, k-1, t[k-1]))
+                    relations[(a_ind, b_ind)] = 2
+                if k+1 in keys:
+                    b_ind = find_key(fs, '/%s/%d_%d.' % (site, k+1, t[k+1]))
+                    relations[(a_ind, b_ind)] = 2
+            
+            # Same trajectory
+            for i in t_inds:
+                for j in t_inds:
+                    if not (i, j) in relations:
+                        relations[(i, j)] = 1
+
+    with open(os.path.join(raw_folder, "%s_static_patches_relations.pkl" % well), 'wb') as f:
+        pickle.dump(relations, f)
+    return
