@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import pickle
 from torch.utils.data import TensorDataset, DataLoader
+from scipy.sparse import csr_matrix
 from .naive_imagenet import DATA_ROOT, read_file_path
 
 
@@ -989,8 +990,8 @@ def reorder_with_trajectories(dataset, relations, seed=None):
             values.append(1.1)
         new_relations.append(k)
     new_relations = np.array(new_relations)
-    relation_mat = scipy.sparse.csr_matrix((np.array(values), (new_relations[:, 0], new_relations[:, 1])),
-                                           shape=(len(dataset), len(dataset)))
+    relation_mat = csr_matrix((np.array(values), (new_relations[:, 0], new_relations[:, 1])),
+                              shape=(len(dataset), len(dataset)))
     relation_mat = relation_mat[np.array(inds_in_order)][:, np.array(inds_in_order)]
     return TensorDataset(new_tensor), relation_mat, inds_in_order
 
@@ -999,10 +1000,17 @@ def rescale(dataset):
     """ Rescale value range of image patches in `dataset` to CHANNEL_RANGE
 
     Args:
+<<<<<<< HEAD
       dataset (TensorDataset): dataset before rescaling
 
     Returns:
       TensorDataset: dataset after rescaling
+=======
+        dataset (TensorDataset): dataset before rescaling
+
+    Returns:
+        TensorDataset: dataset after rescaling
+>>>>>>> 22b8d3e905a8080a0ceaea61f0926df613099b72
 
     """
     tensor = dataset.tensors[0]

@@ -12,6 +12,7 @@ This is a repo storing codes and scripts for **DynaMorph: learning morphodynamic
   - [Label-free Imaging](#label-free-imaging)
   - [Cell Segmentation and Tracking](#cell-segmentation-and-tracking)
   - [Latent Representations of Morphology](#latent-representations-of-morphology)
+- [Usage](#usage)
 - [Citing DynaMorph](#citing-dynamorph)
 
 ## Requirements
