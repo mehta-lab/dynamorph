@@ -31,7 +31,8 @@ def segmentation(paths):
                     unet_feat=32,
                     fc_layers=[64, 32],
                     n_classes=3)
-    model.load('NNsegmentation/temp_save_unsaturated/final.h5')
+    # model.load('NNsegmentation/temp_save_unsaturated/final.h5')
+    model.load(target)
 
     for site in sites:
         site_path = os.path.join(temp_folder, '%s.npy' % site)

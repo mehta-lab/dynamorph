@@ -87,6 +87,7 @@ def main(arguments_):
         print('no input or output supplied, using hard coded paths')
         n_gpu = 4
         TARGET = '/data_sm/home/michaelwu/VALIDATION'
+        #TARGET = '/gpfs/CompMicro/projects/dynamorph/CellVAE/save_0005_bkp4.pt'
 
         for sites, inputs, outputs in zip([sites_NOVEMBER, sites_JANUARY, sites_JANUARY_FAST],
                                 [RAW_NOVEMBER, RAW_JANUARY, RAW_JANUARY_FAST],
@@ -118,6 +119,11 @@ def main(arguments_):
             TARGET = arguments_.validation
         elif method == 'segmentation_validation' and not arguments_.validation:
             raise AttributeError("validation flag must be specified when method=segmentation_validation")
+        elif method == 'segmentation':
+            if arguments_.weights is not None:
+                raise AttributeError("Weights flag must be specified when method=segmentation")
+            else:
+                TARGET = arguments_.weights
         else:
             TARGET = ''
 
@@ -169,6 +175,12 @@ def parse_args():
         type=str,
         required=False,
         help="Path to write validation images",
+    )
+    parser.add_argument(
+        '-w', '--weights',
+        type=str,
+        required=False,
+        help="Path to pytorch weights from trained segmentaton model",
     )
     parser.add_argument(
         '-m', '--method',
