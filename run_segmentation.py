@@ -120,7 +120,7 @@ def main(arguments_):
         elif method == 'segmentation_validation' and not arguments_.validation:
             raise AttributeError("validation flag must be specified when method=segmentation_validation")
         elif method == 'segmentation':
-            if arguments_.weights is not None:
+            if arguments_.weights is None:
                 raise AttributeError("Weights flag must be specified when method=segmentation")
             else:
                 TARGET = arguments_.weights
@@ -180,6 +180,7 @@ def parse_args():
         '-w', '--weights',
         type=str,
         required=False,
+        default=None,
         help="Path to pytorch weights from trained segmentaton model",
     )
     parser.add_argument(
