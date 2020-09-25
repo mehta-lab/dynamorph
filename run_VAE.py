@@ -71,9 +71,10 @@ def main(arguments_):
         print("CLI arguments provided")
         inputs = arguments_.input
         outputs = arguments_.output
+        method = arguments_.method
 
         # results are written to subfolder "supp"
-        if arguments_.method != "assemble":
+        if method != "assemble":
             outputs = os.path.join(outputs, "supp")
             if not os.path.isdir(outputs):
                 os.makedirs(outputs, exist_ok=True)
@@ -86,14 +87,16 @@ def main(arguments_):
                      site.endswith(".npy")]
             sites = list(set(sites))
 
-        method = arguments_.method
         wells = set(s[:2] for s in sites)
         for i, well in enumerate(wells):
             well_sites = [s for s in sites if s[:2] == well]
             print(well_sites)
-            if arguments_.method == "assemble":
+            if method == "assemble":
                 # for "assemble" it is coded such that first arg is the output directory, second arg is input
                 args = (outputs, inputs, TARGET, well_sites)
+            elif method == "process":
+                weights = arguments_.weights
+                args = (inputs, _, weights, well_sites)
             else:
                 args = (inputs, outputs, TARGET, well_sites)
             p = Worker(args, gpuid=i, method=method)
@@ -134,6 +137,12 @@ def parse_args():
         type=lambda s: [str(item.strip(' ').strip("'")) for item in s.split(',')],
         required=False,
         help="list of field-of-views to process (subfolders in raw data directory)",
+    )
+    parser.add_argument(
+        '-w', '--weights',
+        type=str,
+        required=False,
+        help="Path to DNN model weights for VQ-VAE",
     )
     return parser.parse_args()
 
