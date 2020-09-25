@@ -197,6 +197,7 @@ def process_VAE(paths):
         z_bs[f_n] = z_b.cpu().data.numpy()
         z_as[f_n] = z_a.cpu().data.numpy()      
 
+    # it's not clear where pca_save is created.  Will leave hard-coded path here for now
     try:
         pca = pickle.load(open('HiddenStateExtractor/pca_save.pkl', 'rb'))
     except Exception as ex:
@@ -205,18 +206,22 @@ def process_VAE(paths):
 
     dats = np.stack([z_bs[f] for f in fs], 0).reshape((len(dataset), -1))
     with open(os.path.join(temp_folder, '%s_latent_space.pkl' % well), 'wb') as f:
+        print(f"saving {os.path.join(temp_folder, '%s_latent_space.pkl' % well)}")
         pickle.dump(dats, f)
     if pca:
         dats_ = pca.transform(dats)
         with open(os.path.join(temp_folder, '%s_latent_space_PCAed.pkl' % well), 'wb') as f:
+            print(f"saving {os.path.join(temp_folder, '%s_latent_space_PCAed.pkl' % well)}")
             pickle.dump(dats_, f)
     
     dats = np.stack([z_as[f] for f in fs], 0).reshape((len(dataset), -1))
     with open(os.path.join(temp_folder, '%s_latent_space_after.pkl' % well), 'wb') as f:
+        print(f"saving {os.path.join(temp_folder, '%s_latent_space_after.pkl' % well)}")
         pickle.dump(dats, f)
     if pca:
         dats_ = pca.transform(dats)
         with open(os.path.join(temp_folder, '%s_latent_space_after_PCAed.pkl' % well), 'wb') as f:
+            print(f"saving {os.path.join(temp_folder, '%s_latent_space_after_PCAed.pkl' % well)}")
             pickle.dump(dats_, f)
     
     return

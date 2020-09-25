@@ -74,7 +74,7 @@ def main(arguments_):
         method = arguments_.method
 
         # results are written to subfolder "supp"
-        if method != "assemble":
+        if method == "trajectory_matching":
             outputs = os.path.join(outputs, "supp")
             if not os.path.isdir(outputs):
                 os.makedirs(outputs, exist_ok=True)
@@ -95,8 +95,11 @@ def main(arguments_):
                 # for "assemble" it is coded such that first arg is the output directory, second arg is input
                 args = (outputs, inputs, TARGET, well_sites)
             elif method == "process":
-                weights = arguments_.weights
-                args = (inputs, _, weights, well_sites)
+                if arguments_.weights is None:
+                    raise AttributeError("path to VQ-VAE weights must be defined for method=process")
+                else:
+                    weights = arguments_.weights
+                    args = (inputs, None, weights, well_sites)
             else:
                 args = (inputs, outputs, TARGET, well_sites)
             p = Worker(args, gpuid=i, method=method)
