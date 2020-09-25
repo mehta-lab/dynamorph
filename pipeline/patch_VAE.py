@@ -125,8 +125,10 @@ def assemble_VAE(paths):
     assert fs == sorted(fs)
     
     with open(os.path.join(temp_folder, '%s_file_paths.pkl' % sites[0][:2]), 'wb') as f:
+        print(f"saving {os.path.join(temp_folder, '%s_file_paths.pkl' % sites[0][:2])}")
         pickle.dump(fs, f)
 
+    print(f"saving {os.path.join(temp_folder, '%s_static_patches.pt' % sites[0][:2])}")
     torch.save(dataset, os.path.join(temp_folder, '%s_static_patches.pt' % sites[0][:2]))
 
     # Adjust channel mean/std
@@ -137,6 +139,7 @@ def assemble_VAE(paths):
     retard_slice = dataset.tensors[0][:, 1]
     retard_slice = retard_slice / retard_slice.mean() * 0.0285
     adjusted_dataset = TensorDataset(torch.stack([phase_slice, retard_slice], 1))
+    print(f"saving {os.path.join(temp_folder, '%s_adjusted_static_patches.pt' % sites[0][:2])}")
     torch.save(adjusted_dataset, os.path.join(temp_folder, '%s_adjusted_static_patches.pt' % sites[0][:2]))
     return
 

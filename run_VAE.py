@@ -73,9 +73,10 @@ def main(arguments_):
         outputs = arguments_.output
 
         # results are written to subfolder "supp"
-        outputs = os.path.join(outputs, "supp")
-        if not os.path.isdir(outputs):
-            os.makedirs(outputs, exist_ok=True)
+        if arguments_.method != "assemble":
+            outputs = os.path.join(outputs, "supp")
+            if not os.path.isdir(outputs):
+                os.makedirs(outputs, exist_ok=True)
 
         if arguments_.sites:
             sites = arguments_.sites
