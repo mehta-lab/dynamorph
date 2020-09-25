@@ -90,7 +90,11 @@ def main(arguments_):
         for i, well in enumerate(wells):
             well_sites = [s for s in sites if s[:2] == well]
             print(well_sites)
-            args = (inputs, outputs, TARGET, well_sites)
+            if arguments_.method == "assemble":
+                # for "assemble" it is coded such that first arg is the output directory, second arg is input
+                args = (outputs, inputs, TARGET, well_sites)
+            else:
+                args = (inputs, outputs, TARGET, well_sites)
             p = Worker(args, gpuid=i, method=method)
             p.start()
             p.join()
