@@ -52,7 +52,7 @@ class Worker(Process):
 
 def main(arguments_):
 
-    if not arguments_.input or arguments_.output:
+    if not arguments_.input or not arguments_.output:
         print('no input or output supplied, using hard coded paths')
         # loads 'Site.npy',
         #       '_NNProbabilities.npy',
@@ -109,6 +109,8 @@ def main(arguments_):
         # if probabilities and formatted stack exist
         segment_sites = [site for site in sites if os.path.exists(os.path.join(inputs, "%s.npy" % site)) and \
                          os.path.exists(os.path.join(inputs, "%s_NNProbabilities.npy" % site))]
+        if len(segment_sites) == 0:
+            raise AttributeError("no sites found in input directory with preprocessed data and matching NNProbabilities")
 
         # process each site on a different GPU if using multi-gpu
         sep = np.linspace(0, len(segment_sites), n_gpu + 1).astype(int)
