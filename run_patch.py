@@ -50,9 +50,9 @@ class Worker(Process):
             build_trajectories(self.inputs)
 
 
-def main(arguments):
+def main(arguments_):
 
-    if not arguments.input or arguments.output:
+    if not arguments_.input or arguments_.output:
         print('no input or output supplied, using hard coded paths')
         # loads 'Site.npy',
         #       '_NNProbabilities.npy',
@@ -90,19 +90,19 @@ def main(arguments):
         # generates 'cell_traj.pkl'
     else:
         print("CLI arguments provided")
-        inputs = arguments.input
-        outputs = arguments.output
+        inputs = arguments_.input
+        outputs = arguments_.output
 
         # results are written to subfolder "supp"
         outputs = os.path.join(outputs, "supp")
         if not os.path.isdir(outputs):
             os.mkdir(outputs)
 
-        n_gpu = arguments.gpus
-        method = arguments.method
+        n_gpu = arguments_.gpus
+        method = arguments_.method
 
-        if arguments.sites:
-            sites = arguments.sites
+        if arguments_.sites:
+            sites = arguments_.sites
         else:
             sites = [site for site in os.listdir(inputs) if os.path.isdir(os.path.join(inputs, site))]
 
@@ -170,5 +170,5 @@ def parse_args():
 
 
 if __name__ == '__main__':
-    args = parse_args()
-    main(args)
+    arguments = parse_args()
+    main(arguments)
