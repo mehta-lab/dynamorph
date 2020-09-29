@@ -74,10 +74,10 @@ def main(arguments_):
         method = arguments_.method
 
         # results are written to subfolder "supp"
-        if method == "trajectory_matching":
-            outputs = os.path.join(outputs, "supp")
-            if not os.path.isdir(outputs):
-                os.makedirs(outputs, exist_ok=True)
+        # if method == "trajectory_matching":
+        #     outputs = os.path.join(outputs, "supp")
+        #     if not os.path.isdir(outputs):
+        #         os.makedirs(outputs, exist_ok=True)
 
         if arguments_.sites:
             sites = arguments_.sites
@@ -91,10 +91,10 @@ def main(arguments_):
         for i, well in enumerate(wells):
             well_sites = [s for s in sites if s[:2] == well]
             print(well_sites)
-            if method == "assemble":
-                # for "assemble" it is coded such that first arg is the output directory, second arg is input
-                args = (outputs, inputs, TARGET, well_sites)
-            elif method == "process":
+            # if method == "assemble":
+            #     # for "assemble" it is coded such that first arg is the output directory, second arg is input
+            #     args = (outputs, inputs, TARGET, well_sites)
+            if method == "process":
                 if arguments_.weights is None:
                     raise AttributeError("path to VQ-VAE weights must be defined for method=process")
                 else:

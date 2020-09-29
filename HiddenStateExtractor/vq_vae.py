@@ -916,6 +916,7 @@ def prepare_dataset_v2(dat_fs,
     """
     tensors = {}
     for dat_f in dat_fs:
+        print(f"\tloading data {dat_f}")
         file_dats = pickle.load(open(dat_f, 'rb'))
         for k in file_dats:
             dat = file_dats[k]['masked_mat']
