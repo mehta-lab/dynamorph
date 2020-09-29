@@ -108,9 +108,9 @@ def main(arguments_):
         outputs = arguments_.output
 
         # probabilities are written to subfolder "supp"
-        outputs = os.path.join(outputs, "supp")
-        if not os.path.isdir(outputs):
-            os.makedirs(outputs, exist_ok=True)
+        # outputs = os.path.join(outputs, "supp")
+        # if not os.path.isdir(outputs):
+        #     os.makedirs(outputs, exist_ok=True)
 
         n_gpu = arguments_.gpus
         method = arguments_.method

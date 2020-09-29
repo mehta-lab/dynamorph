@@ -76,9 +76,9 @@ def main(arguments_):
         outputs = arguments_.output
 
         # files are written to subfolder "raw"
-        outputs = os.path.join(outputs, 'raw')
-        if not os.path.isdir(outputs):
-            os.makedirs(outputs, exist_ok=True)
+        # outputs = os.path.join(outputs, 'raw')
+        # if not os.path.isdir(outputs):
+        #     os.makedirs(outputs, exist_ok=True)
 
         if arguments_.sites:
             sites = arguments_.sites

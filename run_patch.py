@@ -94,9 +94,9 @@ def main(arguments_):
         outputs = arguments_.output
 
         # results are written to subfolder "supp"
-        outputs = os.path.join(outputs, "supp")
-        if not os.path.isdir(outputs):
-            os.mkdir(outputs)
+        # outputs = os.path.join(outputs, "supp")
+        # if not os.path.isdir(outputs):
+        #     os.mkdir(outputs)
 
         n_gpu = arguments_.gpus
         method = arguments_.method
