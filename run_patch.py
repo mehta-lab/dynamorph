@@ -45,8 +45,8 @@ def main(arguments_):
         if not arguments_.supplementary:
             raise AttributeError("supplementary directory must be specified when method = extract_patches")
 
-    if arguments_.sites:
-        sites = arguments_.sites
+    if arguments_.fov:
+        sites = arguments_.fov
     else:
         sites = [site for site in os.listdir(raw) if os.path.isdir(os.path.join(raw, site))]
 
@@ -107,7 +107,7 @@ def parse_args():
         help="Number of GPS to use",
     )
     parser.add_argument(
-        '-s', '--sites',
+        '-f', '--fov',
         type=lambda s: [str(item.strip(' ').strip("'")) for item in s.split(',')],
         required=False,
         help="list of field-of-views to process (subfolders in raw data directory)",

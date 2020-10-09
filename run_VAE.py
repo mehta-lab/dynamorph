@@ -50,8 +50,8 @@ def main(arguments_):
         if not arguments_.supplementary:
             raise AttributeError("supplementary directory must be specified when method = assemble")
 
-    if arguments_.sites:
-        sites = arguments_.sites
+    if arguments_.fov:
+        sites = arguments_.fov
     else:
         # get all "XX-SITE_#" identifiers in raw data directory
         sites = [os.path.splitext(site)[0][0:9].split('_NN')[0] for site in os.listdir(inputs) if
@@ -107,7 +107,7 @@ def parse_args():
         help="Method: one of 'assemble', 'process', or 'trajectory_matching'",
     )
     parser.add_argument(
-        '-s', '--sites',
+        '-f', '--fov',
         type=lambda s: [str(item.strip(' ').strip("'")) for item in s.split(',')],
         required=False,
         help="list of field-of-views to process (subfolders in raw data directory)",

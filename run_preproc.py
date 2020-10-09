@@ -18,8 +18,8 @@ def main(arguments_):
     path = arguments_.input
     outputs = arguments_.output
 
-    if arguments_.sites:
-        sites = arguments_.sites
+    if arguments_.fov:
+        sites = arguments_.fov
     else:
         # assume all subdirectories are site/FOVs
         sites = [site for site in os.listdir(path) if os.path.isdir(os.path.join(path, site))]
@@ -59,7 +59,7 @@ def parse_args():
     )
     # sites argument is a list of strings
     parser.add_argument(
-        '-s', '--sites',
+        '-f', '--fov',
         type=lambda s: [str(item.strip(' ').strip("'")) for item in s.split(',')],
         required=False,
         help="list of field-of-views to process (subfolders in raw data directory)",
