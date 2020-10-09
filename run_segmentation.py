@@ -49,15 +49,15 @@ import argparse
 # SITES_IFbeta=['B5-Site_0', 'B5-Site_4']
 # SITES_fast = ['C5-Site_0', 'C5-Site_4']
 
-RAW_NOVEMBER = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/NOVEMBER/raw'
-RAW_JANUARY = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/JANUARY/raw'
-RAW_JANUARY_FAST = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/JANUARY_FAST/raw'
+# RAW_NOVEMBER = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/NOVEMBER/raw'
+# RAW_JANUARY = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/JANUARY/raw'
+# RAW_JANUARY_FAST = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/JANUARY_FAST/raw'
+#
+# INTERMEDIATE_NOVEMBER = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/NOVEMBER/supp'
+# INTERMEDIATE_JANUARY = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/JANUARY/supp'
+# INTERMEDIATE_JANUARY_FAST = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/JANUARY_FAST/supp'
 
-INTERMEDIATE_NOVEMBER = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/NOVEMBER/supp'
-INTERMEDIATE_JANUARY = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/JANUARY/supp'
-INTERMEDIATE_JANUARY_FAST = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/JANUARY_FAST/supp'
-
-'''======= TARGET is the output directory for "segmentation_validation" runs ONLY ======='''
+# '''======= TARGET is the output directory for "segmentation_validation" runs ONLY ======='''
 #TARGET = '/gpfs/CompMicro/projects/dynamorph/microglia/segmentation_experiments/expt_009'
 # TARGET = '/data_sm/home/michaelwu/VALIDATION'
 
@@ -83,51 +83,56 @@ class Worker(Process):
 
 def main(arguments_):
 
-    if not arguments_.input or not arguments_.output:
-        print('no input or output supplied, using hard coded paths')
-        n_gpu = 4
-        TARGET = '/data_sm/home/michaelwu/VALIDATION'
-        #TARGET = '/gpfs/CompMicro/projects/dynamorph/CellVAE/save_0005_bkp4.pt'
-
-        for sites, inputs, outputs in zip([sites_NOVEMBER, sites_JANUARY, sites_JANUARY_FAST],
-                                [RAW_NOVEMBER, RAW_JANUARY, RAW_JANUARY_FAST],
-                                [INTERMEDIATE_NOVEMBER, INTERMEDIATE_JANUARY, INTERMEDIATE_JANUARY_FAST]):
-            segment_sites = [site for site in sites if os.path.exists(os.path.join(inputs, "%s.npy" % site)) and \
-                                         os.path.exists(os.path.join(inputs, "%s_NNProbabilities.npy" % site))]
-            sep = np.linspace(0, len(segment_sites), n_gpu+1).astype(int)
-            for i in range(n_gpu):
-                _sites = segment_sites[sep[i]:sep[i+1]]
-                args = (inputs, outputs, TARGET, _sites)
-                process = Worker(args, gpuid=i)
-                process.start()
-            for i in range(n_gpu):
-                process.join()
-    else:
+    # if not arguments_.input or not arguments_.output:
+    #     print('no input or output supplied, using hard coded paths')
+    #     n_gpu = 4
+    #     TARGET = '/data_sm/home/michaelwu/VALIDATION'
+    #     #TARGET = '/gpfs/CompMicro/projects/dynamorph/CellVAE/save_0005_bkp4.pt'
+    #
+    #     for sites, inputs, outputs in zip([sites_NOVEMBER, sites_JANUARY, sites_JANUARY_FAST],
+    #                             [RAW_NOVEMBER, RAW_JANUARY, RAW_JANUARY_FAST],
+    #                             [INTERMEDIATE_NOVEMBER, INTERMEDIATE_JANUARY, INTERMEDIATE_JANUARY_FAST]):
+    #         segment_sites = [site for site in sites if os.path.exists(os.path.join(inputs, "%s.npy" % site)) and \
+    #                                      os.path.exists(os.path.join(inputs, "%s_NNProbabilities.npy" % site))]
+    #         sep = np.linspace(0, len(segment_sites), n_gpu+1).astype(int)
+    #         for i in range(n_gpu):
+    #             _sites = segment_sites[sep[i]:sep[i+1]]
+    #             args = (inputs, outputs, TARGET, _sites)
+    #             process = Worker(args, gpuid=i)
+    #             process.start()
+    #         for i in range(n_gpu):
+    #             process.join()
+    # else:
         print("CLI arguments provided")
-        inputs = arguments_.input
-        outputs = arguments_.output
-
-        # probabilities are written to subfolder "supp"
-        # outputs = os.path.join(outputs, "supp")
-        # if not os.path.isdir(outputs):
-        #     os.makedirs(outputs, exist_ok=True)
+        inputs = arguments_.raw
+        outputs = arguments_.supplementary
 
         n_gpu = arguments_.gpus
         method = arguments_.method
 
-        if method == 'segmentation_validation' and arguments_.validation:
-            TARGET = arguments_.validation
-        elif method == 'segmentation_validation' and not arguments_.validation:
-            raise AttributeError("validation flag must be specified when method=segmentation_validation")
+        # segmentation validation requires raw, supp, and validation definitions
+        if method == 'segmentation_validation':
+            if arguments_.validation:
+                TARGET = arguments_.validation
+            else:
+                raise AttributeError("validation directory must be specified when method=segmentation_validation")
+            if not arguments_.supplementary:
+                raise AttributeError("supplemntary directory must be specifie dwhen method=segmentation_validation")
+
+        # segmentation requires raw (NNProb), and weights to be defined
         elif method == 'segmentation':
             if arguments_.weights is None:
-                raise AttributeError("Weights flag must be specified when method=segmentation")
+                raise AttributeError("Weights path must be specified when method=segmentation")
             else:
                 TARGET = arguments_.weights
-        else:
-            TARGET = ''
 
-        # segmentation methods all require
+        # instance segmentation requires raw (stack, NNprob), supp (to write outputs) to be defined
+        elif method == 'instance_segmentation':
+            TARGET = ''
+        else:
+            raise AttributeError(f"method flag {arguments_.method} not implemented")
+
+        # all methods all require
         if arguments_.sites:
             sites = arguments_.sites
         else:
@@ -159,13 +164,13 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        '-i', '--input',
+        '-r', '--raw',
         type=str,
-        required=False,
+        required=True,
         help="Path to multipage-tiff file of format [t, x, y]",
     )
     parser.add_argument(
-        '-o', '--output',
+        '-s', '--supplementary',
         type=str,
         required=False,
         help="Path to write results",
@@ -186,7 +191,7 @@ def parse_args():
     parser.add_argument(
         '-m', '--method',
         type=str,
-        required=False,
+        required=True,
         choices=['segmentation', 'instance_segmentation', 'segmentation_validation'],
         default='segmentation',
         help="Method: one of 'segmentation', 'instance_segmentation', or 'segmentation_validation'",

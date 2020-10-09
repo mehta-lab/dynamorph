@@ -46,8 +46,8 @@ def extract_patches(paths):
         else:
             print("Building patches %s" % site_path, flush=True)
 
-        process_site_extract_patches(site_path, site_segmentation_path, site_supp_files_folder,
-                                     window_size=256)
+            process_site_extract_patches(site_path, site_segmentation_path, site_supp_files_folder,
+                                         window_size=256)
     return
 
 
@@ -76,16 +76,15 @@ def build_trajectories(paths):
     for site in sites:
         site_path = os.path.join(temp_folder + '/' + site + '.npy')
 
-        site_segmentation_path = os.path.join(temp_folder, '%s_NNProbabilities.npy' % site)
+        # site_segmentation_path = os.path.join(temp_folder, '%s_NNProbabilities.npy' % site)
         site_supp_files_folder = os.path.join(supp_folder, '%s-supps' % site[:2], '%s' % site)
-        if not os.path.exists(site_path) or \
-            not os.path.exists(site_segmentation_path) or \
-            not os.path.exists(site_supp_files_folder):
-                print("Site not found %s" % site_path, flush=True)
+        if not os.path.exists(site_path) or not os.path.exists(site_supp_files_folder):
+            print("Site not found %s" % site_path, flush=True)
         else:
             print("Building trajectories %s" % site_path, flush=True)
+            process_site_build_trajectory(site_supp_files_folder)
 
-        process_site_build_trajectory(site_path, site_segmentation_path, site_supp_files_folder)
+        # process_site_build_trajectory(site_path, site_segmentation_path, site_supp_files_folder)
     return
 
 
@@ -179,7 +178,7 @@ def process_VAE(paths):
     print(f"\tloading file paths {os.path.join(temp_folder, '%s_file_paths.pkl' % well)}")
     fs = pickle.load(open(os.path.join(temp_folder, '%s_file_paths.pkl' % well), 'rb'))
 
-    print(f"\tloading static patches {os.path.join(temp_folder, '%s_adjusted_static_patches.pt')}")
+    print(f"\tloading static patches {os.path.join(temp_folder, '%s_adjusted_static_patches.pt' % well)}")
     dataset = torch.load(os.path.join(temp_folder, '%s_adjusted_static_patches.pt' % well))
     dataset = rescale(dataset)
     

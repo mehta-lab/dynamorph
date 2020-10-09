@@ -4,33 +4,6 @@ import os
 import argparse
 
 
-RAW_NOVEMBER = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/NOVEMBER/raw'
-RAW_JANUARY = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/JANUARY/raw'
-RAW_JANUARY_FAST = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/JANUARY_FAST/raw'
-
-INTERMEDIATE_NOVEMBER = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/NOVEMBER/supp'
-INTERMEDIATE_JANUARY = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/JANUARY/supp'
-INTERMEDIATE_JANUARY_FAST = '/gpfs/CompMicro/projects/dynamorph/microglia/raw_for_segmentation/JANUARY_FAST/supp'
-
-sites_NOVEMBER = [
-    'B2-Site_0', 'B2-Site_1', 'B2-Site_2', 'B2-Site_5', 
-    'B4-Site_0', 'B4-Site_2', 'B4-Site_3', 'B4-Site_6', 
-    'B5-Site_1', 'B5-Site_2', 'B5-Site_6', 'B5-Site_7', 
-    'C4-Site_0', 'C4-Site_2', 'C4-Site_3', 'C4-Site_5', 
-    'C5-Site_1', 'C5-Site_2', 'C5-Site_3', 'C5-Site_5', 
-]
-
-sites_JANUARY = [
-    'B4-Site_0', 'B4-Site_1', 'B4-Site_2', 'B4-Site_3', 
-    'B5-Site_0', 'B5-Site_1', 'B5-Site_2', 'B5-Site_4', 
-    'C3-Site_1', 'C3-Site_5', 'C3-Site_6', 'C3-Site_8', 
-    'C4-Site_5', 'C4-Site_6', 'C4-Site_7', 'C4-Site_8', 
-    'C5-Site_1', 'C5-Site_3', 'C5-Site_6', 'C5-Site_7', 
-]
-
-TARGET = None
-
-
 class Worker(Process):
     def __init__(self, inputs, gpuid=0, method='assemble'):
         super().__init__()
@@ -52,59 +25,57 @@ class Worker(Process):
 
 def main(arguments_):
 
-    if not arguments_.input or not arguments_.output:
-        print('no input or output supplied, using hard coded paths')
+    inputs = arguments_.raw
+    outputs = arguments_.supplementary
+    method = arguments_.method
 
-        sites = sites_NOVEMBER
-        inputs = RAW_NOVEMBER
-        outputs = INTERMEDIATE_NOVEMBER
+    # assemble needs raw (write file_paths/static_patches/adjusted_patches), and supp (read site-supps)
+    if arguments_.method == 'assemble':
+        if not arguments_.raw:
+            raise AttributeError("raw directory must be specified when method = assemble")
+        if not arguments_.supplementary:
+            raise AttributeError("supplementary directory must be specified when method = assemble")
 
-        wells = set(s[:2] for s in sites)
-        for i, well in enumerate(wells):
-            well_sites = [s for s in sites if s[:2] == well]
-            print(well_sites)
-            args = (inputs, outputs, TARGET, well_sites)
-            p = Worker(args, gpuid=i)
-            p.start()
-            p.join()
+    # process needs raw (load _file_paths), and target (torch weights)
+    elif arguments_.method == 'process':
+        if not arguments_.raw:
+            raise AttributeError("raw directory must be specified when method = process")
+        if not arguments_.weights:
+            raise AttributeError("pytorch VQ-VAE weights path must be specified when method = process")
+
+    # trajectory matching needs raw (load file_paths, write trajectories), supp (load cell_traj)
+    elif arguments_.method == 'trajectory_matching':
+        if not arguments_.raw:
+            raise AttributeError("raw directory must be specified when method = assemble")
+        if not arguments_.supplementary:
+            raise AttributeError("supplementary directory must be specified when method = assemble")
+
+    if arguments_.sites:
+        sites = arguments_.sites
     else:
-        print("CLI arguments provided")
-        inputs = arguments_.input
-        outputs = arguments_.output
-        method = arguments_.method
+        # get all "XX-SITE_#" identifiers in raw data directory
+        sites = [os.path.splitext(site)[0][0:9].split('_NN')[0] for site in os.listdir(inputs) if
+                 site.endswith(".npy")]
+        sites = list(set(sites))
 
-        # results are written to subfolder "supp"
-        # if method == "trajectory_matching":
-        #     outputs = os.path.join(outputs, "supp")
-        #     if not os.path.isdir(outputs):
-        #         os.makedirs(outputs, exist_ok=True)
-
-        if arguments_.sites:
-            sites = arguments_.sites
-        else:
-            # get all "XX-SITE_#" identifiers in raw data directory
-            sites = [os.path.splitext(site)[0][0:9].split('_NN')[0] for site in os.listdir(inputs) if
-                     site.endswith(".npy")]
-            sites = list(set(sites))
-
-        wells = set(s[:2] for s in sites)
-        for i, well in enumerate(wells):
-            well_sites = [s for s in sites if s[:2] == well]
-            print(well_sites)
-            # if method == "assemble":
-            #     # for "assemble" it is coded such that first arg is the output directory, second arg is input
-            #     args = (outputs, inputs, TARGET, well_sites)
-            if method == "process":
-                if arguments_.weights is None:
-                    raise AttributeError("path to VQ-VAE weights must be defined for method=process")
-                else:
-                    weights = arguments_.weights
-                    args = (inputs, None, weights, well_sites)
+    wells = set(s[:2] for s in sites)
+    for i, well in enumerate(wells):
+        well_sites = [s for s in sites if s[:2] == well]
+        print(well_sites)
+        # if method == "assemble":
+        #     # for "assemble" it is coded such that first arg is the output directory, second arg is input
+        #     args = (outputs, inputs, TARGET, well_sites)
+        if method == "process":
+            if arguments_.weights is None:
+                raise AttributeError("path to VQ-VAE weights must be defined for method=process")
             else:
-                args = (inputs, outputs, TARGET, well_sites)
-            p = Worker(args, gpuid=i, method=method)
-            p.start()
-            p.join()
+                weights = arguments_.weights
+                args = (inputs, None, weights, well_sites)
+        else:
+            args = (inputs, outputs, None, well_sites)
+        p = Worker(args, gpuid=i, method=method)
+        p.start()
+        p.join()
 
 
 def parse_args():
@@ -116,13 +87,13 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        '-i', '--input',
+        '-i', '--raw',
         type=str,
         required=False,
         help="Path to multipage-tiff file of format [t, x, y]",
     )
     parser.add_argument(
-        '-o', '--output',
+        '-o', '--supplementary',
         type=str,
         required=False,
         help="Path to write results",
@@ -130,7 +101,7 @@ def parse_args():
     parser.add_argument(
         '-m', '--method',
         type=str,
-        required=False,
+        required=True,
         choices=['assemble', 'process', 'trajectory_matching'],
         default='assemble',
         help="Method: one of 'assemble', 'process', or 'trajectory_matching'",
