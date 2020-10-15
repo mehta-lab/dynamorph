@@ -14,7 +14,7 @@ import random
 import os
 import cmath
 import matplotlib.pyplot as plt
-from .naive_imagenet import preprocess, read_file_path, DATA_ROOT, CHANNEL_MAX
+from .naive_imagenet import preprocess, read_file_path, CHANNEL_MAX
 import multiprocessing as mp
 
 
@@ -236,7 +236,8 @@ def get_aspect_ratio_no_rotation(dat):
 
 
 # if __name__ == '__main__':
-#     fs = read_file_path(DATA_ROOT + '/Data/StaticPatches')
+#     path = '/mnt/comp_micro/Projects/CellVAE'
+#     fs = read_file_path(os.path.join(path, 'Data', 'StaticPatches'))
 #     sites = ['D%d-Site_%d' % (i, j) for j in range(9) for i in range(3, 6)]
     
 #     sizes = {}
