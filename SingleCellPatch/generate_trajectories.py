@@ -382,8 +382,6 @@ def process_site_build_trajectory(site_supp_files_folder):
             trajectory positions are dict of t_point: cell center position
 
     Args:
-        site_path (str): path to image stack (.npy)
-        site_segmentation_path (str): path to semantic segmentation stack (.npy)
         site_supp_files_folder (str): path to the folder where supplementary 
             files will be saved
 
