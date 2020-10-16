@@ -1,62 +1,126 @@
 from pipeline.patch_VAE import assemble_VAE, process_VAE, trajectory_matching
 from multiprocessing import Pool, Queue, Process
 import os
-import numpy as np
+import argparse
 
-RAW_NOVEMBER = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation/NOVEMBER/raw'
-RAW_JANUARY = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation/JANUARY/raw'
-RAW_JANUARY_FAST = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation/JANUARY_FAST/raw'
-
-INTERMEDIATE_NOVEMBER = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation/NOVEMBER/supp'
-INTERMEDIATE_JANUARY = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation/JANUARY/supp'
-INTERMEDIATE_JANUARY_FAST = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation/JANUARY_FAST/supp'
-
-sites_NOVEMBER = [
-    'B2-Site_0', 'B2-Site_1', 'B2-Site_2', 'B2-Site_5', 
-    'B4-Site_0', 'B4-Site_2', 'B4-Site_3', 'B4-Site_6', 
-    'B5-Site_1', 'B5-Site_2', 'B5-Site_6', 'B5-Site_7', 
-    'C4-Site_0', 'C4-Site_2', 'C4-Site_3', 'C4-Site_5', 
-    'C5-Site_1', 'C5-Site_2', 'C5-Site_3', 'C5-Site_5', 
-]
-
-sites_JANUARY = [
-    'B4-Site_0', 'B4-Site_1', 'B4-Site_2', 'B4-Site_3', 
-    'B5-Site_0', 'B5-Site_1', 'B5-Site_2', 'B5-Site_4', 
-    'C3-Site_1', 'C3-Site_5', 'C3-Site_6', 'C3-Site_8', 
-    'C4-Site_5', 'C4-Site_6', 'C4-Site_7', 'C4-Site_8', 
-    'C5-Site_1', 'C5-Site_3', 'C5-Site_6', 'C5-Site_7', 
-]
-
-TARGET = None
 
 class Worker(Process):
-    def __init__(self, inputs, gpuid=0):
+    def __init__(self, inputs, gpuid=0, method='assemble'):
         super().__init__()
-        self.gpuid=gpuid
-        self.inputs=inputs
+        self.gpuid = gpuid
+        self.inputs = inputs
+        self.method = method
 
     def run(self):
         #os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         #os.environ["CUDA_VISIBLE_DEVICES"] = str(self.gpuid)
-        #assemble_VAE(self.inputs)
-        process_VAE(self.inputs)
-        #trajectory_matching(self.inputs)
+
+        if self.method == 'assemble':
+            assemble_VAE(self.inputs)
+        elif self.method == 'process':
+            process_VAE(self.inputs)
+        elif self.method == 'trajectory_matching':
+            trajectory_matching(self.inputs)
 
 
-def main():
-    sites = sites_NOVEMBER
-    inputs = RAW_NOVEMBER
-    outputs = INTERMEDIATE_NOVEMBER
-    
+def main(arguments_):
+
+    inputs = arguments_.raw
+    outputs = arguments_.supplementary
+    method = arguments_.method
+
+    # assemble needs raw (write file_paths/static_patches/adjusted_patches), and supp (read site-supps)
+    if arguments_.method == 'assemble':
+        if not arguments_.raw:
+            raise AttributeError("raw directory must be specified when method = assemble")
+        if not arguments_.supplementary:
+            raise AttributeError("supplementary directory must be specified when method = assemble")
+
+    # process needs raw (load _file_paths), and target (torch weights)
+    elif arguments_.method == 'process':
+        if not arguments_.raw:
+            raise AttributeError("raw directory must be specified when method = process")
+        if not arguments_.weights:
+            raise AttributeError("pytorch VQ-VAE weights path must be specified when method = process")
+
+    # trajectory matching needs raw (load file_paths, write trajectories), supp (load cell_traj)
+    elif arguments_.method == 'trajectory_matching':
+        if not arguments_.raw:
+            raise AttributeError("raw directory must be specified when method = assemble")
+        if not arguments_.supplementary:
+            raise AttributeError("supplementary directory must be specified when method = assemble")
+
+    if arguments_.fov:
+        sites = arguments_.fov
+    else:
+        # get all "XX-SITE_#" identifiers in raw data directory
+        sites = [os.path.splitext(site)[0][0:9].split('_NN')[0] for site in os.listdir(inputs) if
+                 site.endswith(".npy")]
+        sites = list(set(sites))
+
     wells = set(s[:2] for s in sites)
-    process = []
     for i, well in enumerate(wells):
         well_sites = [s for s in sites if s[:2] == well]
         print(well_sites)
-        args = (inputs, outputs, TARGET, well_sites)
-        p = Worker(args, gpuid=i)
+        # if method == "assemble":
+        #     # for "assemble" it is coded such that first arg is the output directory, second arg is input
+        #     args = (outputs, inputs, TARGET, well_sites)
+        if method == "process":
+            if arguments_.weights is None:
+                raise AttributeError("path to VQ-VAE weights must be defined for method=process")
+            else:
+                weights = arguments_.weights
+                args = (inputs, None, weights, well_sites)
+        else:
+            args = (inputs, outputs, None, well_sites)
+        p = Worker(args, gpuid=i, method=method)
         p.start()
         p.join()
 
+
+def parse_args():
+    """
+    Parse command line arguments for CLI.
+
+    :return: namespace containing the arguments passed.
+    """
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        '-i', '--raw',
+        type=str,
+        required=False,
+        help="Path to multipage-tiff file of format [t, x, y]",
+    )
+    parser.add_argument(
+        '-o', '--supplementary',
+        type=str,
+        required=False,
+        help="Path to write results",
+    )
+    parser.add_argument(
+        '-m', '--method',
+        type=str,
+        required=True,
+        choices=['assemble', 'process', 'trajectory_matching'],
+        default='assemble',
+        help="Method: one of 'assemble', 'process', or 'trajectory_matching'",
+    )
+    parser.add_argument(
+        '-f', '--fov',
+        type=lambda s: [str(item.strip(' ').strip("'")) for item in s.split(',')],
+        required=False,
+        help="list of field-of-views to process (subfolders in raw data directory)",
+    )
+    parser.add_argument(
+        '-w', '--weights',
+        type=str,
+        required=False,
+        help="Path to DNN model weights for VQ-VAE",
+    )
+    return parser.parse_args()
+
+
 if __name__ == '__main__':
-    main()
+    arguments = parse_args()
+    main(arguments)

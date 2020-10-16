@@ -916,6 +916,7 @@ def prepare_dataset_v2(dat_fs,
     """
     tensors = {}
     for dat_f in dat_fs:
+        print(f"\tloading data {dat_f}")
         file_dats = pickle.load(open(dat_f, 'rb'))
         for k in file_dats:
             dat = file_dats[k]['masked_mat']
@@ -1000,10 +1001,17 @@ def rescale(dataset):
     """ Rescale value range of image patches in `dataset` to CHANNEL_RANGE
 
     Args:
+<<<<<<< HEAD
+      dataset (TensorDataset): dataset before rescaling
+
+    Returns:
+      TensorDataset: dataset after rescaling
+=======
         dataset (TensorDataset): dataset before rescaling
 
     Returns:
         TensorDataset: dataset after rescaling
+>>>>>>> 22b8d3e905a8080a0ceaea61f0926df613099b72
 
     """
     tensor = dataset.tensors[0]

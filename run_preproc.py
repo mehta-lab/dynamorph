@@ -11,82 +11,30 @@ import os
 import time
 
 import argparse
-import logging
-
-# Paths of RAW experiment data (ESS from hulk)
-path_NOVEMBER = '/gpfs/CompMicro/Projects/learningCellState/microglia/20191107_1209_1_GW23/blank_bg_stabilized'
-path_JANUARY = '/gpfs/CompMicro/Hummingbird/Processed/Galina/2020_01_28/SM_GW22_2020_0128_1404_1_SM_GW22_2020_0128_1404_1/blank_bg_stabilized'
-path_JANUARY_FAST = '/gpfs/CompMicro/Hummingbird/Processed/Galina/2020_01_28/SM_GW22_2020_0128_1143_2hr_fastTimeSeries_1_SM_GW22_2020_0128_1143_2hr_fastTimeSeries_1/blank_bg_stabilized'
 
 
-# Sites for each experiment
-sites_NOVEMBER = [
-    'B2-Site_0', 'B2-Site_1',  'B2-Site_2',  'B2-Site_3',  'B2-Site_4', 'B2-Site_5', 'B2-Site_6', 'B2-Site_7', 'B2-Site_8',
-    'B4-Site_0', 'B4-Site_1',  'B4-Site_2',  'B4-Site_3',  'B4-Site_4', 'B4-Site_5', 'B4-Site_6', 'B4-Site_7', 'B4-Site_8',
-    'B5-Site_0', 'B5-Site_1',  'B5-Site_2',  'B5-Site_3',  'B5-Site_4', 'B5-Site_5', 'B5-Site_6', 'B5-Site_7', 'B5-Site_8',
-    'C4-Site_0', 'C4-Site_1',  'C4-Site_2',  'C4-Site_3',  'C4-Site_4', 'C4-Site_5', 'C4-Site_6', 'C4-Site_7', 'C4-Site_8',
-    'C5-Site_0', 'C5-Site_1',  'C5-Site_2',  'C5-Site_3',  'C5-Site_4', 'C5-Site_5', 'C5-Site_6', 'C5-Site_7', 'C5-Site_8'
-]
+def main(arguments_):
 
-sites_JANUARY = [
-    'B2-Site_0', 'B2-Site_1', 'B2-Site_2', 'B2-Site_3', 'B2-Site_4', 'B2-Site_5', 'B2-Site_6', 'B2-Site_7', 'B2-Site_8',
-    'B4-Site_0', 'B4-Site_1', 'B4-Site_2', 'B4-Site_3', 'B4-Site_4', 'B4-Site_5', 'B4-Site_6', 'B4-Site_7', 'B4-Site_8',
-    'B5-Site_0', 'B5-Site_1', 'B5-Site_2', 'B5-Site_3', 'B5-Site_4', 'B5-Site_5', 'B5-Site_6', 'B5-Site_7', 'B5-Site_8',
-    'C3-Site_0', 'C3-Site_1', 'C3-Site_2', 'C3-Site_3', 'C3-Site_4', 'C3-Site_5', 'C3-Site_6', 'C3-Site_7', 'C3-Site_8',
-    'C4-Site_0', 'C4-Site_1', 'C4-Site_2', 'C4-Site_3', 'C4-Site_4', 'C4-Site_5', 'C4-Site_6', 'C4-Site_7', 'C4-Site_8',
-    'C5-Site_0', 'C5-Site_1', 'C5-Site_2', 'C5-Site_3', 'C5-Site_4', 'C5-Site_5', 'C5-Site_6', 'C5-Site_7', 'C5-Site_8'
-]
+    path = arguments_.input
+    outputs = arguments_.output
 
-sites_JANUARY_FAST = [
-    'C5-Site_0', 'C5-Site_1', 'C5-Site_2', 'C5-Site_3', 'C5-Site_4', 'C5-Site_5', 'C5-Site_6', 'C5-Site_7', 'C5-Site_8'
-]
-
-
-# Output paths for each experiment
-# DATA_PREP = '/gpfs/CompMicro/Hummingbird/Processed/Galina/VAE/data_temp'
-# output = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation'
-output_NOVEMBER = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation/NOVEMBER/raw'
-output_JANUARY = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation/JANUARY/raw'
-output_JANUARY_FAST = '/gpfs/CompMicro/Projects/learningCellState/microglia/raw_for_segmentation/JANUARY_FAST/raw'
-
-
-def main(arguments):
-
-    if not arguments.input or not arguments.output:
-        print('no input or output supplied, using hard coded paths')
-
-        for sites, output, path in zip([sites_NOVEMBER, sites_JANUARY, sites_JANUARY_FAST],
-                                     [output_NOVEMBER, output_JANUARY, output_JANUARY_FAST],
-                                     [path_NOVEMBER, path_JANUARY, path_JANUARY_FAST]):
-            for site in sites:
-
-                if not os.path.exists(output):
-                    os.makedirs(output)
-
-                out = output
-
-                try:
-                    print(f"writing {site} to {out}", flush=True)
-                    write_raw_to_npy(path, site, out, multipage=True)
-                except Exception as e:
-                    print(f"\terror in writing {site}", flush=True)
-
+    if arguments_.fov:
+        sites = arguments_.fov
     else:
-        path = arguments.input
-        output = arguments.output
-        sites = os.listdir(path)
+        # assume all subdirectories are site/FOVs
+        sites = [site for site in os.listdir(path) if os.path.isdir(os.path.join(path, site))]
 
-        for site in sites:
-            if not os.path.exists(output):
-                os.makedirs(output)
+    for site in sites:
+        if not os.path.exists(outputs):
+            os.makedirs(outputs)
 
-            out = output
+        out = outputs
 
-            try:
-                print(f"writing {site} to {out}", flush=True)
-                write_raw_to_npy(path, site, out, multipage=True)
-            except Exception as e:
-                print(f"\terror in writing {site}", flush=True)
+        try:
+            print(f"writing {site} to {out}", flush=True)
+            write_raw_to_npy(path, site, out, multipage=True)
+        except Exception as e:
+            print(f"\terror in writing {site}", flush=True)
 
 
 def parse_args():
@@ -100,21 +48,28 @@ def parse_args():
     parser.add_argument(
         '-i', '--input',
         type=str,
-        required=False,
+        required=True,
         help="Path to multipage-tiff file of format [t, x, y]",
     )
     parser.add_argument(
         '-o', '--output',
         type=str,
-        required=False,
+        required=True,
         help="Path to write results",
+    )
+    # sites argument is a list of strings
+    parser.add_argument(
+        '-f', '--fov',
+        type=lambda s: [str(item.strip(' ').strip("'")) for item in s.split(',')],
+        required=False,
+        help="list of field-of-views to process (subfolders in raw data directory)",
     )
     return parser.parse_args()
 
 
 if __name__ == '__main__':
     print(time.asctime(time.localtime(time.time())), flush=True)
-    args = parse_args()
-    main(args)
+    arguments = parse_args()
+    main(arguments)
     print(time.asctime(time.localtime(time.time())), flush=True)
 

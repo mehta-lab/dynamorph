@@ -46,8 +46,8 @@ def extract_patches(paths):
         else:
             print("Building patches %s" % site_path, flush=True)
 
-        process_site_extract_patches(site_path, site_segmentation_path, site_supp_files_folder,
-                                     window_size=256)
+            process_site_extract_patches(site_path, site_segmentation_path, site_supp_files_folder,
+                                         window_size=256)
     return
 
 
@@ -76,16 +76,15 @@ def build_trajectories(paths):
     for site in sites:
         site_path = os.path.join(temp_folder + '/' + site + '.npy')
 
-        site_segmentation_path = os.path.join(temp_folder, '%s_NNProbabilities.npy' % site)
+        # site_segmentation_path = os.path.join(temp_folder, '%s_NNProbabilities.npy' % site)
         site_supp_files_folder = os.path.join(supp_folder, '%s-supps' % site[:2], '%s' % site)
-        if not os.path.exists(site_path) or \
-            not os.path.exists(site_segmentation_path) or \
-            not os.path.exists(site_supp_files_folder):
-                print("Site not found %s" % site_path, flush=True)
+        if not os.path.exists(site_path) or not os.path.exists(site_supp_files_folder):
+            print("Site not found %s" % site_path, flush=True)
         else:
             print("Building trajectories %s" % site_path, flush=True)
+            process_site_build_trajectory(site_supp_files_folder)
 
-        process_site_build_trajectory(site_path, site_segmentation_path, site_supp_files_folder)
+        # process_site_build_trajectory(site_path, site_segmentation_path, site_supp_files_folder)
     return
 
 
@@ -125,8 +124,10 @@ def assemble_VAE(paths):
     assert fs == sorted(fs)
     
     with open(os.path.join(temp_folder, '%s_file_paths.pkl' % sites[0][:2]), 'wb') as f:
+        print(f"\tsaving {os.path.join(temp_folder, '%s_file_paths.pkl' % sites[0][:2])}")
         pickle.dump(fs, f)
 
+    print(f"\tsaving {os.path.join(temp_folder, '%s_static_patches.pt' % sites[0][:2])}")
     torch.save(dataset, os.path.join(temp_folder, '%s_static_patches.pt' % sites[0][:2]))
 
     # Adjust channel mean/std
@@ -137,6 +138,7 @@ def assemble_VAE(paths):
     retard_slice = dataset.tensors[0][:, 1]
     retard_slice = retard_slice / retard_slice.mean() * 0.0285
     adjusted_dataset = TensorDataset(torch.stack([phase_slice, retard_slice], 1))
+    print(f"\tsaving {os.path.join(temp_folder, '%s_adjusted_static_patches.pt' % sites[0][:2])}")
     torch.save(adjusted_dataset, os.path.join(temp_folder, '%s_adjusted_static_patches.pt' % sites[0][:2]))
     return
 
@@ -173,14 +175,20 @@ def process_VAE(paths):
 
     assert len(set(s[:2] for s in sites)) == 1
     well = sites[0][:2]
+    print(f"\tloading file paths {os.path.join(temp_folder, '%s_file_paths.pkl' % well)}")
     fs = pickle.load(open(os.path.join(temp_folder, '%s_file_paths.pkl' % well), 'rb'))
+
+    print(f"\tloading static patches {os.path.join(temp_folder, '%s_adjusted_static_patches.pt' % well)}")
     dataset = torch.load(os.path.join(temp_folder, '%s_adjusted_static_patches.pt' % well))
     dataset = rescale(dataset)
     
     model = VQ_VAE(alpha=0.0005, gpu=True)
     model = model.cuda()
-    model.load_state_dict(torch.load('HiddenStateExtractor/save_0005_bkp4.pt'))
- 
+    if target:
+        model.load_state_dict(torch.load(target))
+    else:
+        model.load_state_dict(torch.load('HiddenStateExtractor/save_0005_bkp4.pt'))
+
     z_bs = {}
     z_as = {}
     for i in range(len(dataset)):
@@ -190,23 +198,33 @@ def process_VAE(paths):
         f_n = fs[i]
         z_bs[f_n] = z_b.cpu().data.numpy()
         z_as[f_n] = z_a.cpu().data.numpy()      
-    
-    pca = pickle.load(open('HiddenStateExtractor/pca_save.pkl', 'rb'))
+
+    # it's not clear where pca_save is created.  Will leave hard-coded path here for now
+    try:
+        pca = pickle.load(open('HiddenStateExtractor/pca_save.pkl', 'rb'))
+    except Exception as ex:
+        pca = None
+        print("no saved PCA found at HiddenStateExtractor/pca_save.pkl'")
 
     dats = np.stack([z_bs[f] for f in fs], 0).reshape((len(dataset), -1))
     with open(os.path.join(temp_folder, '%s_latent_space.pkl' % well), 'wb') as f:
+        print(f"\tsaving {os.path.join(temp_folder, '%s_latent_space.pkl' % well)}")
         pickle.dump(dats, f)
-    dats_ = pca.transform(dats)
-    with open(os.path.join(temp_folder, '%s_latent_space_PCAed.pkl' % well), 'wb') as f:
-        pickle.dump(dats_, f)
-
+    if pca:
+        dats_ = pca.transform(dats)
+        with open(os.path.join(temp_folder, '%s_latent_space_PCAed.pkl' % well), 'wb') as f:
+            print(f"\tsaving {os.path.join(temp_folder, '%s_latent_space_PCAed.pkl' % well)}")
+            pickle.dump(dats_, f)
     
     dats = np.stack([z_as[f] for f in fs], 0).reshape((len(dataset), -1))
     with open(os.path.join(temp_folder, '%s_latent_space_after.pkl' % well), 'wb') as f:
+        print(f"\tsaving {os.path.join(temp_folder, '%s_latent_space_after.pkl' % well)}")
         pickle.dump(dats, f)
-    dats_ = pca.transform(dats)
-    with open(os.path.join(temp_folder, '%s_latent_space_after_PCAed.pkl' % well), 'wb') as f:
-        pickle.dump(dats_, f)
+    if pca:
+        dats_ = pca.transform(dats)
+        with open(os.path.join(temp_folder, '%s_latent_space_after_PCAed.pkl' % well), 'wb') as f:
+            print(f"\tsaving {os.path.join(temp_folder, '%s_latent_space_after_PCAed.pkl' % well)}")
+            pickle.dump(dats_, f)
     
     return
 
@@ -235,12 +253,14 @@ def trajectory_matching(paths):
     wells = set(site[:2] for site in sites)
     assert len(wells) == 1
     well = list(wells)[0]
-      
+
+    print(f"\tloading file_paths {os.path.join(temp_folder, '%s_file_paths.pkl' % well)}")
     fs = pickle.load(open(os.path.join(temp_folder, '%s_file_paths.pkl' % well), 'rb'))
 
     site_trajs = {}
     for site in sites:
         site_supp_files_folder = os.path.join(supp_folder, '%s-supps' % well, '%s' % site)
+        print(f"\tloading cell_traj {os.path.join(site_supp_files_folder, 'cell_traj.pkl')}")
         trajs = pickle.load(open(os.path.join(site_supp_files_folder, 'cell_traj.pkl'), 'rb'))
         for i, t in enumerate(trajs[0]):
             name = site + '/' + str(i)
@@ -253,4 +273,5 @@ def trajectory_matching(paths):
                 site_trajs[name] = traj
           
     with open(os.path.join(temp_folder, '%s_trajectories.pkl' % well), 'wb') as f:
+        print(f"\twriting trajectories {os.path.join(temp_folder, '%s_trajectories.pkl' % well)}")
         pickle.dump(site_trajs, f)
