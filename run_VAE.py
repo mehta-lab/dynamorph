@@ -80,16 +80,16 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        '-i', '--raw',
+        '-r', '--raw',
         type=str,
         required=False,
-        help="Path to multipage-tiff file of format [t, x, y]",
+        help="Path to the folder for raw inputus (multipage-tiff file of format [t, x, y]) and summary results",
     )
     parser.add_argument(
-        '-o', '--supplementary',
+        '-s', '--supplementary',
         type=str,
         required=False,
-        help="Path to write results",
+        help="Path to the folder for supplementary results",
     )
     parser.add_argument(
         '-m', '--method',
@@ -109,7 +109,7 @@ def parse_args():
         '-w', '--weights',
         type=str,
         required=False,
-        help="Path to DNN model weights for VQ-VAE or PCA weights",
+        help="Path to pytorch model weights for VQ-VAE or PCA weights",
     )
     return parser.parse_args()
 

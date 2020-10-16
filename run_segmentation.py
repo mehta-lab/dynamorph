@@ -94,13 +94,13 @@ def parse_args():
         '-r', '--raw',
         type=str,
         required=True,
-        help="Path to multipage-tiff file of format [t, x, y]",
+        help="Path to the folder for raw inputus (multipage-tiff file of format [t, x, y]) and summary results",
     )
     parser.add_argument(
         '-s', '--supplementary',
         type=str,
         required=False,
-        help="Path to write results",
+        help="Path to the folder for supplementary results",
     )
     parser.add_argument(
         '-v', '--validation',
@@ -113,7 +113,7 @@ def parse_args():
         type=str,
         required=False,
         default=None,
-        help="Path to pytorch weights from trained segmentaton model",
+        help="Path to keras weights for trained UNet segmentaton model",
     )
     parser.add_argument(
         '-m', '--method',
