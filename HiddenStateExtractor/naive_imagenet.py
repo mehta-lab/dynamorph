@@ -5,7 +5,6 @@ import pickle
 import cv2
 
 
-DATA_ROOT = '/mnt/comp_micro/Projects/CellVAE'
 CHANNEL_MAX = [65535., 65535.]
 
 
@@ -131,15 +130,15 @@ def predict(fs,
 
 
 # if __name__ == '__main__':
-#     fs = read_file_path(DATA_ROOT + '/Data/StaticPatches')
+#     path = '/mnt/comp_micro/Projects/CellVAE'
+#     fs = read_file_path(os.path.join(path, 'Data', 'StaticPatches'))
 #     extractor, preprocess_fn = initiate_model()
 #     ys = predict(fs, extractor, preprocess_fn, cs=[0, 1], channel_max=CHANNEL_MAX)
     
 #     output = {}
 #     for f_n, y in zip(fs, ys):
 #         output[f_n] = y
-#     with open('/mnt/comp_micro/Projects/CellVAE/Data/EncodedResNet50.pkl', 'wb') as f:
+#     with open(os.path.join(path, 'Data' 'EncodedResNet50.pkl'), 'wb') as f:
 #         pickle.dump(output, f)
-    
-  
+
   

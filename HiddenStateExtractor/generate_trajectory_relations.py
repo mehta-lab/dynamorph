@@ -7,7 +7,7 @@ Created on Wed Aug 14 16:19:26 2019
 """
 import pickle
 import os
-from .naive_imagenet import read_file_path, DATA_ROOT
+from .naive_imagenet import read_file_path
 
 # Support script for generating relation dict, which is used for 
 # dataset re-ordering (necessary for matching loss)

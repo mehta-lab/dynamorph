@@ -10,7 +10,7 @@ import torch.nn.functional as F
 import pickle
 from torch.utils.data import TensorDataset, DataLoader
 from scipy.sparse import csr_matrix
-from .naive_imagenet import DATA_ROOT, read_file_path
+from .naive_imagenet import read_file_path
 
 
 CHANNEL_RANGE = [(0.3, 0.8), (0., 0.6)] 
@@ -1048,7 +1048,7 @@ if __name__ == '__main__':
     path = '/mnt/comp_micro/Projects/CellVAE'
 
     ### Load Data ###
-    fs = read_file_path(DATA_ROOT + '/Data/StaticPatches')
+    fs = read_file_path(path + '/Data/StaticPatches')
 
     dataset = prepare_dataset(fs, cs=cs, input_shape=input_shape, channel_max=CHANNEL_MAX)
     dataset_mask = prepare_dataset(fs, cs=cs_mask, input_shape=input_shape, channel_max=[1., 1.])
