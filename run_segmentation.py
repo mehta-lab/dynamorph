@@ -94,7 +94,7 @@ def parse_args():
         '-r', '--raw',
         type=str,
         required=True,
-        help="Path to the folder for raw inputus (multipage-tiff file of format [t, x, y]) and summary results",
+        help="Path to the folder for raw inputs (multipage-tiff file of format [t, x, y]) and summary results",
     )
     parser.add_argument(
         '-s', '--supplementary',
