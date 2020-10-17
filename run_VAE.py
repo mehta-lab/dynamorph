@@ -1,4 +1,4 @@
-from pipeline.patch_VAE import assemble_VAE, process_VAE, trajectory_matching
+from pipeline.patch_VAE import assemble_VAE, process_VAE, process_PCA, trajectory_matching
 from multiprocessing import Pool, Queue, Process
 import os
 import argparse
@@ -19,6 +19,8 @@ class Worker(Process):
             assemble_VAE(self.inputs)
         elif self.method == 'process':
             process_VAE(self.inputs)
+        elif self.method == 'pca':
+            process_PCA(self.inputs)
         elif self.method == 'trajectory_matching':
             trajectory_matching(self.inputs)
 
@@ -27,6 +29,7 @@ def main(arguments_):
 
     inputs = arguments_.raw
     outputs = arguments_.supplementary
+    weights = arguments_.weights
     method = arguments_.method
 
     # assemble needs raw (write file_paths/static_patches/adjusted_patches), and supp (read site-supps)
@@ -36,19 +39,19 @@ def main(arguments_):
         if not arguments_.supplementary:
             raise AttributeError("supplementary directory must be specified when method = assemble")
 
-    # process needs raw (load _file_paths), and target (torch weights)
-    elif arguments_.method == 'process':
+    # process and pca needs raw (load _file_paths), and target (torch weights)
+    elif arguments_.method == 'process' or arguments_.method == 'pca':
         if not arguments_.raw:
-            raise AttributeError("raw directory must be specified when method = process")
+            raise AttributeError("raw directory must be specified when method = process / pca")
         if not arguments_.weights:
-            raise AttributeError("pytorch VQ-VAE weights path must be specified when method = process")
+            raise AttributeError("pytorch VQ-VAE weights path must be specified when method = process / pca")
 
     # trajectory matching needs raw (load file_paths, write trajectories), supp (load cell_traj)
     elif arguments_.method == 'trajectory_matching':
         if not arguments_.raw:
-            raise AttributeError("raw directory must be specified when method = assemble")
+            raise AttributeError("raw directory must be specified when method = trajectory_matching")
         if not arguments_.supplementary:
-            raise AttributeError("supplementary directory must be specified when method = assemble")
+            raise AttributeError("supplementary directory must be specified when method = trajectory_matching")
 
     if arguments_.fov:
         sites = arguments_.fov
@@ -61,18 +64,8 @@ def main(arguments_):
     wells = set(s[:2] for s in sites)
     for i, well in enumerate(wells):
         well_sites = [s for s in sites if s[:2] == well]
-        print(well_sites)
-        # if method == "assemble":
-        #     # for "assemble" it is coded such that first arg is the output directory, second arg is input
-        #     args = (outputs, inputs, TARGET, well_sites)
-        if method == "process":
-            if arguments_.weights is None:
-                raise AttributeError("path to VQ-VAE weights must be defined for method=process")
-            else:
-                weights = arguments_.weights
-                args = (inputs, None, weights, well_sites)
-        else:
-            args = (inputs, outputs, None, well_sites)
+        print(well_sites)        
+        args = (inputs, outputs, weights, well_sites)
         p = Worker(args, gpuid=i, method=method)
         p.start()
         p.join()
@@ -87,24 +80,24 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        '-i', '--raw',
+        '-r', '--raw',
         type=str,
         required=False,
-        help="Path to multipage-tiff file of format [t, x, y]",
+        help="Path to the folder for raw inputs (multipage-tiff file of format [t, x, y]) and summary results",
     )
     parser.add_argument(
-        '-o', '--supplementary',
+        '-s', '--supplementary',
         type=str,
         required=False,
-        help="Path to write results",
+        help="Path to the folder for supplementary results",
     )
     parser.add_argument(
         '-m', '--method',
         type=str,
         required=True,
-        choices=['assemble', 'process', 'trajectory_matching'],
+        choices=['assemble', 'process', 'pca', 'trajectory_matching'],
         default='assemble',
-        help="Method: one of 'assemble', 'process', or 'trajectory_matching'",
+        help="Method: one of 'assemble', 'process', 'pca' or 'trajectory_matching'",
     )
     parser.add_argument(
         '-f', '--fov',
@@ -116,7 +109,7 @@ def parse_args():
         '-w', '--weights',
         type=str,
         required=False,
-        help="Path to DNN model weights for VQ-VAE",
+        help="Path to pytorch model weights for VQ-VAE or PCA weights",
     )
     return parser.parse_args()
 

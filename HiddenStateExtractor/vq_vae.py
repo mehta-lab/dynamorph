@@ -1001,17 +1001,10 @@ def rescale(dataset):
     """ Rescale value range of image patches in `dataset` to CHANNEL_RANGE
 
     Args:
-<<<<<<< HEAD
-      dataset (TensorDataset): dataset before rescaling
-
-    Returns:
-      TensorDataset: dataset after rescaling
-=======
         dataset (TensorDataset): dataset before rescaling
 
     Returns:
         TensorDataset: dataset after rescaling
->>>>>>> 22b8d3e905a8080a0ceaea61f0926df613099b72
 
     """
     tensor = dataset.tensors[0]

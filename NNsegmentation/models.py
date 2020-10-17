@@ -216,27 +216,27 @@ class Segment_with_time(Segment):
         pre_conv = Dense(3, activation=None, name='pre_conv')(inp)
 
         backbone = segmentation_models.backbones.get_backbone(
-          'resnet34',
-          input_shape=list(self.input_shape[:2]) + [3],
-          weights='imagenet',
-          include_top=False)
+            'resnet34',
+            input_shape=list(self.input_shape[:2]) + [3],
+            weights='imagenet',
+            include_top=False)
 
         if self.freeze_encoder:
-          for layer in backbone.layers:
-              if not isinstance(layer, BatchNormalization):
-                  layer.trainable=False
+            for layer in backbone.layers:
+                if not isinstance(layer, BatchNormalization):
+                    layer.trainable=False
 
         skip_connection_layers = segmentation_models.backbones.get_feature_layers('resnet34', n=4)
         self.unet = segmentation_models.unet.builder.build_unet(
-          backbone,
-          self.unet_feat,
-          skip_connection_layers,
-          decoder_filters=(256, 128, 64, 32, 16),
-          block_type='upsampling',
-          activation='linear',
-          n_upsample_blocks=5,
-          upsample_rates=(2, 2, 2, 2, 2),
-          use_batchnorm=True)
+            backbone,
+            self.unet_feat,
+            skip_connection_layers,
+            decoder_filters=(256, 128, 64, 32, 16),
+            block_type='upsampling',
+            activation='linear',
+            n_upsample_blocks=5,
+            upsample_rates=(2, 2, 2, 2, 2),
+            use_batchnorm=True)
 
         output = self.unet(pre_conv)
 
@@ -246,5 +246,5 @@ class Segment_with_time(Segment):
         output = Dense(self.n_classes, activation=None)(output)
         self.model = Model(self.input, output)
         self.model.compile(optimizer='Adam',
-                         loss=self.loss_func,
-                         metrics=[])
+                           loss=self.loss_func,
+                           metrics=[])
