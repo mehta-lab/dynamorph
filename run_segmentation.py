@@ -49,7 +49,7 @@ def main(arguments_):
     # segmentation requires raw (NNProb), and weights to be defined
     elif method == 'segmentation':
         if arguments_.weights is None:
-            raise AttributeError("Weights path must be specified when method=segmentation")
+            raise AttributeError("Weights supp_dir must be specified when method=segmentation")
         else:
             TARGET = arguments_.weights
 
@@ -65,7 +65,8 @@ def main(arguments_):
         sites = arguments_.fov
     else:
         # get all "XX-SITE_#" identifiers in raw data directory
-        sites = [os.path.splitext(site)[0][0:9].split('_NN')[0] for site in os.listdir(inputs) if site.endswith(".npy")]
+        img_names = [file for file in os.listdir(inputs) if (file.endswith(".npy")) & ('_NN' not in file)]
+        sites = [os.path.splitext(img_name)[0] for img_name in img_names]
         sites = list(set(sites))
 
     segment_sites = [site for site in sites if os.path.exists(os.path.join(inputs, "%s.npy" % site))]

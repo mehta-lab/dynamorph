@@ -22,9 +22,10 @@ def fit_PCA(train_data):
 
 
 if __name__ == '__main__':
-    path = '/gpfs/CompMicro/projects/dynamorph/microglia/JUNE_data_processed'
-    dats = pickle.load(open(os.path.join(path, 'D_latent_space.pkl'), 'rb'))
-
+    # input_path = '/gpfs/CompMicro/projects/dynamorph/microglia/JUNE_data_processed'
+    # dats = pickle.load(open(os.input_path.join(input_path, 'D_latent_space.pkl'), 'rb'))
+    path = '/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_input'
+    dats = pickle.load(open(os.path.join(path, 'im_latent_space_after.pkl'), 'rb'))
     pca_model, dats_transformed = fit_PCA(dats)
-    with open('pca_save.pkl', 'wb') as f:
+    with open(os.path.join(path, 'pca_save.pkl'), 'wb') as f:
         pickle.dump(pca_model, f)

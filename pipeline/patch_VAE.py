@@ -5,13 +5,14 @@ os.environ['KERAS_BACKEND'] = 'tensorflow'
 import pickle
 import torch
 import numpy as np
+import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from torch.utils.data import TensorDataset
 
 from SingleCellPatch.generate_trajectories import process_site_build_trajectory
-from SingleCellPatch.extract_patches import process_site_extract_patches
+from SingleCellPatch.extract_patches import process_site_extract_patches, im_adjust
 
-from HiddenStateExtractor.vq_vae import VQ_VAE, prepare_dataset_v2, rescale
+from HiddenStateExtractor.vq_vae_cm import VQ_VAE, prepare_dataset_v2, zscore
 
 
 def extract_patches(paths):
@@ -48,7 +49,8 @@ def extract_patches(paths):
             process_site_extract_patches(site_path, 
                                          site_segmentation_path, 
                                          site_supp_files_folder,
-                                         window_size=256)
+                                         window_size=256,
+                                         save_fig=True)
     return
 
 
@@ -129,23 +131,27 @@ def assemble_VAE(paths):
     with open(os.path.join(summary_folder, '%s_file_paths.pkl' % well), 'wb') as f:
         pickle.dump(fs, f)
 
-    print(f"\tsaving {os.path.join(summary_folder, '%s_static_patches.pt' % well)}")
-    torch.save(dataset, os.path.join(summary_folder, '%s_static_patches.pt' % well))
+    # print(f"\tsaving {os.input_path.join(summary_folder, '%s_static_patches.pt' % well)}")
+    # torch.save(dataset, os.input_path.join(summary_folder, '%s_static_patches.pt' % well))
+
+    print(f"\tsaving {os.path.join(summary_folder, '%s_static_patches.pkl' % well)}")
+    with open(os.path.join(summary_folder, '%s_static_patches.pkl' % well), 'wb') as f:
+        pickle.dump(dataset, f, protocol=4)
 
     # Adjust channel mean/std
     # phase: 0.4980 plus/minus 0.0257
     # retardance: 0.0285 plus/minus 0.0261, only adjust for mean
-    phase_slice = dataset.tensors[0][:, 0]
-    phase_slice = ((phase_slice - phase_slice.mean()) / phase_slice.std()) * 0.0257 + 0.4980
-    retard_slice = dataset.tensors[0][:, 1]
-    retard_slice = retard_slice / retard_slice.mean() * 0.0285
-    adjusted_dataset = TensorDataset(torch.stack([phase_slice, retard_slice], 1))
-    print(f"\tsaving {os.path.join(summary_folder, '%s_adjusted_static_patches.pt' % well)}")
-    torch.save(adjusted_dataset, os.path.join(summary_folder, '%s_adjusted_static_patches.pt' % well))
+    # phase_slice = dataset.tensors[0][:, 0]
+    # phase_slice = ((phase_slice - phase_slice.mean()) / phase_slice.std()) * 0.0257 + 0.4980
+    # retard_slice = dataset.tensors[0][:, 1]
+    # retard_slice = retard_slice / retard_slice.mean() * 0.0285
+    # adjusted_dataset = TensorDataset(torch.stack([phase_slice, retard_slice], 1))
+    # print(f"\tsaving {os.input_path.join(summary_folder, '%s_adjusted_static_patches.pt' % well)}")
+    # torch.save(adjusted_dataset, os.input_path.join(summary_folder, '%s_adjusted_static_patches.pt' % well))
     return
 
 
-def process_VAE(paths):
+def process_VAE(paths, save_ouput=True):
     """ Wrapper method for VAE encoding
 
     This function loads prepared dataset and applies trained VAE to encode 
@@ -169,6 +175,7 @@ def process_VAE(paths):
     """
     # these sites should be from a single condition (C5, C4, B-wells, etc..)
     summary_folder, supp_folder, model_path, sites = paths[0], paths[1], paths[2], paths[3]
+    train_folder = os.path.dirname(model_path)
     assert len(set(site[:2] for site in sites)) == 1, \
         "Sites should be from a single well/condition"
     well = sites[0][:2]
@@ -176,9 +183,12 @@ def process_VAE(paths):
     print(f"\tloading file paths {os.path.join(summary_folder, '%s_file_paths.pkl' % well)}")
     fs = pickle.load(open(os.path.join(summary_folder, '%s_file_paths.pkl' % well), 'rb'))
 
-    print(f"\tloading static patches {os.path.join(summary_folder, '%s_adjusted_static_patches.pt' % well)}")
-    dataset = torch.load(os.path.join(summary_folder, '%s_adjusted_static_patches.pt' % well))
-    dataset = rescale(dataset)
+    # print(f"\tloading static patches {os.supp_dir.join(raw_dir, '%s_adjusted_static_patches.pt' % well)}")
+    # dataset = torch.load(os.supp_dir.join(raw_dir, '%s_adjusted_static_patches.pt' % well))
+    print(f"\tloading static patches {os.path.join(summary_folder, '%s_static_patches.pkl' % well)}")
+    dataset = pickle.load(open(os.path.join(summary_folder, '%s_static_patches.pkl' % well), 'rb'))
+    dataset = zscore(dataset)
+    dataset = TensorDataset(torch.from_numpy(dataset).float())
     
     model = VQ_VAE(alpha=0.0005, gpu=True)
     model = model.cuda()
@@ -210,7 +220,32 @@ def process_VAE(paths):
     print(f"\tsaving {os.path.join(summary_folder, '%s_latent_space_after.pkl' % well)}")
     with open(os.path.join(summary_folder, '%s_latent_space_after.pkl' % well), 'wb') as f:
         pickle.dump(dats, f)
-    return
+
+    if save_ouput:
+        np.random.seed(0)
+        random_inds = np.random.randint(0, len(dataset), (10,))
+        for i in random_inds:
+            sample = dataset[i:(i + 1)][0].cuda()
+            output = model(sample)[0]
+            im_phase = im_adjust(sample[0, 0].cpu().data.numpy())
+            im_phase_recon = im_adjust(output[0, 0].cpu().data.numpy())
+            im_retard = im_adjust(sample[0, 1].cpu().data.numpy())
+            im_retard_recon = im_adjust(output[0, 1].cpu().data.numpy())
+            n_rows = 2
+            n_cols = 2
+            fig, ax = plt.subplots(n_rows, n_cols, squeeze=False)
+            ax = ax.flatten()
+            fig.set_size_inches((15, 5 * n_rows))
+            axis_count = 0
+            for im, name in zip([im_phase, im_phase_recon, im_retard, im_retard_recon],
+                                ['phase', 'phase_recon', 'im_retard', 'retard_recon']):
+                ax[axis_count].imshow(np.squeeze(im), cmap='gray')
+                ax[axis_count].axis('off')
+                ax[axis_count].set_title(name, fontsize=12)
+                axis_count += 1
+            fig.savefig(os.path.join(train_folder, 'recon_%d.jpg' % i),
+                        dpi=300, bbox_inches='tight')
+            plt.close(fig)
 
 
 def process_PCA(paths):

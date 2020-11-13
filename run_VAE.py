@@ -12,13 +12,13 @@ class Worker(Process):
         self.method = method
 
     def run(self):
-        #os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-        #os.environ["CUDA_VISIBLE_DEVICES"] = str(self.gpuid)
+        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(self.gpuid)
 
         if self.method == 'assemble':
             assemble_VAE(self.inputs)
         elif self.method == 'process':
-            process_VAE(self.inputs)
+            process_VAE(self.inputs, save_ouput=True)
         elif self.method == 'pca':
             process_PCA(self.inputs)
         elif self.method == 'trajectory_matching':
@@ -31,6 +31,7 @@ def main(arguments_):
     outputs = arguments_.supplementary
     weights = arguments_.weights
     method = arguments_.method
+    gpu = arguments_.gpu
 
     # assemble needs raw (write file_paths/static_patches/adjusted_patches), and supp (read site-supps)
     if arguments_.method == 'assemble':
@@ -57,8 +58,8 @@ def main(arguments_):
         sites = arguments_.fov
     else:
         # get all "XX-SITE_#" identifiers in raw data directory
-        sites = [os.path.splitext(site)[0][0:9].split('_NN')[0] for site in os.listdir(inputs) if
-                 site.endswith(".npy")]
+        img_names = [file for file in os.listdir(inputs) if (file.endswith(".npy")) & ('_NN' not in file)]
+        sites = [os.path.splitext(img_name)[0] for img_name in img_names]
         sites = list(set(sites))
 
     wells = set(s[:2] for s in sites)
@@ -66,7 +67,7 @@ def main(arguments_):
         well_sites = [s for s in sites if s[:2] == well]
         print(well_sites)        
         args = (inputs, outputs, weights, well_sites)
-        p = Worker(args, gpuid=i, method=method)
+        p = Worker(args, gpuid=gpu, method=method)
         p.start()
         p.join()
 
@@ -110,6 +111,13 @@ def parse_args():
         type=str,
         required=False,
         help="Path to pytorch model weights for VQ-VAE or PCA weights",
+    )
+    parser.add_argument(
+        '-g', '--gpu',
+        type=int,
+        required=False,
+        default=0,
+        help="ID of the GPU to use",
     )
     return parser.parse_args()
 

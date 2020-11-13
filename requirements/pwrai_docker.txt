@@ -1,0 +1,7 @@
+matplotlib>=3.0.3
+scipy>=1.2.1
+matplotlib>=3.0.3
+tifffile>=0.15.1
+imageio>=2.6.0
+keras==2.2.5
+segmentation_models==0.2.1
