@@ -1,5 +1,6 @@
 from pipeline.patch_VAE import assemble_VAE, process_VAE, process_PCA, trajectory_matching
-from multiprocessing import Pool, Queue, Process
+from torch.multiprocessing import Pool, Queue, Process
+import torch.multiprocessing as mp
 import os
 import argparse
 
@@ -44,7 +45,9 @@ def main(arguments_):
     elif arguments_.method == 'process' or arguments_.method == 'pca':
         if not arguments_.raw:
             raise AttributeError("raw directory must be specified when method = process / pca")
-        if not arguments_.weights:
+        if type(weights) is not list:
+            weights = [weights]
+        if not weights:
             raise AttributeError("pytorch VQ-VAE weights path must be specified when method = process / pca")
 
     # trajectory matching needs raw (load file_paths, write trajectories), supp (load cell_traj)
@@ -63,13 +66,15 @@ def main(arguments_):
         sites = list(set(sites))
 
     wells = set(s[:2] for s in sites)
+    mp.set_start_method('spawn')
     for i, well in enumerate(wells):
-        well_sites = [s for s in sites if s[:2] == well]
-        print(well_sites)        
-        args = (inputs, outputs, weights, well_sites)
-        p = Worker(args, gpuid=gpu, method=method)
-        p.start()
-        p.join()
+        for weight in weights:
+            well_sites = [s for s in sites if s[:2] == well]
+            # print(well_sites)
+            args = (inputs, outputs, weight, well_sites)
+            p = Worker(args, gpuid=gpu, method=method)
+            p.start()
+            p.join()
 
 
 def parse_args():
@@ -108,6 +113,8 @@ def parse_args():
     )
     parser.add_argument(
         '-w', '--weights',
+        nargs='+',
+        default=[],
         type=str,
         required=False,
         help="Path to pytorch model weights for VQ-VAE or PCA weights",

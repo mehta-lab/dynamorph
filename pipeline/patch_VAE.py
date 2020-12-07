@@ -88,6 +88,66 @@ def build_trajectories(paths):
     return
 
 
+def generate_trajectory_relations(paths):
+    """ Find pair relations (adjacent frame, same trajectory) in static patches
+
+    Results will be saved under `raw_folder`
+
+    Args:
+        sites (list of str): sites from the same well
+        raw_folder (str): path to save image stacks, segmentation stacks, etc.
+        supp_folder (str): path to save supplementary data
+
+    """
+
+    raw_folder, supp_folder, model_path, sites = paths[0], paths[1], paths[2], paths[3]
+
+    assert len(set(s[:2] for s in sites)) == 1
+    well = sites[0][:2]
+    fs = pickle.load(open(os.path.join(raw_folder, "%s_file_paths.pkl" % well), 'rb'))
+    relations = {}
+
+    def find_key(fs, key):
+        inds = []
+        for i, f in enumerate(fs):
+            if key in f:
+                inds.append(i)
+        return inds[0] if len(inds) == 1 else None
+
+    for site in sites:
+        print(site)
+        trajectories = pickle.load(open(
+            os.path.join(supp_folder, "%s-supps" % well, site, "cell_traj.pkl"), 'rb'))[0]
+        print(trajectories)
+        # print(fs)
+        for t in trajectories:
+            keys = sorted(t.keys())
+            t_inds = []
+            for k in keys:
+                a_ind = find_key(fs, '/%s/%d_%d.' % (site, k, t[k]))
+                if a_ind is None:
+                    print('/%s/%d_%d.' % (site, k, t[k]))
+                assert not a_ind is None
+                t_inds.append(a_ind)
+                # Adjacent frames
+                if k - 1 in keys:
+                    b_ind = find_key(fs, '/%s/%d_%d.' % (site, k - 1, t[k - 1]))
+                    relations[(a_ind, b_ind)] = 2
+                if k + 1 in keys:
+                    b_ind = find_key(fs, '/%s/%d_%d.' % (site, k + 1, t[k + 1]))
+                    relations[(a_ind, b_ind)] = 2
+
+            # Same trajectory
+            for i in t_inds:
+                for j in t_inds:
+                    if not (i, j) in relations:
+                        relations[(i, j)] = 1
+
+    with open(os.path.join(raw_folder, "%s_static_patches_relations.pkl" % well), 'wb') as f:
+        pickle.dump(relations, f)
+    return
+
+
 def assemble_VAE(paths):
     """ Wrapper method for prepare dataset for VAE encoding
 
@@ -173,9 +233,16 @@ def process_VAE(paths, save_ouput=True):
             3 - list of site names
 
     """
+    #TODO: add pooling datasets features and remove hardcoded normalization constants
+    channel_mean = [0.49998672, 0.007081]
+    channel_std = [0.00074311, 0.00906428]
     # these sites should be from a single condition (C5, C4, B-wells, etc..)
     summary_folder, supp_folder, model_path, sites = paths[0], paths[1], paths[2], paths[3]
-    train_folder = os.path.dirname(model_path)
+    model_folder = os.path.dirname(model_path)
+    model_name = os.path.basename(model_folder)
+    output_dir = os.path.join(summary_folder, model_name)
+    os.makedirs(output_dir, exist_ok=True)
+
     assert len(set(site[:2] for site in sites)) == 1, \
         "Sites should be from a single well/condition"
     well = sites[0][:2]
@@ -187,7 +254,7 @@ def process_VAE(paths, save_ouput=True):
     # dataset = torch.load(os.supp_dir.join(raw_dir, '%s_adjusted_static_patches.pt' % well))
     print(f"\tloading static patches {os.path.join(summary_folder, '%s_static_patches.pkl' % well)}")
     dataset = pickle.load(open(os.path.join(summary_folder, '%s_static_patches.pkl' % well), 'rb'))
-    dataset = zscore(dataset)
+    dataset = zscore(dataset, channel_mean=channel_mean, channel_std=channel_std)
     dataset = TensorDataset(torch.from_numpy(dataset).float())
     
     model = VQ_VAE(alpha=0.0005, gpu=True)
@@ -212,13 +279,13 @@ def process_VAE(paths, save_ouput=True):
         z_as[f_n] = z_a.cpu().data.numpy()      
 
     dats = np.stack([z_bs[f] for f in fs], 0).reshape((len(dataset), -1))
-    print(f"\tsaving {os.path.join(summary_folder, '%s_latent_space.pkl' % well)}")
-    with open(os.path.join(summary_folder, '%s_latent_space.pkl' % well), 'wb') as f:
+    print(f"\tsaving {os.path.join(output_dir, '%s_latent_space.pkl' % well)}")
+    with open(os.path.join(output_dir, '%s_latent_space.pkl' % well), 'wb') as f:
         pickle.dump(dats, f)
     
     dats = np.stack([z_as[f] for f in fs], 0).reshape((len(dataset), -1))
-    print(f"\tsaving {os.path.join(summary_folder, '%s_latent_space_after.pkl' % well)}")
-    with open(os.path.join(summary_folder, '%s_latent_space_after.pkl' % well), 'wb') as f:
+    print(f"\tsaving {os.path.join(output_dir, '%s_latent_space_after.pkl' % well)}")
+    with open(os.path.join(output_dir, '%s_latent_space_after.pkl' % well), 'wb') as f:
         pickle.dump(dats, f)
 
     if save_ouput:
@@ -243,7 +310,7 @@ def process_VAE(paths, save_ouput=True):
                 ax[axis_count].axis('off')
                 ax[axis_count].set_title(name, fontsize=12)
                 axis_count += 1
-            fig.savefig(os.path.join(train_folder, 'recon_%d.jpg' % i),
+            fig.savefig(os.path.join(output_dir, 'recon_%d.jpg' % i),
                         dpi=300, bbox_inches='tight')
             plt.close(fig)
 
@@ -274,6 +341,10 @@ def process_PCA(paths):
     """
     # these sites should be from a single condition (C5, C4, B-wells, etc..)
     summary_folder, supp_folder, model_path, sites = paths[0], paths[1], paths[2], paths[3]
+    model_folder = os.path.dirname(model_path)
+    model_name = os.path.basename(model_folder)
+    output_dir = os.path.join(summary_folder, model_name)
+    os.makedirs(output_dir, exist_ok=True)
     assert len(set(site[:2] for site in sites)) == 1, \
         "Sites should be from a single well/condition"
     well = sites[0][:2]
@@ -287,16 +358,18 @@ def process_PCA(paths):
         print(ex)
         raise ValueError("Error in loading pre-saved PCA weights")
 
-    dats = pickle.load(open(os.path.join(summary_folder, '%s_latent_space.pkl' % well), 'rb'))
+    dats = pickle.load(open(os.path.join(output_dir, '%s_latent_space.pkl' % well), 'rb'))
     dats_ = pca.transform(dats)
-    print(f"\tsaving {os.path.join(summary_folder, '%s_latent_space_PCAed.pkl' % well)}")
-    with open(os.path.join(summary_folder, '%s_latent_space_PCAed.pkl' % well), 'wb') as f:
+    output_file = os.path.join(output_dir, '%s_latent_space_PCAed.pkl' % well)
+    print(f"\tsaving {output_file}")
+    with open(output_file, 'wb') as f:
         pickle.dump(dats_, f)
 
     dats = pickle.load(open(os.path.join(summary_folder, '%s_latent_space_after.pkl' % well), 'rb'))
     dats_ = pca.transform(dats)
-    print(f"\tsaving {os.path.join(summary_folder, '%s_latent_space_after_PCAed.pkl' % well)}")
-    with open(os.path.join(summary_folder, '%s_latent_space_after_PCAed.pkl' % well), 'wb') as f:
+    output_file = os.path.join(output_dir, '%s_latent_space_after_PCAed.pkl' % well)
+    print(f"\tsaving {output_file}")
+    with open(output_file, 'wb') as f:
         pickle.dump(dats_, f)
     return
 

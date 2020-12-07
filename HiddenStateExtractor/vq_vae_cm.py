@@ -10,10 +10,12 @@ import torch.nn.functional as F
 import pickle
 import matplotlib.pyplot as plt
 from torch.utils.data import TensorDataset, DataLoader
+from torch.utils.tensorboard import SummaryWriter
+
 from scipy.sparse import csr_matrix
 from .naive_imagenet import get_stack_paths
 from SingleCellPatch.extract_patches import im_adjust
-
+from .generate_trajectory_relations import generate_trajectory_relations
 
 CHANNEL_RANGE = [(0.3, 0.8), (0., 0.6)] 
 CHANNEL_VAR = np.array([0.0475, 0.0394]) # After normalized to CHANNEL_RANGE
@@ -238,7 +240,7 @@ class VQ_VAE(nn.Module):
                  num_residual_layers=2,
                  num_embeddings=64,
                  commitment_cost=0.25,
-                 channel_var=CHANNEL_VAR,
+                 channel_var=np.ones(2),
                  alpha=0.005,
                  gpu=True,
                  **kwargs):
@@ -675,7 +677,8 @@ class AAE(nn.Module):
 
 
 
-def train(model, dataset, relation_mat=None, mask=None, n_epochs=10, lr=0.001, batch_size=16, gpu=True):
+def train(model, dataset, output_dir, relation_mat=None, mask=None,
+          n_epochs=10, lr=0.001, batch_size=16, gpu=True, shuffle_data=False):
     """ Train function for VQ-VAE, VAE, IWAE, etc.
 
     Args:
@@ -689,6 +692,8 @@ def train(model, dataset, relation_mat=None, mask=None, n_epochs=10, lr=0.001, b
         lr (float, optional): learning rate
         batch_size (int, optional): batch size
         gpu (bool, optional): if the model is run on gpu
+        shuffle_data (bool): shuffle data at the end of the epoch to add randomness to mini-batch.
+            Set False when using matching loss
     
     Returns:
         nn.Module: trained model
@@ -696,18 +701,24 @@ def train(model, dataset, relation_mat=None, mask=None, n_epochs=10, lr=0.001, b
     """
     optimizer = t.optim.Adam(model.parameters(), lr=lr, betas=(.9, .999))
     model.zero_grad()
-
-    n_batches = int(np.ceil(len(dataset)/batch_size))
+    n_samples = len(dataset)
+    n_batches = int(np.ceil(n_samples/batch_size))
+    # Declare sample indices and do an initial shuffle
+    sample_ids = np.arange(n_samples)
+    if shuffle_data:
+        np.random.shuffle(sample_ids)
+    writer = SummaryWriter(output_dir)
     for epoch in range(n_epochs):
         recon_loss = []
         perplexities = []
+        matching_loss = []
         print('start epoch %d' % epoch) 
         for i in range(n_batches):
             # Input data
-            batch = dataset[i*batch_size:(i+1)*batch_size][0]
+            sample_ids_batch = sample_ids[i * batch_size:(i + 1) * batch_size]
+            batch = dataset[sample_ids_batch][0]
             if gpu:
                 batch = batch.cuda()
-              
             # Relation (adjacent frame, same trajectory)
             if not relation_mat is None:
                 batch_relation_mat = relation_mat[i*batch_size:(i+1)*batch_size, i*batch_size:(i+1)*batch_size]
@@ -734,8 +745,21 @@ def train(model, dataset, relation_mat=None, mask=None, n_epochs=10, lr=0.001, b
 
             recon_loss.append(loss_dict['recon_loss'])
             perplexities.append(loss_dict['perplexity'])
-        print('epoch %d recon loss: %f perplexity: %f' % \
-            (epoch, sum(recon_loss).item()/len(recon_loss), sum(perplexities).item()/len(perplexities)))
+            matching_loss.append(loss_dict['time_matching_loss'])
+        # shuffle samples ids at the end of the epoch
+        if shuffle_data:
+            np.random.shuffle(sample_ids)
+        recon_loss = sum(recon_loss).item()/len(recon_loss)
+        perplexities = sum(perplexities).item() / len(perplexities)
+        matching_loss = sum(matching_loss).item() / len(matching_loss)
+        print('epoch %d recon loss: %f perplexity: %f matching loss: %f' % \
+            (epoch, recon_loss, perplexities, matching_loss))
+        writer.add_scalar('Loss/recon loss', recon_loss, epoch)
+        writer.add_scalar('Loss/matching loss', matching_loss, epoch)
+        writer.add_scalar('Loss/perplexity', perplexities, epoch)
+        t.save(model.state_dict(), os.path.join(output_dir, 'model.pt'))
+        writer.flush()
+    writer.close()
     return model
 
 
@@ -1095,42 +1119,58 @@ if __name__ == '__main__':
     input_shape = (128, 128)
     gpu = True
     gpuid = 2
-    supp_dir = '/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_supp'
-    train_dir = '/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_train'
-    raw_dir = '/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_input'
+    supp_dirs = ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_supp_tstack',
+                 '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_supp']
+    train_dirs = ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_train_tstack',
+                  '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_train']
+    raw_dirs = ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_input_tstack',
+                '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_input']
+    dir_sets = list(zip(supp_dirs, train_dirs, raw_dirs))
+    dir_sets = dir_sets[0:1]
+    ts_keys = []
+    datasets = []
     ### Load Data ###
-    # fs = get_stack_paths(supp_dir)
-    # dataset, ts_keys = prepare_dataset_v2(fs, cs=cs, input_shape=input_shape, channel_max=CHANNEL_MAX, key='mat')
-    # dataset_mask, fs = prepare_dataset_v2(fs, cs=cs_mask, input_shape=input_shape, channel_max=[1., 1.], key='masked_mat')
-    print(f"\tloading file paths {os.path.join(raw_dir, 'im_file_paths.pkl')}")
-    ts_keys = pickle.load(open(os.path.join(raw_dir, 'im_file_paths.pkl'), 'rb'))
-    print(f"\tloading static patches {os.path.join(raw_dir, 'im_static_patches.pkl')}")
-    dataset = pickle.load(open(os.path.join(raw_dir, 'im_static_patches.pkl'), 'rb'))
-    print('dataset.shape:', dataset.shape)
-    # Note that `relations` is depending on the order of fs (should not sort)
-    # `relations` is generated by script "generate_trajectory_relations.py"
-    # relations = pickle.load(open(supp_dir + '/Data/StaticPatchesAllRelations.pkl', 'rb'))
-    # dataset, relation_mat, inds_in_order = reorder_with_trajectories(dataset, relations, seed=123)
-    # dataset_mask = TensorDataset(dataset_mask.tensors[0][np.array(inds_in_order)])
+    for supp_dir, train_dir, raw_dir in dir_sets:
+        os.makedirs(train_dir, exist_ok=True)
+        print(f"\tloading file paths {os.path.join(raw_dir, 'im_file_paths.pkl')}")
+        ts_key = pickle.load(open(os.path.join(raw_dir, 'im_file_paths.pkl'), 'rb'))
+        print(f"\tloading static patches {os.path.join(raw_dir, 'im_static_patches.pkl')}")
+        dataset = pickle.load(open(os.path.join(raw_dir, 'im_static_patches.pkl'), 'rb'))
+        print('dataset.shape:', dataset.shape)
+        # Note that `relations` is depending on the order of fs (should not sort)
+        # `relations` is generated by script "generate_trajectory_relations.py"
+        relations = pickle.load(open(os.path.join(raw_dir, 'im_static_patches_relations.pkl'), 'rb'))
+        # dataset_mask = TensorDataset(dataset_mask.tensors[0][np.array(inds_in_order)])
+        # print('relations:', relations)
+        ts_keys += ts_key
+        datasets.append(dataset)
+    dataset = np.concatenate(datasets, axis=0)
     dataset = zscore(dataset)
     dataset = TensorDataset(t.from_numpy(dataset).float())
+    dataset, relation_mat, inds_in_order = reorder_with_trajectories(dataset, relations, seed=123)
 
-    ### Initialize Model ###
-    model = VQ_VAE(alpha=0.0005)
+    ## Initialize Model ###
+    model = VQ_VAE(alpha=0.01)
+    model_dir = os.path.join(train_dir, 'mock_matching_point01')
     if gpu:
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         os.environ["CUDA_VISIBLE_DEVICES"] = str(gpuid)
+        print("CUDA_VISIBLE_DEVICES", os.environ["CUDA_VISIBLE_DEVICES"])
+        print("CUDA_DEVICE_ORDER", os.environ["CUDA_DEVICE_ORDER"])
+        print('cuda.current_device:', t.cuda.current_device())
         model = model.cuda()
-    model = train(model, 
-                  dataset, 
-                  relation_mat=None,
+    model = train(model,
+                  dataset,
+                  output_dir=model_dir,
+                  relation_mat=relation_mat,
                   mask=None,
                   n_epochs=5000,
-                  lr=0.0001, 
-                  batch_size=128,
-                  gpu=gpu)
-    t.save(model.state_dict(), os.path.join(train_dir, 'model.pt'))
-    
+                  lr=0.0001,
+                  batch_size=64,
+                  gpu=gpu,
+                  )
+
+
     ### Check coverage of embedding vectors ###
     used_indices = []
     for i in range(500):

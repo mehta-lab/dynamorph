@@ -398,11 +398,14 @@ def process_site_build_trajectory(site_supp_files_folder):
     # Mapping to centroid positions
     cell_positions_dict = {k: dict(cell_positions[k][0] + cell_positions[k][1] + cell_positions[k][2]) for k in cell_positions}
     # Mapping to size of segmentation
-    intensities_dict = {}
+    cell_size_dict = {}
     for t_point in t_points:
-        intensities_d = dict(zip(*np.unique(cell_pixel_assignments[t_point][1], return_counts=True)))
-        intensities_d = {p[0]: intensities_d[p[0]] for p in cell_positions[t_point][0] + cell_positions[t_point][1] + cell_positions[t_point][2]}
-        intensities_dict[t_point] = intensities_d
+        positions, positions_labels = cell_pixel_assignments[t_point]
+        mg_cells, non_mg_cells, other_cells = cell_positions[t_point]
+        all_cells = mg_cells + non_mg_cells + other_cells
+        cell_size_d = dict(zip(*np.unique(positions_labels, return_counts=True)))
+        cell_size_d = {id: cell_size_d[id] for id, position in all_cells}
+        cell_size_dict[t_point] = cell_size_d
 
     # Generate Frame-frame matching
     cell_matchings = {}
@@ -413,15 +416,15 @@ def process_site_build_trajectory(site_supp_files_folder):
         ids2 = sorted(cell_positions_dict[t_point+1].keys())      
         f1 = [cell_positions_dict[t_point][i] for i in ids1]
         f2 = [cell_positions_dict[t_point+1][i] for i in ids2]
-        int1 = [intensities_dict[t_point][i] for i in ids1]
-        int2 = [intensities_dict[t_point+1][i] for i in ids2]
+        int1 = [cell_size_dict[t_point][i] for i in ids1]
+        int2 = [cell_size_dict[t_point+1][i] for i in ids2]
         pairs, top_cost_pairs = frame_matching(f1, f2, int1, int2, dist_cutoff=100)
         for p in top_cost_pairs:
             pairs_to_be_checked[('%d_%d' % (t_point, ids1[p[0]]), '%d_%d' % (t_point+1, ids2[p[1]]))] = top_cost_pairs[p]
         cell_matchings[t_point] = [(ids1[p1], ids2[p2]) for p1, p2 in pairs]
       
     # Connect to trajectories
-    cell_trajectories, cell_trajectories_positions = generate_trajectories(cell_matchings, cell_positions_dict, intensities_dict)
+    cell_trajectories, cell_trajectories_positions = generate_trajectories(cell_matchings, cell_positions_dict, cell_size_dict)
     with open(os.path.join(site_supp_files_folder, 'cell_traj.pkl'), 'wb') as f:
         print(f"\tsaving cell_traj {os.path.join(site_supp_files_folder, 'cell_traj.pkl')}")
         pickle.dump([cell_trajectories, cell_trajectories_positions], f)

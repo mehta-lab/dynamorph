@@ -8,13 +8,11 @@ Created on Wed Jun 26 15:43:41 2019
 
 import cv2
 import numpy as np
-import h5py
 import os
-from sklearn.cluster import DBSCAN
 import matplotlib
+
 matplotlib.use('AGG')
 import matplotlib.pyplot as plt
-from copy import deepcopy
 from scipy.signal import convolve2d
 import pickle
 
@@ -138,114 +136,25 @@ def generate_mask(positions, positions_labels, cell_id, window, window_segmentat
         target_mask.reshape((x_size, y_size, 1)), \
         target_mask2.reshape((x_size, y_size, 1))
 
-
-def instance_clustering(cell_segmentation, 
-                        ct_thr=(500, 12000), 
-                        instance_map=True, 
-                        map_path=None, 
-                        fg_thr=0.3,
-                        DBSCAN_thr=(10, 250)):
-    """ Perform instance clustering on a static frame
-
+def check_segmentation_dim(segmentation):
+    """ Check segmentation mask dimension. Add a background channel if n(channels)==1
     Args:
-        cell_segmentation (np.array): segmentation mask for the frame
-        ct_thr (tuple, optional): lower and upper threshold for cell size (number 
-            of pixels in segmentation mask)
-        instance_map (bool, optional): if to save instance segmentation as an 
-            image
-        map_path (str or None, optional): path to the image (if `instance_map` 
-            is True)
-        fg_thr (float, optional): threshold of foreground, any pixel with 
-            predicted background prob less than this value would be regarded as
-            foreground (MG or Non-MG)
-        DBSCAN_thr (tuple, optional): parameters for DBSCAN, (eps, min_samples)
+        segmentation: (np.array): segmentation mask for the frame
 
     Returns:
-        (list * 3): 3 lists (MG, Non-MG, intermediate) of cell identifiers
-            each entry in the list is a tuple of cell ID and cell center position
-        np.array: array of x, y coordinates of foreground pixels
-        np.array: array of cell IDs of foreground pixels
 
     """
-    cell_segmentation = np.squeeze(cell_segmentation)
+    segmentation = np.squeeze(segmentation)
     # binary segmentation has only foreground channel, add background channel
-    if cell_segmentation.ndim == 2:
-        all_cells = cell_segmentation > fg_thr
-        cell_segmentation = np.stack([1 - cell_segmentation, cell_segmentation], axis=-1)
+    if segmentation.ndim == 2:
+        segmentation = np.stack([1 - segmentation, segmentation], axis=-1)
     # assueming the first channel to be background for multi-class segmentation
-    elif cell_segmentation.ndim == 3:
+    elif segmentation.ndim == 3:
         pass
     else:
-        raise ValueError('Input to instance clustering can only be 2 or 3 dimension, not {}'.
-                         format(cell_segmentation.ndim))
-    all_cells = cell_segmentation[:, :, 0] < fg_thr
-    positions = np.array(list(zip(*np.where(all_cells))))
-    if len(positions) < 1000:
-        # No cell detected
-        return ([], [], []), np.zeros((0, 2), dtype=int), np.zeros((0,), dtype=int)
-
-    # DBSCAN clustering of cell pixels
-    clustering = DBSCAN(eps=DBSCAN_thr[0], min_samples=DBSCAN_thr[1]).fit(positions)
-    positions_labels = clustering.labels_
-    cell_ids, point_cts = np.unique(positions_labels, return_counts=True)
-    
-    mg_cell_positions = []
-    non_mg_cell_positions = []
-    other_cells = []
-    for cell_id, ct in zip(cell_ids, point_cts):
-        if cell_id < 0:
-            # neglect unclustered pixels
-            continue
-        if ct <= ct_thr[0] or ct >= ct_thr[1]:
-            # neglect cells that are too small/big
-            continue
-        points = positions[np.where(positions_labels == cell_id)[0]]
-        # calculate cell center
-        mean_pos = np.mean(points, 0).astype(int)
-        ## TODO: remove hardcoded window size
-        ## define window
-        # window = [(mean_pos[0]-128, mean_pos[0]+128), (mean_pos[1]-128, mean_pos[1]+128)]
-        # skip if cell has too many outlying points
-        # outliers = [p for p in points if not within_range(window, p)]
-        # if len(outliers) > len(points) * 0.05:
-        #     continue
-        cell_segmentation_labels = cell_segmentation[points[:, 0], points[:, 1]]
-        # Calculate if MG/Non-MG/intermediate
-        mg_ratio = (np.argmax(cell_segmentation_labels, 1) == 1).sum()/len(points)
-        non_mg_ratio = (np.argmax(cell_segmentation_labels, 1) == 2).sum()/len(points)
-        if mg_ratio > 0.9:
-            mg_cell_positions.append((cell_id, mean_pos))
-        elif non_mg_ratio > 0.9:
-            non_mg_cell_positions.append((cell_id, mean_pos))
-        else:
-            other_cells.append((cell_id, mean_pos))
-
-    # Save instance segmentation results as image
-    if instance_map and map_path is not None:
-        # bg as -1
-        segmented = np.zeros(cell_segmentation.shape[:2]) - 1
-        for cell_id, mean_pos in mg_cell_positions:
-            points = positions[np.where(positions_labels == cell_id)[0]]
-            for p in points:
-                segmented[p[0], p[1]] = cell_id%10
-        for cell_id, mean_pos in non_mg_cell_positions:
-            points = positions[np.where(positions_labels == cell_id)[0]]
-            for p in points:
-                segmented[p[0], p[1]] = cell_id%10
-        plt.clf()
-        cmap = matplotlib.cm.get_cmap('tab10')
-        cmap.set_under(color='k')
-        plt.imshow(segmented, cmap=cmap, vmin=-0.001, vmax=10.001)
-        # MG will be marked with white text, Non-MG with red text
-        font_mg = {'color': 'white', 'size': 4}
-        font_non_mg = {'color': 'red', 'size': 4}
-        for cell_id, mean_pos in mg_cell_positions:
-            plt.text(mean_pos[1], mean_pos[0], str(cell_id), fontdict=font_mg)
-        for cell_id, mean_pos in non_mg_cell_positions:
-            plt.text(mean_pos[1], mean_pos[0], str(cell_id), fontdict=font_non_mg)
-        plt.axis('off')
-        plt.savefig(map_path, dpi=300)
-    return (mg_cell_positions, non_mg_cell_positions, other_cells), positions, positions_labels
+        raise ValueError('segmentation mask can only be 2 or 3 dimension, not {}'.
+                         format(segmentation.ndim))
+    return segmentation
 
 
 def get_cell_rect_angle(tm):
@@ -268,48 +177,7 @@ def get_cell_rect_angle(tm):
     return ang
 
 
-def process_site_instance_segmentation(site_path, 
-                                       site_segmentation_path, 
-                                       site_supp_files_folder):
-    """ Wrapper method for instance segmentation
-
-    Results will be saved to the supplementary data folder as:
-        "cell_positions.pkl": list of cells in each frame (IDs and positions);
-        "cell_pixel_assignments.pkl": pixel compositions of cells;
-        "segmentation_*.png": image of instance segmentation results.
-    
-    Args:
-        site_path (str): path to image stack (.npy)
-        site_segmentation_path (str): path to semantic segmentation stack (.npy)
-        site_supp_files_folder (str): path to the folder where supplementary 
-            files will be saved
-
-    """
-
-    # TODO: Size is hardcoded here
-    # Should be of size (n_time_points, 2048, 2048, 2), uint16
-    image_stack = np.load(site_path)
-    # Should be of size (n_time_points, 2048, 2048, n_classes), float
-    segmentation_stack = np.load(site_segmentation_path)
-
-    cell_positions = {}
-    cell_pixel_assignments = {}
-    for t_point in range(image_stack.shape[0]):
-        print("\tClustering time %d" % t_point)
-        cell_segmentation = segmentation_stack[t_point, :, :, :]
-        instance_map_path = os.path.join(site_supp_files_folder, 'segmentation_%d.png' % t_point)
-        res = instance_clustering(
-            cell_segmentation, instance_map=True, map_path=instance_map_path, ct_thr=[500, np.inf])
-        cell_positions[t_point] = res[0] # MG, Non-MG, Chimeric Cells
-        cell_pixel_assignments[t_point] = res[1:]
-    with open(os.path.join(site_supp_files_folder, 'cell_positions.pkl'), 'wb') as f:
-        pickle.dump(cell_positions, f)
-    with open(os.path.join(site_supp_files_folder, 'cell_pixel_assignments.pkl'), 'wb') as f:
-        pickle.dump(cell_pixel_assignments, f)
-    return
-
-
-def process_site_extract_patches(site_path, 
+def process_site_extract_patches(site_path,
                                  site_segmentation_path, 
                                  site_supp_files_folder,
                                  window_size=256,
@@ -343,19 +211,19 @@ def process_site_extract_patches(site_path,
     for t_point in range(image_stack.shape[0]):
         site_data = {}
         print("\tWriting time %d" % t_point)
-        raw_image = image_stack[t_point, :, :]
-        cell_segmentation = segmentation_stack[t_point, :, :]
-        
+        raw_image = image_stack[t_point]
+        cell_segmentation = segmentation_stack[t_point]
+        cell_segmentation = check_segmentation_dim(cell_segmentation)
         positions, positions_labels = cell_pixel_assignments[t_point]
         mg_cells, non_mg_cells, other_cells = cell_positions[t_point]
-
+        all_cells = mg_cells + non_mg_cells + other_cells
         # Define fillings for the masked pixels in this slice
         background_pool = raw_image[np.where(cell_segmentation[:, :, 0] > 0.9)]
         background_pool = np.median(background_pool, 0)
         background_filling = np.ones((window_size, window_size, 1)) * background_pool.reshape((1, 1, -1))
-
+        cells_to_keep = []
         # Save all cells in this step, filtering will be performed during analysis
-        for cell_id, cell_position in mg_cells + non_mg_cells + other_cells:
+        for cell_id, cell_position in all_cells:
             cell_name = os.path.join(site_supp_files_folder, '%d_%d.h5' % (t_point, cell_id))
             if cell_name in site_data:
                 continue
@@ -366,6 +234,8 @@ def process_site_extract_patches(site_path,
             window_segmentation = select_window(cell_segmentation, window, padding=None)
             if window_segmentation is None:
                 continue
+            # only keep the cells that has patches
+            cells_to_keep.append(cell_id)
             remove_mask, tm, tm2 = generate_mask(positions, 
                                                  positions_labels, 
                                                  cell_id, 
@@ -403,9 +273,17 @@ def process_site_extract_patches(site_path,
                 fig.savefig(os.path.join(site_supp_files_folder, 'patch_t%d_id%d.jpg' % (t_point, cell_id)),
                             dpi=300, bbox_inches='tight')
                 plt.close(fig)
-
+        # remove cells that don't have patches, update cell_positions
+        cell_positions_t = []
+        for cells in [mg_cells, non_mg_cells, other_cells]:
+            cells = [cell for cell in cells if cell[0] in cells_to_keep]
+            cell_positions_t.append(cells)
+        cell_positions[t_point] = cell_positions_t
         with open(os.path.join(site_supp_files_folder, 'stacks_%d.pkl' % t_point), 'wb') as f:
             pickle.dump(site_data, f)
+        with open(os.path.join(site_supp_files_folder, 'cell_positions.pkl'), 'wb') as f:
+            pickle.dump(cell_positions, f)
+
 
 def im_bit_convert(im, bit=16, norm=False, limit=[]):
     im = im.astype(np.float32, copy=False) # convert to float32 without making a copy to save memory

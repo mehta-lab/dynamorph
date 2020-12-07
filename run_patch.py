@@ -1,6 +1,6 @@
 # bchhun, {2020-02-21}
 
-from pipeline.patch_VAE import extract_patches, build_trajectories
+from pipeline.patch_VAE import extract_patches, build_trajectories, generate_trajectory_relations
 from multiprocessing import Pool, Queue, Process
 import os
 import numpy as np
@@ -22,6 +22,8 @@ class Worker(Process):
             extract_patches(self.inputs)
         elif self.method == 'build_trajectories':
             build_trajectories(self.inputs)
+        elif self.method == 'generate_relations':
+            generate_trajectory_relations(self.inputs)
 
 
 def main(arguments_):
@@ -45,6 +47,11 @@ def main(arguments_):
         if not arguments_.supplementary:
             raise AttributeError("supplementary directory must be specified when method = extract_patches")
 
+    # extract patches needs supp (cell_positions, cell_pixel_assignments)
+    elif arguments_.method == 'generate_relations':
+        if not arguments_.raw:
+            raise AttributeError("raw directory must be specified when method = generate_relations")
+
     if arguments_.fov:
         sites = arguments_.fov
     else:
@@ -52,7 +59,6 @@ def main(arguments_):
         img_names = [file for file in os.listdir(raw) if (file.endswith(".npy")) & ('_NN' not in file)]
         sites = [os.path.splitext(img_name)[0] for img_name in img_names]
         sites = list(set(sites))
-    print(sites)
     # if probabilities and formatted stack exist
     segment_sites = [site for site in sites if os.path.exists(os.path.join(raw, "%s.npy" % site)) and \
                      os.path.exists(os.path.join(raw, "%s_NNProbabilities.npy" % site))]
@@ -99,9 +105,9 @@ def parse_args():
         '-m', '--method',
         type=str,
         required=False,
-        choices=['extract_patches', 'build_trajectories'],
+        choices=['extract_patches', 'build_trajectories', 'generate_relations'],
         default='extract_patches',
-        help="Method: one of 'extract_patches', 'build_trajectories'",
+        help="Method: one of 'extract_patches', 'build_trajectories', 'generate_relations'",
     )
     parser.add_argument(
         '-g', '--gpus',
