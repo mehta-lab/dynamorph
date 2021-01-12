@@ -47,10 +47,11 @@ def main(arguments_):
         if not arguments_.supplementary:
             raise AttributeError("supplementary directory must be specified when method = extract_patches")
 
-    # extract patches needs supp (cell_positions, cell_pixel_assignments)
     elif arguments_.method == 'generate_relations':
         if not arguments_.raw:
             raise AttributeError("raw directory must be specified when method = generate_relations")
+        # generate_relations doesn't support multiprocessing
+        n_gpu = 1
 
     if arguments_.fov:
         sites = arguments_.fov
@@ -62,7 +63,6 @@ def main(arguments_):
     # if probabilities and formatted stack exist
     segment_sites = [site for site in sites if os.path.exists(os.path.join(raw, "%s.npy" % site)) and \
                      os.path.exists(os.path.join(raw, "%s_NNProbabilities.npy" % site))]
-    print(segment_sites)
     if len(segment_sites) == 0:
         raise AttributeError("no sites found in raw directory with preprocessed data and matching NNProbabilities")
 

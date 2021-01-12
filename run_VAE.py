@@ -1,4 +1,5 @@
-from pipeline.patch_VAE import assemble_VAE, process_VAE, process_PCA, trajectory_matching
+from pipeline.patch_VAE import assemble_VAE, process_VAE, trajectory_matching
+from run_dim_reduction import process_PCA
 from torch.multiprocessing import Pool, Queue, Process
 import torch.multiprocessing as mp
 import os
@@ -13,9 +14,6 @@ class Worker(Process):
         self.method = method
 
     def run(self):
-        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(self.gpuid)
-
         if self.method == 'assemble':
             assemble_VAE(self.inputs)
         elif self.method == 'process':
@@ -67,8 +65,12 @@ def main(arguments_):
 
     wells = set(s[:2] for s in sites)
     mp.set_start_method('spawn')
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu)
+    print("CUDA_VISIBLE_DEVICES=" + os.environ["CUDA_VISIBLE_DEVICES"])
     for i, well in enumerate(wells):
         for weight in weights:
+            print('Encoding using model {}'.format(weight))
             well_sites = [s for s in sites if s[:2] == well]
             # print(well_sites)
             args = (inputs, outputs, weight, well_sites)

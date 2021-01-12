@@ -16,6 +16,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2
+import warnings
 from scipy.spatial.distance import cdist
 from scipy.optimize import linear_sum_assignment
 from .extract_patches import within_range, generate_mask, select_window
@@ -411,20 +412,24 @@ def process_site_build_trajectory(site_supp_files_folder):
     cell_matchings = {}
     # TODO: save top cost pairs
     pairs_to_be_checked = {}
-    for t_point in t_points[:-1]:
-        ids1 = sorted(cell_positions_dict[t_point].keys())
-        ids2 = sorted(cell_positions_dict[t_point+1].keys())      
-        f1 = [cell_positions_dict[t_point][i] for i in ids1]
-        f2 = [cell_positions_dict[t_point+1][i] for i in ids2]
-        int1 = [cell_size_dict[t_point][i] for i in ids1]
-        int2 = [cell_size_dict[t_point+1][i] for i in ids2]
-        pairs, top_cost_pairs = frame_matching(f1, f2, int1, int2, dist_cutoff=100)
-        for p in top_cost_pairs:
-            pairs_to_be_checked[('%d_%d' % (t_point, ids1[p[0]]), '%d_%d' % (t_point+1, ids2[p[1]]))] = top_cost_pairs[p]
-        cell_matchings[t_point] = [(ids1[p1], ids2[p2]) for p1, p2 in pairs]
-      
-    # Connect to trajectories
-    cell_trajectories, cell_trajectories_positions = generate_trajectories(cell_matchings, cell_positions_dict, cell_size_dict)
+    try:
+        for t_point in t_points[:-1]:
+            ids1 = sorted(cell_positions_dict[t_point].keys())
+            ids2 = sorted(cell_positions_dict[t_point+1].keys())
+            f1 = [cell_positions_dict[t_point][i] for i in ids1]
+            f2 = [cell_positions_dict[t_point+1][i] for i in ids2]
+            int1 = [cell_size_dict[t_point][i] for i in ids1]
+            int2 = [cell_size_dict[t_point+1][i] for i in ids2]
+            pairs, top_cost_pairs = frame_matching(f1, f2, int1, int2, dist_cutoff=100)
+            for p in top_cost_pairs:
+                pairs_to_be_checked[('%d_%d' % (t_point, ids1[p[0]]), '%d_%d' % (t_point+1, ids2[p[1]]))] = top_cost_pairs[p]
+            cell_matchings[t_point] = [(ids1[p1], ids2[p2]) for p1, p2 in pairs]
+
+        # Connect to trajectories
+        cell_trajectories, cell_trajectories_positions = generate_trajectories(cell_matchings, cell_positions_dict, cell_size_dict)
+    except IndexError as e:
+        cell_trajectories = cell_trajectories_positions = []
+        warnings.warn('No trajectory is generated due to the following error: {}'.format(e))
     with open(os.path.join(site_supp_files_folder, 'cell_traj.pkl'), 'wb') as f:
         print(f"\tsaving cell_traj {os.path.join(site_supp_files_folder, 'cell_traj.pkl')}")
         pickle.dump([cell_trajectories, cell_trajectories_positions], f)

@@ -13,9 +13,7 @@ from torch.utils.data import TensorDataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from scipy.sparse import csr_matrix
-from .naive_imagenet import get_stack_paths
 from SingleCellPatch.extract_patches import im_adjust
-from .generate_trajectory_relations import generate_trajectory_relations
 
 CHANNEL_RANGE = [(0.3, 0.8), (0., 0.6)] 
 CHANNEL_VAR = np.array([0.0475, 0.0394]) # After normalized to CHANNEL_RANGE
@@ -271,29 +269,43 @@ class VQ_VAE(nn.Module):
         self.commitment_cost = commitment_cost
         self.channel_var = nn.Parameter(t.from_numpy(channel_var).float().reshape((1, num_inputs, 1, 1)), requires_grad=False)
         self.alpha = alpha
+        # self.enc = nn.Sequential(
+        #     nn.Conv2d(self.num_inputs, self.num_hiddens//2, 1),
+        #     nn.Conv2d(self.num_hiddens//2, self.num_hiddens//2, 4, stride=2, padding=1),
+        #     nn.BatchNorm2d(self.num_hiddens//2),
+        #     nn.ReLU(),
+        #     nn.Conv2d(self.num_hiddens//2, self.num_hiddens, 4, stride=2, padding=1),
+        #     nn.BatchNorm2d(self.num_hiddens),
+        #     nn.ReLU(),
+        #     nn.Conv2d(self.num_hiddens, self.num_hiddens, 4, stride=2, padding=1),
+        #     nn.BatchNorm2d(self.num_hiddens),
+        #     nn.ReLU(),
+        #     nn.Conv2d(self.num_hiddens, self.num_hiddens, 3, padding=1),
+        #     nn.BatchNorm2d(self.num_hiddens),
+        #     ResidualBlock(self.num_hiddens, self.num_residual_hiddens, self.num_residual_layers))
         self.enc = nn.Sequential(
-            nn.Conv2d(self.num_inputs, self.num_hiddens//2, 1),
-            nn.Conv2d(self.num_hiddens//2, self.num_hiddens//2, 4, stride=2, padding=1),
-            nn.BatchNorm2d(self.num_hiddens//2),
+            nn.Conv2d(self.num_inputs, self.num_hiddens // 2, 4, stride=2, padding=1),
+            nn.BatchNorm2d(self.num_hiddens // 2),
             nn.ReLU(),
-            nn.Conv2d(self.num_hiddens//2, self.num_hiddens, 4, stride=2, padding=1),
-            nn.BatchNorm2d(self.num_hiddens),
-            nn.ReLU(),
-            nn.Conv2d(self.num_hiddens, self.num_hiddens, 4, stride=2, padding=1),
-            nn.BatchNorm2d(self.num_hiddens),
-            nn.ReLU(),
-            nn.Conv2d(self.num_hiddens, self.num_hiddens, 3, padding=1),
+            nn.Conv2d(self.num_hiddens // 2, self.num_hiddens, 4, stride=2, padding=1),
             nn.BatchNorm2d(self.num_hiddens),
             ResidualBlock(self.num_hiddens, self.num_residual_hiddens, self.num_residual_layers))
         self.vq = VectorQuantizer(self.num_hiddens, self.num_embeddings, commitment_cost=self.commitment_cost, gpu=gpu)
         self.dec = nn.Sequential(
-            nn.ConvTranspose2d(self.num_hiddens, self.num_hiddens//2, 4, stride=2, padding=1),
+            ResidualBlock(self.num_hiddens, self.num_residual_hiddens, self.num_residual_layers),
+            nn.ConvTranspose2d(self.num_hiddens, self.num_hiddens // 2, 4, stride=2, padding=1),
+            nn.BatchNorm2d(self.num_hiddens // 2),
             nn.ReLU(),
-            nn.ConvTranspose2d(self.num_hiddens//2, self.num_hiddens//4, 4, stride=2, padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose2d(self.num_hiddens//4, self.num_hiddens//4, 4, stride=2, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(self.num_hiddens//4, self.num_inputs, 1))
+            nn.ConvTranspose2d(self.num_hiddens // 2, self.num_inputs, 4, stride=2, padding=1))
+
+        # self.dec = nn.Sequential(
+        #     nn.ConvTranspose2d(self.num_hiddens, self.num_hiddens//2, 4, stride=2, padding=1),
+        #     nn.ReLU(),
+        #     nn.ConvTranspose2d(self.num_hiddens//2, self.num_hiddens//4, 4, stride=2, padding=1),
+        #     nn.ReLU(),
+        #     nn.ConvTranspose2d(self.num_hiddens//4, self.num_hiddens//4, 4, stride=2, padding=1),
+        #     nn.ReLU(),
+        #     nn.Conv2d(self.num_hiddens//4, self.num_inputs, 1))
       
     def forward(self, inputs, time_matching_mat=None, batch_mask=None):
         """ Forward pass
@@ -319,7 +331,7 @@ class VQ_VAE(nn.Module):
             batch_mask = t.ones_like(inputs)
         recon_loss = t.mean(F.mse_loss(decoded * batch_mask, inputs * batch_mask, reduction='none')/self.channel_var)
         total_loss = recon_loss + c_loss
-        time_matching_loss = None
+        time_matching_loss = 0
         if not time_matching_mat is None:
             z_before_ = z_before.reshape((z_before.shape[0], -1))
             len_latent = z_before_.shape[1]
@@ -332,8 +344,8 @@ class VQ_VAE(nn.Module):
                {'recon_loss': recon_loss,
                 'commitment_loss': c_loss,
                 'time_matching_loss': time_matching_loss,
-                'total_loss': total_loss,
-                'perplexity': perplexity}
+                'perplexity': perplexity,
+                'total_loss': total_loss,}
 
     def predict(self, inputs):
         """ Prediction fn, same as forward pass """
@@ -709,9 +721,11 @@ def train(model, dataset, output_dir, relation_mat=None, mask=None,
         np.random.shuffle(sample_ids)
     writer = SummaryWriter(output_dir)
     for epoch in range(n_epochs):
-        recon_loss = []
-        perplexities = []
-        matching_loss = []
+        mean_loss = {'recon_loss': [],
+                     'commitment_loss': [],
+                     'time_matching_loss': [],
+                     'total_loss': [],
+                     'perplexity': []}
         print('start epoch %d' % epoch) 
         for i in range(n_batches):
             # Input data
@@ -742,23 +756,18 @@ def train(model, dataset, output_dir, relation_mat=None, mask=None,
             loss_dict['total_loss'].backward()
             optimizer.step()
             model.zero_grad()
-
-            recon_loss.append(loss_dict['recon_loss'])
-            perplexities.append(loss_dict['perplexity'])
-            matching_loss.append(loss_dict['time_matching_loss'])
+            for key, loss in loss_dict.items():
+                mean_loss[key].append(loss)
         # shuffle samples ids at the end of the epoch
         if shuffle_data:
             np.random.shuffle(sample_ids)
-        recon_loss = sum(recon_loss).item()/len(recon_loss)
-        perplexities = sum(perplexities).item() / len(perplexities)
-        matching_loss = sum(matching_loss).item() / len(matching_loss)
-        print('epoch %d recon loss: %f perplexity: %f matching loss: %f' % \
-            (epoch, recon_loss, perplexities, matching_loss))
-        writer.add_scalar('Loss/recon loss', recon_loss, epoch)
-        writer.add_scalar('Loss/matching loss', matching_loss, epoch)
-        writer.add_scalar('Loss/perplexity', perplexities, epoch)
-        t.save(model.state_dict(), os.path.join(output_dir, 'model.pt'))
+        for key, loss in mean_loss.items():
+            mean_loss[key] = sum(loss)/len(loss)
+            writer.add_scalar('Loss/' + key, mean_loss[key], epoch)
         writer.flush()
+        print('epoch %d' % epoch)
+        print(''.join(['{}:{:0.4f}  '.format(key, loss) for key, loss in mean_loss.items()]))
+        t.save(model.state_dict(), os.path.join(model_dir, 'model.pt'))
     writer.close()
     return model
 
@@ -960,7 +969,7 @@ def prepare_dataset_v2(dat_fs,
     return dataset, ts_keys
 
 
-def reorder_with_trajectories(dataset, relations, seed=None):
+def reorder_with_trajectories(dataset, relations, seed=None, w_a=1.1, w_t=0.1):
     """ Reorder `dataset` to facilitate training with matching loss
 
     Args:
@@ -968,7 +977,8 @@ def reorder_with_trajectories(dataset, relations, seed=None):
         relations (dict): dict of pairwise relationship (adjacent frames, same 
             trajectory)
         seed (int or None, optional): if given, random seed
-
+        w_a (float): weight for adjacent frames
+        w_t (float): weight for non-adjecent frames in the same trajectory
     Returns:
         TensorDataset: dataset of training inputs (after reordering)
         scipy csr matrix: sparse matrix of pairwise relations
@@ -1014,9 +1024,9 @@ def reorder_with_trajectories(dataset, relations, seed=None):
     for k, v in relations.items():
         # 2 - adjacent, 1 - same trajectory
         if v == 1:
-            values.append(0.1)
+            values.append(w_t)
         elif v == 2:
-            values.append(1.1)
+            values.append(w_a)
         new_relations.append(k)
     new_relations = np.array(new_relations)
     relation_mat = csr_matrix((np.array(values), (new_relations[:, 0], new_relations[:, 1])),
@@ -1035,8 +1045,6 @@ def zscore(input_image, channel_mean=None, channel_std=None):
         channel_mean = np.mean(input_image, axis=(0, 2, 3))
     if not channel_std:
         channel_std = np.std(input_image, axis=(0, 2, 3))
-    print('channel_mean:', channel_mean)
-    print('channel_std:', channel_std)
     channel_slices = []
     for c in range(len(channel_mean)):
         mean = channel_mean[c]
@@ -1111,6 +1119,27 @@ def resscale_backward(tensor):
     new_tensor = t.stack(channel_slices, 1)
     return new_tensor
 
+def concat_relations(relations, offsets):
+    """combine relation dictionaries from multiple datasets
+
+    Args:
+        relations (list): list of relation dict to combine
+        offsets (list): offset to add to the indices
+
+    Returns: new_relations (dict): dictionary of combined relations
+
+    """
+    new_relations = {}
+    for relation, offset in zip(relations, offsets):
+        old_keys = relation.keys()
+        new_keys = [(id1 + offset, id2 + offset) for id1, id2 in old_keys]
+        # make a new dict with updated keys
+        relation = dict(zip(new_keys, relation.values()))
+        new_relations.update(relation)
+
+    return new_relations
+
+
 
 if __name__ == '__main__':
     ### Settings ###
@@ -1119,16 +1148,20 @@ if __name__ == '__main__':
     input_shape = (128, 128)
     gpu = True
     gpuid = 2
+    w_a = 1
+    w_t = 0.5
     supp_dirs = ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_supp_tstack',
-                 '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_supp']
+                 '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_supp_tstack']
     train_dirs = ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_train_tstack',
-                  '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_train']
+                  '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_train_tstack']
     raw_dirs = ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_input_tstack',
-                '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_input']
+                '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_input_tstack']
     dir_sets = list(zip(supp_dirs, train_dirs, raw_dirs))
-    dir_sets = dir_sets[0:1]
+    # dir_sets = dir_sets[0:1]
     ts_keys = []
     datasets = []
+    relations = []
+    id_offsets = [0]
     ### Load Data ###
     for supp_dir, train_dir, raw_dir in dir_sets:
         os.makedirs(train_dir, exist_ok=True)
@@ -1139,19 +1172,40 @@ if __name__ == '__main__':
         print('dataset.shape:', dataset.shape)
         # Note that `relations` is depending on the order of fs (should not sort)
         # `relations` is generated by script "generate_trajectory_relations.py"
-        relations = pickle.load(open(os.path.join(raw_dir, 'im_static_patches_relations.pkl'), 'rb'))
+        relation = pickle.load(open(os.path.join(raw_dir, 'im_static_patches_relations.pkl'), 'rb'))
         # dataset_mask = TensorDataset(dataset_mask.tensors[0][np.array(inds_in_order)])
         # print('relations:', relations)
+        print('len(ts_key):', len(ts_key))
+        print('len(dataset):', len(dataset))
+        relations.append(relation)
         ts_keys += ts_key
         datasets.append(dataset)
+        id_offsets.append(len(dataset))
+    id_offsets = id_offsets[:-1]
     dataset = np.concatenate(datasets, axis=0)
     dataset = zscore(dataset)
     dataset = TensorDataset(t.from_numpy(dataset).float())
-    dataset, relation_mat, inds_in_order = reorder_with_trajectories(dataset, relations, seed=123)
+    relations = concat_relations(relations, offsets=id_offsets)
+    patch_ids = [idx for ids in relations.keys() for idx in ids]
+    patch_id_last = max(patch_ids)
+    print('patch_id_last:', patch_id_last)
+    print('len(ts_keys):', len(ts_keys))
+    dataset, relation_mat, inds_in_order = reorder_with_trajectories(dataset, relations, seed=123, w_a=w_a, w_t=w_t)
 
     ## Initialize Model ###
-    model = VQ_VAE(alpha=0.01)
-    model_dir = os.path.join(train_dir, 'mock_matching_point01')
+    num_hiddens = 64
+    num_residual_hiddens = num_hiddens
+    num_embeddings = 128
+    commitment_cost = 0.25
+
+    model = VQ_VAE(num_inputs=2,
+                     num_hiddens=num_hiddens,
+                     num_residual_hiddens=num_residual_hiddens,
+                     num_residual_layers=2,
+                     num_embeddings=num_embeddings,
+                     commitment_cost=commitment_cost,
+                     alpha=0.005)
+    model_dir = os.path.join(train_dir, 'mock+low_moi_z32_nh{}_nrh{}_ne{}_cc{}'.format(num_hiddens, num_residual_hiddens, num_embeddings, commitment_cost))
     if gpu:
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         os.environ["CUDA_VISIBLE_DEVICES"] = str(gpuid)
@@ -1162,11 +1216,11 @@ if __name__ == '__main__':
     model = train(model,
                   dataset,
                   output_dir=model_dir,
-                  relation_mat=relation_mat,
+                  relation_mat=None,
                   mask=None,
                   n_epochs=5000,
                   lr=0.0001,
-                  batch_size=64,
+                  batch_size=128,
                   gpu=gpu,
                   )
 
@@ -1213,6 +1267,6 @@ if __name__ == '__main__':
             ax[axis_count].axis('off')
             ax[axis_count].set_title(name, fontsize=12)
             axis_count += 1
-        fig.savefig(os.path.join(train_dir, 'recon_%d.jpg' % i),
+        fig.savefig(os.path.join(model_dir, 'recon_%d.jpg' % i),
                     dpi=300, bbox_inches='tight')
         plt.close(fig)

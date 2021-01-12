@@ -38,7 +38,7 @@ DynaMorph utilizes a broad set of deep learning and machine learning tools to an
 
 ## DynaMorph Pipeline
 
-DynaMorph starts with raw image files from cell imaging experiments and sequentially applies a set of segmentation and encoding tools. Below we briefly introduced the main processing steps.
+DynaMorph starts with raw image files from cell imaging experiments and sequentially applies a set of segmentation and encoding tools. Below we briefly introduced the dim_reduction processing steps.
 
 ### Label-free Imaging
 (for pipeline, can use data acquired from any microscopy source -- file format as .tif)
@@ -74,7 +74,7 @@ To extract single cell patches and employ morphology encoding, follow steps belo
 
 ##### <a name="step7"></a> 7. extract cell patches based on instance segmentation, see method `pipeline.patch_VAE.extract_patches` or `run_patch.py` 
 
-##### <a name="step8"></a> 8. (optional) train a VAE for cell patch reconstruction, see the [main block](https://github.com/czbiohub/dynamorph/blob/8965b5d7b21895d95d548cc3ef6c1a397cee8255/HiddenStateExtractor/vq_vae.py#L1041) of `HiddenStateExtractor/vq_vae.py` for reference.
+##### <a name="step8"></a> 8. (optional) train a VAE for cell patch reconstruction, see the [dim_reduction block](https://github.com/czbiohub/dynamorph/blob/8965b5d7b21895d95d548cc3ef6c1a397cee8255/HiddenStateExtractor/vq_vae.py#L1041) of `HiddenStateExtractor/vq_vae.py` for reference.
 
 ##### <a name="step9"></a> 9. assemble cell patches generate from step 7 to model-compatible datasets, see method `pipeline.patch_VAE.assemble_VAE` or `run_VAE.py`
 
