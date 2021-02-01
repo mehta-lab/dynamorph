@@ -362,7 +362,7 @@ def process_site_extract_patches(site_path,
             masked_output_mat = output_mat * (1 - remove_mask) + background_filling * remove_mask
             # To prevent backward compatibility issue cast to int64 and float 64 respectively
             # TODO: solve compatibility issue here
-            output_mat = np.concatenate([output_mat, tm, tm2], 2).astype('int64')
+            output_mat = np.concatenate([output_mat, tm, tm2], 2).astype('float64')
             masked_output_mat = np.concatenate([masked_output_mat, tm, tm2], 2).astype('float64')
             site_data[cell_name] = {"mat": output_mat, "masked_mat": masked_output_mat}
         with open(os.path.join(site_supp_files_folder, 'stacks_%d.pkl' % t_point), 'wb') as f:
