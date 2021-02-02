@@ -240,8 +240,8 @@ def process_VAE(paths, save_ouput=True):
     channel_mean = [0.49998672, 0.007081]
     channel_std = [0.00074311, 0.00906428]
     # these sites should be from a single condition (C5, C4, B-wells, etc..)
-    summary_folder, supp_folder, model_path, sites = paths[0], paths[1], paths[2], paths[3]
-    model_dir = os.path.dirname(model_path)
+    summary_folder, supp_folder, model_dir, sites = paths[0], paths[1], paths[2], paths[3]
+    model_path = os.path.join(model_dir, 'model.pt')
     model_name = os.path.basename(model_dir)
     output_dir = os.path.join(summary_folder, model_name)
     os.makedirs(output_dir, exist_ok=True)
@@ -259,17 +259,16 @@ def process_VAE(paths, save_ouput=True):
     dataset = pickle.load(open(os.path.join(summary_folder, '%s_static_patches.pkl' % well), 'rb'))
     dataset = zscore(dataset, channel_mean=channel_mean, channel_std=channel_std)
     dataset = TensorDataset(torch.from_numpy(dataset).float())
-    search_obj = re.search(r'nh(\d+)_nrh(\d+)_ne(\d+)_cc(\d+\.\d+).*', model_name)
+    search_obj = re.search(r'nh(\d+)_nrh(\d+)_ne(\d+).*', model_name)
     num_hiddens = int(search_obj.group(1))
     num_residual_hiddens = int(search_obj.group(2))
     num_embeddings = int(search_obj.group(3))
-    commitment_cost = float(search_obj.group(4))
+    # commitment_cost = float(search_obj.group(4))
     model = VQ_VAE(num_inputs=2,
                    num_hiddens=num_hiddens,
                    num_residual_hiddens=num_residual_hiddens,
                    num_residual_layers=2,
                    num_embeddings=num_embeddings,
-                   commitment_cost=commitment_cost,
                    gpu=True)
     model = model.cuda()
     try:

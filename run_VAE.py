@@ -64,7 +64,7 @@ def main(arguments_):
         sites = list(set(sites))
 
     wells = set(s[:2] for s in sites)
-    mp.set_start_method('spawn')
+    mp.set_start_method('spawn', force=True)
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu)
     print("CUDA_VISIBLE_DEVICES=" + os.environ["CUDA_VISIBLE_DEVICES"])
@@ -119,7 +119,7 @@ def parse_args():
         default=[],
         type=str,
         required=False,
-        help="Path to pytorch model weights for VQ-VAE or PCA weights",
+        help="Path to directories containing VQ-VAE model weights or PCA weights",
     )
     parser.add_argument(
         '-g', '--gpu',

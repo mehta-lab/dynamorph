@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import pickle
+import h5py
 from sklearn.decomposition import PCA
 import argparse
 import matplotlib
@@ -101,9 +102,10 @@ def process_PCA(input_dir, output_dir, weights_dir, prefix, suffix='_after'):
         pickle.dump(dats_, f, protocol=4)
 
 def umap_transform(input_dir, output_dir, weights_dir, prefix, suffix='_after'):
-    model_fnames = [file for file in os.listdir(weights_dir) if file.startswith('umap')]
+    model_fnames = [file for file in os.listdir(weights_dir) if file.startswith('umap') & file.endswith('.pkl')]
     model_names = [os.path.splitext(name)[0] for name in model_fnames]
     for model_name, model_fname in zip(model_names, model_fnames):
+        print('Transforming using model {}'.format(model_name))
         model_path = os.path.join(weights_dir, model_fname)
         try:
             umap = pickle.load(open(model_path, 'rb'))
@@ -141,13 +143,11 @@ def fit_umap(train_data, weights_dir, labels, n_nbrs=(15, 50, 200, 1000), a_s=(1
     for n_nbr in n_nbrs:
         for a, b in zip(a_s, b_s):
             print('Fitting UMAP model {} with N(neighbors)={}, a={}, b={} ...'.format(weights_dir, n_nbr, a, b))
-            # embedding, labels = pickle.load(open(os.path.join(input_dir, 'umap_{}_nbr.pkl'.format(n_nbr)), 'rb'))
             reducer = umap.UMAP(a=a, b=b, n_neighbors=n_nbr)
             embedding = reducer.fit_transform(train_data)
             print('Saving UMAP model {}...'.format(weights_dir))
             with open(os.path.join(weights_dir, 'umap_nbr{}_a{}_b{}.pkl'.format(n_nbr, a, b)), 'wb') as f:
-                pickle.dump(reducer, f, protocol=4)
-
+                pickle.dump([embedding, labels], f, protocol=4)
             scatter = ax[axis_count].scatter(embedding[:, 0], embedding[:, 1], s=7, c=labels,
                                              facecolors='none', cmap='Paired', alpha=0.1)
             scatter.set_facecolor("none")
@@ -198,9 +198,13 @@ def dim_reduction(input_dirs,
             label += 1
         vectors = np.concatenate(vector_list, axis=0)
         _ = fit_func(vectors, weights_dir, labels=labels)
+        # UMAP model from umap 0.5.0 can't be pickled with protocol=4.
+        # Transform from saved models is currently not supported
+        if method == 'umap':
+            return
 
     for input_dir, output_dir in zip(input_dirs, output_dirs):
-        print('Computing PC of latent vectors for {}'.format(input_dir))
+        print('Transforming latent vectors for {}'.format(input_dir))
         transform_func(input_dir=input_dir,
                     output_dir=output_dir,
                     weights_dir=weights_dir,

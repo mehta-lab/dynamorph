@@ -7,11 +7,12 @@ import queue
 import torch as t
 import torch.nn as nn
 import torch.nn.functional as F
+import PIL
 import pickle
 import matplotlib.pyplot as plt
 from torch.utils.data import TensorDataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
-
+from torchvision import transforms
 from scipy.sparse import csr_matrix
 from SingleCellPatch.extract_patches import im_adjust
 
@@ -690,7 +691,8 @@ class AAE(nn.Module):
 
 
 def train(model, dataset, output_dir, relation_mat=None, mask=None,
-          n_epochs=10, lr=0.001, batch_size=16, gpu=True, shuffle_data=False):
+          n_epochs=10, lr=0.001, batch_size=16, gpu=True, shuffle_data=False,
+          transform=None):
     """ Train function for VQ-VAE, VAE, IWAE, etc.
 
     Args:
@@ -728,9 +730,35 @@ def train(model, dataset, output_dir, relation_mat=None, mask=None,
                      'perplexity': []}
         print('start epoch %d' % epoch) 
         for i in range(n_batches):
-            # Input data
-            sample_ids_batch = sample_ids[i * batch_size:(i + 1) * batch_size]
+            # deal with last batch might < batch size
+            sample_ids_batch = sample_ids[i * batch_size:min((i + 1) * batch_size, n_samples)]
             batch = dataset[sample_ids_batch][0]
+            n_channels = len(batch[0])
+            if transform is not None:
+                for idx_in_batch in range(len(sample_ids_batch)):
+                    # for ch in range(n_channels):
+                    #     batch[idx_in_batch, ch, ...] = transform(batch[idx_in_batch, ch, ...])
+                    flip_idx = np.random.choice([0, 1, 2])
+                    if flip_idx != 0:
+                        img = t.flip(batch[idx_in_batch], dims=(flip_idx,))
+                    rot_idx = int(np.random.choice([0, 1, 2, 3]))
+                    batch[idx_in_batch] = t.rot90(img, k=rot_idx, dims=[1, 2])
+            # n_rows = 3
+            # n_cols = 4
+            # fig, ax = plt.subplots(n_rows, n_cols, squeeze=False)
+            # ax = ax.flatten()
+            # fig.set_size_inches((15, 5 * n_rows))
+            # axis_count = 0
+            # for j in range(12):
+            #     sample = batch[j]
+            #     im_phase = im_adjust(sample[0].data.numpy())
+            #     im_retard = im_adjust(sample[1].data.numpy())
+            #     ax[axis_count].imshow(np.squeeze(im_phase), cmap='gray')
+            #     ax[axis_count].axis('off')
+            #     axis_count += 1
+            # fig.savefig(os.path.join(output_dir, 'batch_%d_aug.jpg' % i),
+            #             dpi=300, bbox_inches='tight')
+            # plt.close(fig)
             if gpu:
                 batch = batch.cuda()
             # Relation (adjacent frame, same trajectory)
@@ -767,7 +795,7 @@ def train(model, dataset, output_dir, relation_mat=None, mask=None,
         writer.flush()
         print('epoch %d' % epoch)
         print(''.join(['{}:{:0.4f}  '.format(key, loss) for key, loss in mean_loss.items()]))
-        t.save(model.state_dict(), os.path.join(model_dir, 'model.pt'))
+        t.save(model.state_dict(), os.path.join(output_dir, 'model.pt'))
     writer.close()
     return model
 
@@ -862,7 +890,7 @@ def prepare_dataset(fs, cs=[0, 1], input_shape=(128, 128), channel_max=CHANNEL_M
     This function reads individual h5 files
 
     Args:
-        fs (list of str): list of file paths/single cell patch identifiers, 
+        fs (list of str): list of file paths/single cell patch identifiers,
             images are saved as individual h5 files
         cs (list of int, optional): channels in the input
         input_shape (tuple, optional): input shape (height and width only)
@@ -1147,7 +1175,7 @@ if __name__ == '__main__':
     cs_mask = [2, 3]
     input_shape = (128, 128)
     gpu = True
-    gpuid = 2
+    gpuid = 3
     w_a = 1
     w_t = 0.5
     supp_dirs = ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_supp_tstack',
@@ -1195,17 +1223,25 @@ if __name__ == '__main__':
     ## Initialize Model ###
     num_hiddens = 64
     num_residual_hiddens = num_hiddens
-    num_embeddings = 128
+    num_embeddings = 512
     commitment_cost = 0.25
-
+    alpha = 0.002
     model = VQ_VAE(num_inputs=2,
                      num_hiddens=num_hiddens,
                      num_residual_hiddens=num_residual_hiddens,
                      num_residual_layers=2,
                      num_embeddings=num_embeddings,
                      commitment_cost=commitment_cost,
-                     alpha=0.005)
-    model_dir = os.path.join(train_dir, 'mock+low_moi_z32_nh{}_nrh{}_ne{}_cc{}'.format(num_hiddens, num_residual_hiddens, num_embeddings, commitment_cost))
+                     alpha=alpha)
+    transform = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip(),
+        transforms.RandomRotation(180, resample=PIL.Image.BILINEAR),
+        transforms.ToTensor(),
+    ])
+    model_dir = os.path.join(train_dir, 'mock+low_moi_z32_nh{}_nrh{}_ne{}_alpha{}_wa{}_wt{}_aug'.format(
+        num_hiddens, num_residual_hiddens, num_embeddings, alpha, w_a, w_t))
     if gpu:
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         os.environ["CUDA_VISIBLE_DEVICES"] = str(gpuid)
@@ -1216,12 +1252,13 @@ if __name__ == '__main__':
     model = train(model,
                   dataset,
                   output_dir=model_dir,
-                  relation_mat=None,
+                  relation_mat=relation_mat,
                   mask=None,
                   n_epochs=5000,
                   lr=0.0001,
-                  batch_size=128,
+                  batch_size=96,
                   gpu=gpu,
+                  transform=True,
                   )
 
 
