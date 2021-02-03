@@ -415,10 +415,13 @@ def process_site_build_trajectory(site_supp_files_folder):
         f2 = [cell_positions_dict[t_point+1][i] for i in ids2]
         int1 = [intensities_dict[t_point][i] for i in ids1]
         int2 = [intensities_dict[t_point+1][i] for i in ids2]
-        pairs, top_cost_pairs = frame_matching(f1, f2, int1, int2, dist_cutoff=100)
-        for p in top_cost_pairs:
-            pairs_to_be_checked[('%d_%d' % (t_point, ids1[p[0]]), '%d_%d' % (t_point+1, ids2[p[1]]))] = top_cost_pairs[p]
-        cell_matchings[t_point] = [(ids1[p1], ids2[p2]) for p1, p2 in pairs]
+        if len(ids1) == 0 or len(ids2) == 0:
+            cell_matchings[t_point] = []
+        else:
+            pairs, top_cost_pairs = frame_matching(f1, f2, int1, int2, dist_cutoff=100)
+            for p in top_cost_pairs:
+                pairs_to_be_checked[('%d_%d' % (t_point, ids1[p[0]]), '%d_%d' % (t_point+1, ids2[p[1]]))] = top_cost_pairs[p]
+            cell_matchings[t_point] = [(ids1[p1], ids2[p2]) for p1, p2 in pairs]
       
     # Connect to trajectories
     cell_trajectories, cell_trajectories_positions = generate_trajectories(cell_matchings, cell_positions_dict, intensities_dict)
