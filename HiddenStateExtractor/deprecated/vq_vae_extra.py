@@ -93,7 +93,7 @@
 #        nn.Conv2d(self.num_hiddens//4, self.num_inputs, 1))
 
 # 32*32*128, weak decoder
-#class VQ_VAE(nn.Module):
+#class VQ_VAE_z32(nn.Module):
 #  def __init__(self,
 #               num_inputs=3,
 #               num_hiddens=128,
@@ -104,7 +104,7 @@
 #               channel_var=CHANNEL_VAR,
 #               alpha=0.1,
 #               **kwargs):
-#    super(VQ_VAE, self).__init__(**kwargs)
+#    super(VQ_VAE_z32, self).__init__(**kwargs)
 #    self.num_inputs = num_inputs
 #    self.num_hiddens = num_hiddens
 #    self.num_residual_layers = num_residual_layers

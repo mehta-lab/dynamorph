@@ -1,5 +1,5 @@
 from pipeline.patch_VAE import assemble_VAE, process_VAE, trajectory_matching
-from run_dim_reduction import process_PCA
+from run_dim_reduction import process_PCA_hcs
 from torch.multiprocessing import Pool, Queue, Process
 import torch.multiprocessing as mp
 import os
@@ -19,7 +19,7 @@ class Worker(Process):
         elif self.method == 'process':
             process_VAE(self.inputs, save_ouput=True)
         elif self.method == 'pca':
-            process_PCA(self.inputs)
+            process_PCA_hcs(self.inputs)
         elif self.method == 'trajectory_matching':
             trajectory_matching(self.inputs)
 

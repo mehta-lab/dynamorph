@@ -12,7 +12,7 @@ from torch.utils.data import TensorDataset
 from SingleCellPatch.generate_trajectories import process_site_build_trajectory
 from SingleCellPatch.extract_patches import process_site_extract_patches, im_adjust
 
-from run_training import VQ_VAE, prepare_dataset_v2, zscore
+from run_training import VQ_VAE_z32, prepare_dataset_v2, zscore
 
 
 def extract_patches(paths):
@@ -264,12 +264,12 @@ def process_VAE(paths, save_ouput=True):
     num_residual_hiddens = int(search_obj.group(2))
     num_embeddings = int(search_obj.group(3))
     # commitment_cost = float(search_obj.group(4))
-    model = VQ_VAE(num_inputs=2,
-                   num_hiddens=num_hiddens,
-                   num_residual_hiddens=num_residual_hiddens,
-                   num_residual_layers=2,
-                   num_embeddings=num_embeddings,
-                   gpu=True)
+    model = VQ_VAE_z32(num_inputs=2,
+                       num_hiddens=num_hiddens,
+                       num_residual_hiddens=num_residual_hiddens,
+                       num_residual_layers=2,
+                       num_embeddings=num_embeddings,
+                       gpu=True)
     model = model.cuda()
     try:
         if not model_path is None:

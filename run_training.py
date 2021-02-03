@@ -12,7 +12,7 @@ import pickle
 import matplotlib.pyplot as plt
 from torch.utils.data import TensorDataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from torchvision import transforms
+# from torchvision import transforms
 from scipy.sparse import csr_matrix
 from SingleCellPatch.extract_patches import im_adjust
 
@@ -228,9 +228,9 @@ class ResidualBlock(nn.Module):
         return output
 
 
-class VQ_VAE(nn.Module):
-    """ Vector-Quantized VAE as introduced in 
-        "Neural Discrete Representation Learning"
+class VQ_VAE_z32(nn.Module):
+    """ Vector-Quantized VAE with 32 X 32 X num_hiddens latent tensor
+     as introduced in  "Neural Discrete Representation Learning"
     """
     def __init__(self,
                  num_inputs=2,
@@ -261,7 +261,7 @@ class VQ_VAE(nn.Module):
             **kwargs: other keyword arguments
 
         """
-        super(VQ_VAE, self).__init__(**kwargs)
+        super(VQ_VAE_z32, self).__init__(**kwargs)
         self.num_inputs = num_inputs
         self.num_hiddens = num_hiddens
         self.num_residual_layers = num_residual_layers
@@ -270,20 +270,6 @@ class VQ_VAE(nn.Module):
         self.commitment_cost = commitment_cost
         self.channel_var = nn.Parameter(t.from_numpy(channel_var).float().reshape((1, num_inputs, 1, 1)), requires_grad=False)
         self.alpha = alpha
-        # self.enc = nn.Sequential(
-        #     nn.Conv2d(self.num_inputs, self.num_hiddens//2, 1),
-        #     nn.Conv2d(self.num_hiddens//2, self.num_hiddens//2, 4, stride=2, padding=1),
-        #     nn.BatchNorm2d(self.num_hiddens//2),
-        #     nn.ReLU(),
-        #     nn.Conv2d(self.num_hiddens//2, self.num_hiddens, 4, stride=2, padding=1),
-        #     nn.BatchNorm2d(self.num_hiddens),
-        #     nn.ReLU(),
-        #     nn.Conv2d(self.num_hiddens, self.num_hiddens, 4, stride=2, padding=1),
-        #     nn.BatchNorm2d(self.num_hiddens),
-        #     nn.ReLU(),
-        #     nn.Conv2d(self.num_hiddens, self.num_hiddens, 3, padding=1),
-        #     nn.BatchNorm2d(self.num_hiddens),
-        #     ResidualBlock(self.num_hiddens, self.num_residual_hiddens, self.num_residual_layers))
         self.enc = nn.Sequential(
             nn.Conv2d(self.num_inputs, self.num_hiddens // 2, 4, stride=2, padding=1),
             nn.BatchNorm2d(self.num_hiddens // 2),
@@ -298,15 +284,6 @@ class VQ_VAE(nn.Module):
             nn.BatchNorm2d(self.num_hiddens // 2),
             nn.ReLU(),
             nn.ConvTranspose2d(self.num_hiddens // 2, self.num_inputs, 4, stride=2, padding=1))
-
-        # self.dec = nn.Sequential(
-        #     nn.ConvTranspose2d(self.num_hiddens, self.num_hiddens//2, 4, stride=2, padding=1),
-        #     nn.ReLU(),
-        #     nn.ConvTranspose2d(self.num_hiddens//2, self.num_hiddens//4, 4, stride=2, padding=1),
-        #     nn.ReLU(),
-        #     nn.ConvTranspose2d(self.num_hiddens//4, self.num_hiddens//4, 4, stride=2, padding=1),
-        #     nn.ReLU(),
-        #     nn.Conv2d(self.num_hiddens//4, self.num_inputs, 1))
       
     def forward(self, inputs, time_matching_mat=None, batch_mask=None):
         """ Forward pass
@@ -352,6 +329,117 @@ class VQ_VAE(nn.Module):
         """ Prediction fn, same as forward pass """
         return self.forward(inputs)
 
+
+class VQ_VAE_z16(nn.Module):
+    """ Reduced Vector-Quantized VAE with 16 X 16 X num_hiddens latent tensor
+    """
+
+    def __init__(self,
+                 num_inputs=2,
+                 num_hiddens=16,
+                 num_residual_hiddens=32,
+                 num_residual_layers=2,
+                 num_embeddings=64,
+                 commitment_cost=0.25,
+                 channel_var=np.ones(2),
+                 alpha=0.005,
+                 gpu=True,
+                 **kwargs):
+        """ Initialize the model
+
+        Args:
+            num_inputs (int, optional): number of channels in input
+            num_hiddens (int, optional): number of hidden units (size of latent
+                encodings per position)
+            num_residual_hiddens (int, optional): number of hidden units in the
+                residual layer
+            num_residual_layers (int, optional): number of residual layers
+            num_embeddings (int, optional): number of VQ embedding vectors
+            commitment_cost (float, optional): balance between latent losses
+            channel_var (list of float, optional): each channel's SD, used for
+                balancing loss across channels
+            alpha (float, optional): balance of matching loss
+            gpu (bool, optional): if the model is run on gpu
+            **kwargs: other keyword arguments
+
+        """
+        super(VQ_VAE_z16, self).__init__(**kwargs)
+        self.num_inputs = num_inputs
+        self.num_hiddens = num_hiddens
+        self.num_residual_layers = num_residual_layers
+        self.num_residual_hiddens = num_residual_hiddens
+        self.num_embeddings = num_embeddings
+        self.commitment_cost = commitment_cost
+        self.channel_var = nn.Parameter(t.from_numpy(channel_var).float().reshape((1, num_inputs, 1, 1)),
+                                        requires_grad=False)
+        self.alpha = alpha
+        self.enc = nn.Sequential(
+            nn.Conv2d(self.num_inputs, self.num_hiddens//2, 1),
+            nn.Conv2d(self.num_hiddens//2, self.num_hiddens//2, 4, stride=2, padding=1),
+            nn.BatchNorm2d(self.num_hiddens//2),
+            nn.ReLU(),
+            nn.Conv2d(self.num_hiddens//2, self.num_hiddens, 4, stride=2, padding=1),
+            nn.BatchNorm2d(self.num_hiddens),
+            nn.ReLU(),
+            nn.Conv2d(self.num_hiddens, self.num_hiddens, 4, stride=2, padding=1),
+            nn.BatchNorm2d(self.num_hiddens),
+            nn.ReLU(),
+            nn.Conv2d(self.num_hiddens, self.num_hiddens, 3, padding=1),
+            nn.BatchNorm2d(self.num_hiddens),
+            ResidualBlock(self.num_hiddens, self.num_residual_hiddens, self.num_residual_layers))
+        self.vq = VectorQuantizer(self.num_hiddens, self.num_embeddings, commitment_cost=self.commitment_cost, gpu=gpu)
+        self.dec = nn.Sequential(
+            nn.ConvTranspose2d(self.num_hiddens, self.num_hiddens//2, 4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(self.num_hiddens//2, self.num_hiddens//4, 4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(self.num_hiddens//4, self.num_hiddens//4, 4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(self.num_hiddens//4, self.num_inputs, 1))
+
+    def forward(self, inputs, time_matching_mat=None, batch_mask=None):
+        """ Forward pass
+
+        Args:
+            inputs (torch tensor): input cell image patches
+            time_matching_mat (torch tensor or None, optional): if given,
+                pairwise relationship between samples in the minibatch, used
+                to calculate time matching loss
+            batch_mask (torch tensor or None, optional): if given, weight mask
+                of training samples, used to concentrate loss on cell bodies
+
+        Returns:
+            torch tensor: decoded/reconstructed cell image patches
+            dict: losses and perplexity of the minibatch
+
+        """
+        # inputs: Batch * num_inputs(channel) * H * W, each channel from 0 to 1
+        z_before = self.enc(inputs)
+        z_after, c_loss, perplexity = self.vq(z_before)
+        decoded = self.dec(z_after)
+        if batch_mask is None:
+            batch_mask = t.ones_like(inputs)
+        recon_loss = t.mean(F.mse_loss(decoded * batch_mask, inputs * batch_mask, reduction='none') / self.channel_var)
+        total_loss = recon_loss + c_loss
+        time_matching_loss = 0
+        if not time_matching_mat is None:
+            z_before_ = z_before.reshape((z_before.shape[0], -1))
+            len_latent = z_before_.shape[1]
+            sim_mat = t.pow(z_before_.reshape((1, -1, len_latent)) - \
+                            z_before_.reshape((-1, 1, len_latent)), 2).mean(2)
+            assert sim_mat.shape == time_matching_mat.shape
+            time_matching_loss = (sim_mat * time_matching_mat).sum()
+            total_loss += time_matching_loss * self.alpha
+        return decoded, \
+               {'recon_loss': recon_loss,
+                'commitment_loss': c_loss,
+                'time_matching_loss': time_matching_loss,
+                'perplexity': perplexity,
+                'total_loss': total_loss, }
+
+    def predict(self, inputs):
+        """ Prediction fn, same as forward pass """
+        return self.forward(inputs)
 
 class VAE(nn.Module):
     """ Regular VAE """
@@ -708,6 +796,7 @@ def train(model, dataset, output_dir, relation_mat=None, mask=None,
         gpu (bool, optional): if the model is run on gpu
         shuffle_data (bool): shuffle data at the end of the epoch to add randomness to mini-batch.
             Set False when using matching loss
+        transform (bool): data augmentation
     
     Returns:
         nn.Module: trained model
@@ -736,11 +825,10 @@ def train(model, dataset, output_dir, relation_mat=None, mask=None,
             n_channels = len(batch[0])
             if transform is not None:
                 for idx_in_batch in range(len(sample_ids_batch)):
-                    # for ch in range(n_channels):
-                    #     batch[idx_in_batch, ch, ...] = transform(batch[idx_in_batch, ch, ...])
+                    img = batch[idx_in_batch]
                     flip_idx = np.random.choice([0, 1, 2])
                     if flip_idx != 0:
-                        img = t.flip(batch[idx_in_batch], dims=(flip_idx,))
+                        img = t.flip(img, dims=(flip_idx,))
                     rot_idx = int(np.random.choice([0, 1, 2, 3]))
                     batch[idx_in_batch] = t.rot90(img, k=rot_idx, dims=[1, 2])
             # n_rows = 3
@@ -1226,20 +1314,22 @@ if __name__ == '__main__':
     num_embeddings = 512
     commitment_cost = 0.25
     alpha = 0.002
-    model = VQ_VAE(num_inputs=2,
-                     num_hiddens=num_hiddens,
-                     num_residual_hiddens=num_residual_hiddens,
-                     num_residual_layers=2,
-                     num_embeddings=num_embeddings,
-                     commitment_cost=commitment_cost,
-                     alpha=alpha)
-    transform = transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomVerticalFlip(),
-        transforms.RandomRotation(180, resample=PIL.Image.BILINEAR),
-        transforms.ToTensor(),
-    ])
+    model = VQ_VAE_z32(num_inputs=2,
+                       num_hiddens=num_hiddens,
+                       num_residual_hiddens=num_residual_hiddens,
+                       num_residual_layers=2,
+                       num_embeddings=num_embeddings,
+                       commitment_cost=commitment_cost,
+                       alpha=alpha)
+    #TODO: Torchvision data augmentation does not work for Pytorch tensordataset. Rewrite with dataloader
+    #
+    # transform = transforms.Compose([
+    #     transforms.ToPILImage(),
+    #     transforms.RandomHorizontalFlip(),
+    #     transforms.RandomVerticalFlip(),
+    #     transforms.RandomRotation(180, resample=PIL.Image.BILINEAR),
+    #     transforms.ToTensor(),
+    # ])
     model_dir = os.path.join(train_dir, 'mock+low_moi_z32_nh{}_nrh{}_ne{}_alpha{}_wa{}_wt{}_aug'.format(
         num_hiddens, num_residual_hiddens, num_embeddings, alpha, w_a, w_t))
     if gpu:
@@ -1282,7 +1372,7 @@ if __name__ == '__main__':
         f_n = ts_keys[i]
         z_as[f_n] = z_a.cpu().data.numpy()
         z_bs[f_n] = z_b.cpu().data.numpy()
-
+#%% display recon images
     np.random.seed(0)
     random_inds = np.random.randint(0, len(dataset), (10,))
     for i in random_inds:
