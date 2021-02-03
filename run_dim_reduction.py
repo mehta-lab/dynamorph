@@ -10,15 +10,17 @@ import matplotlib.pyplot as plt
 import umap
 
 def fit_PCA(train_data, weights_dir, labels):
-    """ Fit a PCA (50% variance) on train_data
+    """ Fit a PCA model accounting for top 50% variance to the train_data,
+    and outout
 
     Args:
-        train_data (np.array): array of training data,
+        train_data (np.array): 2D array of training data (samples, features),
             should be directly extracted from VAE latent space
+        weights_dir (str): output directory for fit pca model
+        labels (np array): 1D array of sample class indices.
 
     Returns:
-        sklearn PCA model: trained PCA instance
-        np.array: transformed (top PCs of) training data
+        pca (sklearn PCA model): trained PCA instance
 
     """
     model_path = os.path.join(weights_dir, 'pca_model.pkl')
@@ -80,11 +82,11 @@ def process_PCA(input_dir, output_dir, weights_dir, prefix, suffix='_after'):
             (after quantization)
 
     Args:
-        input_dir: folder for latent vectors
-        output_dir: folder to save output files
-        weights_dir: folder for PCA model
-        prefix: prefix for input file name
-        suffix: suffix for input file name
+        input_dir (str): folder for latent vectors
+        output_dir (str): folder to save output files
+        weights_dir (str): folder for PCA model
+        prefix (str): prefix for input file name
+        suffix (str): suffix for input file name
 
     """
     model_path = os.path.join(weights_dir, 'pca_model.pkl')
@@ -104,24 +106,18 @@ def process_PCA(input_dir, output_dir, weights_dir, prefix, suffix='_after'):
         pickle.dump(dats_, f, protocol=4)
 
 def umap_transform(input_dir, output_dir, weights_dir, prefix, suffix='_after'):
-    """Apply trained UMAP model to latent vectors.
-
-    Resulting morphology descriptors will be saved in the summary folder,
-    including:
-        "*_latent_space_PCAed.pkl": array of top PCs of latent vectors (before
+    """Apply trained UMAP model to latent vectors and save the reduced vectors:
+        "*_latent_space_{umap model name}.pkl": reduced latent vectors (before
             quantization)
-        "*_latent_space_after_PCAed.pkl": array of top PCs of latent vectors
+        "*_latent_space_after_{umap model name}.pkl": reduced latent vectors
             (after quantization)
 
     Args:
-        input_dir:
-        output_dir:
-        weights_dir:
-        prefix:
-        suffix:
-
-    Returns:
-
+        input_dir (str): folder for latent vectors
+        output_dir (str): folder to save output files
+        weights_dir (str): folder for UMAP model
+        prefix (str): prefix for input file name
+        suffix (str): suffix for input file name
     """
     model_fnames = [file for file in os.listdir(weights_dir) if file.startswith('umap') & file.endswith('.pkl')]
     model_names = [os.path.splitext(name)[0] for name in model_fnames]
@@ -145,12 +141,42 @@ def umap_transform(input_dir, output_dir, weights_dir, prefix, suffix='_after'):
             pickle.dump(dats_, f, protocol=4)
 
 def zoom_axis(x, y, ax, zoom_cutoff=1):
+    """
+    Auto zoom axes of pyplot axes object
+    Args:
+        x (array): x data
+        y (array): y data
+        ax (object): pyplot axes object
+        zoom_cutoff (float): percentage of outliers to cut off [0, 100]
+    """
     xlim = [np.percentile(x, zoom_cutoff), np.percentile(x, 100 - zoom_cutoff)]
     ylim = [np.percentile(y, zoom_cutoff), np.percentile(y, 100 - zoom_cutoff)]
     ax.set_xlim(left=xlim[0], right=xlim[1])
     ax.set_ylim(bottom=ylim[0], top=ylim[1])
 
 def fit_umap(train_data, weights_dir, labels, n_nbrs=(15, 50, 200, 1000), a_s=(1.58,), b_s=(0.9,)):
+    """Fit UMAP model to latent vectors and save the reduced vectors (embeddings), output UMAP plot
+    Args:
+        train_data (np.array): 2D array of training data (samples, features),
+            should be directly extracted from VAE latent space
+        weights_dir (str): output directory for the fit umap model
+        labels (np array): 1D array of sample class indices.
+        n_nbrs (float) (optional, default 15)
+        The size of local neighborhood (in terms of number of neighboring
+        sample points) used for manifold approximation. Larger values
+        result in more global views of the manifold, while smaller
+        values result in more local data being preserved. In general
+        values should be in the range 2 to 100.
+        a: float (optional, default None)
+        More specific parameters controlling the embedding. If None these
+        values are set automatically as determined by ``min_dist`` and
+        ``spread``.
+        b: float (optional, default None)
+        More specific parameters controlling the embedding. If None these
+        values are set automatically as determined by ``min_dist`` and
+        ``spread``.
+
+    """
     n_plots = len(n_nbrs) * len(a_s) * len(b_s)
     n_rows = int(np.round(np.sqrt(n_plots)))
     n_cols = int(np.ceil(np.sqrt(n_plots)))
@@ -192,6 +218,20 @@ def dim_reduction(input_dirs,
                   method,
                   fit_model,
                   prefix):
+    """
+    Wrapper fucntion for dimensionality reduction, save the reduced vectors (embeddings),
+    output 2D embedding plot.
+    supports PCA and UMAP for fitting new models and save reduced vectors.
+    Transform from saved model is only suppored for PCA
+    Args:
+        input_dir (str): folder for latent vectors
+        output_dir (str): folder to save output files
+        weights_dir (str): folder for loading or saving model
+        method (str): reduction method ('pca', 'umap')
+        fit_model (bool): Fit new model if Ture, load previous trained model otherwise
+        prefix (str): prefix for input file name
+
+    """
 
     if type(input_dirs) is not list:
         input_dirs = [input_dirs]
