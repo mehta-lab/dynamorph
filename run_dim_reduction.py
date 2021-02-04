@@ -1,7 +1,6 @@
 import os
 import numpy as np
 import pickle
-import h5py
 from sklearn.decomposition import PCA
 import argparse
 import matplotlib
@@ -9,7 +8,7 @@ matplotlib.use('AGG')
 import matplotlib.pyplot as plt
 import umap
 
-def fit_PCA(train_data, weights_dir, labels):
+def fit_PCA(train_data, weights_dir, labels, conditions):
     """ Fit a PCA model accounting for top 50% variance to the train_data,
     and outout
 
@@ -33,7 +32,7 @@ def fit_PCA(train_data, weights_dir, labels):
 
     plt.clf()
     zoom_cutoff = 1
-    conditions = ['mock', 'infected']
+    # conditions = ['mock', 'infected']
     fig, ax = plt.subplots()
     scatter = ax.scatter(pcas[:, 0], pcas[:, 1], s=7, c=labels, cmap='Paired', alpha=0.1)
     scatter.set_facecolor("none")
@@ -154,7 +153,7 @@ def zoom_axis(x, y, ax, zoom_cutoff=1):
     ax.set_xlim(left=xlim[0], right=xlim[1])
     ax.set_ylim(bottom=ylim[0], top=ylim[1])
 
-def fit_umap(train_data, weights_dir, labels, n_nbrs=(15, 50, 200, 1000), a_s=(1.58,), b_s=(0.9,)):
+def fit_umap(train_data, weights_dir, labels, conditions, n_nbrs=(15, 50, 200, 1000), a_s=(1.58,), b_s=(0.9,)):
     """Fit UMAP model to latent vectors and save the reduced vectors (embeddings), output UMAP plot
     Args:
         train_data (np.array): 2D array of training data (samples, features),
@@ -186,7 +185,7 @@ def fit_umap(train_data, weights_dir, labels, n_nbrs=(15, 50, 200, 1000), a_s=(1
     axis_count = 0
     # top and bottom % of data to cut off
     zoom_cutoff = 1
-    conditions = ['mock', 'infected']
+    # conditions = ['mock', 'infected']
     for n_nbr in n_nbrs:
         for a, b in zip(a_s, b_s):
             print('Fitting UMAP model {} with N(neighbors)={}, a={}, b={} ...'.format(weights_dir, n_nbr, a, b))
@@ -217,7 +216,8 @@ def dim_reduction(input_dirs,
                   weights_dir,
                   method,
                   fit_model,
-                  prefix):
+                  prefix=None,
+                  conditions=None):
     """
     Wrapper fucntion for dimensionality reduction, save the reduced vectors (embeddings),
     output 2D embedding plot.
@@ -248,6 +248,10 @@ def dim_reduction(input_dirs,
         transform_func = umap_transform
     else:
         raise ValueError('Dimensionality reduction method has to be "pca" or "umap"')
+    if conditions is None:
+        conditions = [os.path.basename(input_dir) for input_dir in input_dirs]
+    elif type(conditions) is not list:
+        conditions = [conditions]
     if fit_model:
         vector_list = []
         labels = []
@@ -258,7 +262,7 @@ def dim_reduction(input_dirs,
             labels += [label] * vec.shape[0]
             label += 1
         vectors = np.concatenate(vector_list, axis=0)
-        _ = fit_func(vectors, weights_dir, labels=labels)
+        _ = fit_func(vectors, weights_dir, labels=labels, conditions=conditions)
         # UMAP model from umap 0.5.0 can't be pickled with protocol=4.
         # Transform from saved models is currently not supported
         if method == 'umap':
@@ -321,7 +325,16 @@ def parse_args():
         type=str,
         required=False,
         default=None,
-        help="prefix of the filename for latent vectors",
+        help='prefix of the latent vector filename "{}_latent_space"',
+    )
+
+    parser.add_argument(
+        '-c', '--condition',
+        nargs='+',
+        type=str,
+        required=False,
+        default=None,
+        help='Condition for each input directory',
     )
     return parser.parse_args()
 
@@ -335,6 +348,7 @@ if __name__ == '__main__':
                   method=args.method,
                   fit_model=args.fit_model,
                   prefix=args.prefix,
+                  conditions=args.condition,
                   )
 
 

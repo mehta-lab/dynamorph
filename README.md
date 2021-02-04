@@ -102,6 +102,10 @@ Initiate a trained VQ-VAE model and encode cell image patches into morphology de
 	python run_VAE.py -r $RAW_PATH -s $SUPP_PATH -m process -f $SITE_NAMES -w $VQVAE_WEIGHT_PATH
 	python run_VAE.py -r $RAW_PATH -s $SUPP_PATH -m pca -f $SITE_NAMES -w $PCA_WEIGHT_PATH
 
+Reduce the dimension of latent vectors for visualization by fitting a PCA or UMAP model to the data. For UMAP:
+
+    python run_dim_reduction.py -i <input dir 1> <input dir 2> ... -w <model dir> -f -m umap -p <prefix> -c <condition 1> <condition 2> ...
+"prefix" is the string in the latent vector filename "{prefix}_latent_space"
 ## Citing DynaMorph
 
 To cite DynaMorph, please use the bibtex entry below:
