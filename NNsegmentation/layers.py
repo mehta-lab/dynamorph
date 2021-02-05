@@ -15,68 +15,75 @@ from keras.layers import Dense, Layer, Input
 from sklearn.metrics import roc_auc_score, f1_score
 
 
-class Reshape(Layer):
+class SplitSlice(Layer):
     """ Customized layer for tensor reshape
+    
+    Used for 2.5D segmentation
     """
     def __init__(self,
-                 target_shape,
+                 n_channels,
+                 x_size,
+                 y_size,
                  **kwargs):
-        self.target_shape = target_shape
-        super(Reshape, self).__init__(**kwargs)
+        self.n_channels = n_channels
+        self.x_size = x_size
+        self.y_size = y_size
+        super(SplitSlice, self).__init__(**kwargs)
 
     def build(self, input_shape):
-        super(Reshape, self).build(input_shape)
+        super(SplitSlice, self).build(input_shape)
 
     def call(self, x):
-        # Input shape: (batch_size, z_size, x_size, y_size, channels)
-        # Output shape: (batch_size * z_size, x_size, y_size, channels)
-        output = K.reshape(x, self.target_shape)
+        # Input shape: (batch_size, n_channel, n_slice, x_size, y_size)
+        # Output shape: (batch_size * n_slice, n_channel, x_size, y_size)
+        _x = K.permute_dimensions(x, (0, 2, 1, 3, 4))
+        target_shape = (-1, self.n_channels, self.x_size, self.y_size)
+        output = K.reshape(_x, target_shape)
         return output
 
     def compute_output_shape(self, input_shape):
-        return tuple([input_shape[0],
-                      input_shape[2],
-                      input_shape[3],
-                      input_shape[4]])
+        return tuple([input_shape[0], # batch
+                      input_shape[1], # c
+                      input_shape[-2], # x
+                      input_shape[-1]]) # y
 
 
-class MergeOnZ(Layer):
+class MergeSlices(Layer):
     """ Customized layer for tensor reshape
     """
     def __init__(self,
-                 z_size=5,
-                 unet_feat=32,
+                 n_slice=5,
+                 n_channel=32,
                  **kwargs):
-        self.z_size = z_size
-        self.unet_feat = unet_feat
-        self.output_dim = self.z_size * self.unet_feat
-        super(MergeOnZ, self).__init__(**kwargs)
+        self.n_slice = n_slice
+        self.n_channel = n_channel
+        self.output_dim = self.n_slice * self.n_channel
+        super(MergeSlices, self).__init__(**kwargs)
 
     def build(self, input_shape):
-        super(MergeOnZ, self).build(input_shape)
+        super(MergeSlices, self).build(input_shape)
 
     def call(self, x):
-        # Input shape: (batch_size * z_size, x_size, y_size, channels)
-        # Output shape: (batch_size, x_size, y_size, channels * z_size)
+        # Input shape: (batch_size * n_slice, n_channel, x_size, y_size)
+        # Output shape: (batch_size, n_slice * n_channel, x_size, y_size)
         x_shape = K.shape(x)
-        x = K.reshape(x, [x_shape[0]//self.z_size, # Batch size
-                          self.z_size, # z
-                          x_shape[1], # x
-                          x_shape[2], # y
-                          x_shape[3]]) # channels
+        _x = K.reshape(x, [x_shape[0]//self.n_slice, # Batch size
+                          self.n_slice, # n_slice
+                          self.n_channel, # n_channel
+                          x_shape[2], # x
+                          x_shape[3]]) # y
 
-        output = K.reshape(K.permute_dimensions(x, (0, 2, 3, 1, 4)),
-                           [x_shape[0]//self.z_size, # Batch size
-                            x_shape[1], # x
-                            x_shape[2], # y
-                            self.output_dim]) # z * channels
+        output = K.reshape(_x, [x_shape[0]//self.n_slice, # Batch size
+                                self.output_dim, # n_slice * n_channel
+                                x_shape[2], # x
+                                x_shape[3]]) # y
         return output
 
     def compute_output_shape(self, input_shape):
         return tuple([input_shape[0], # avoiding None
-                      input_shape[1],
+                      self.output_dim,
                       input_shape[2],
-                      self.output_dim])
+                      input_shape[3]])
 
 
 class weighted_binary_cross_entropy(object):
@@ -97,8 +104,13 @@ class weighted_binary_cross_entropy(object):
         
         """
 
-        w = y_true[:, :, :, -1]
-        y_true = y_true[:, :, :, :-1]
+        w = y_true[:, -1]
+        y_true = y_true[:, :-1]
+        
+        # Switch to channel last form
+        y_true = K.permute_dimensions(y_true, (0, 2, 3, 1))
+        y_pred = K.permute_dimensions(y_pred, (0, 2, 3, 1))
+        
         loss = K.categorical_crossentropy(y_true, y_pred, from_logits=True) * w
         return loss
 
@@ -117,14 +129,14 @@ class ValidMetrics(keras.callbacks.Callback):
 
     def on_epoch_end(self, epoch, logs={}):
         if self.valid_data is not None:
-            y_pred = self.model.predict(self.valid_data[0])[:, :, :, 1]
-            y_true = self.valid_data[1][:, :, :, 1] > 0.5
+            y_pred = self.model.predict(self.valid_data[0])[:, 0]
+            y_true = self.valid_data[1][:, 0] > 0.5
             roc = roc_auc_score(y_true.flatten(), y_pred.flatten())
             f1 = f1_score(y_true.flatten(), y_pred.flatten()>0.5)
             print('\r valid-roc-auc: %f  valid-f1: %f\n' % (roc, f1))
         if self.test_data is not None:
-            y_pred = self.model.predict(self.test_data[0])[:, :, :, 1]
-            y_true = self.test_data[1][:, :, :, 1] > 0.5
+            y_pred = self.model.predict(self.test_data[0])[:, 0]
+            y_true = self.test_data[1][:, 0] > 0.5
             roc = roc_auc_score(y_true.flatten(), y_pred.flatten())
             f1 = f1_score(y_true.flatten(), y_pred.flatten()>0.5)
             print('\r test-roc-auc: %f  test-f1: %f\n' % (roc, f1))
