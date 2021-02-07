@@ -28,7 +28,7 @@ def select_window(mat, window, padding=0.):
     negative boundaries are allowed (padded)
     
     Args:
-        mat (np.array): target matrix, size should be 2048 * 2048 * C
+        mat (np.array): target matrix, size should be (c, z(1), x(2048), y(2048))
             TODO: size is hardcoded now
         window (tuple): area-of-interest for submatrix, ((int, int), (int, int))
             in the form of ((x_low, x_up), (y_low, y_up))
@@ -38,19 +38,24 @@ def select_window(mat, window, padding=0.):
         np.array: submatrix-of-interest
     
     """
+    n_channels, n_z, x_full_size, y_full_size = mat.shape
     if window[0][0] < 0:
-        output_mat = np.concatenate([padding * np.ones_like(mat[window[0][0]:]), mat[:window[0][1]]], 0)
-    elif window[0][1] > 2048:
-        output_mat = np.concatenate([mat[window[0][0]:], padding * np.ones_like(mat[:(window[0][1] - 2048)])], 0)
+        output_mat = np.concatenate([padding * np.ones_like(mat[:, :, window[0][0]:]), 
+                                     mat[:, :, :window[0][1]]], 2)
+    elif window[0][1] > x_full_size:
+        output_mat = np.concatenate([mat[:, :, window[0][0]:], 
+                                     padding * np.ones_like(mat[:, :, :(window[0][1] - x_full_size)])], 2)
     else:
-        output_mat = mat[window[0][0]:window[0][1]]
+        output_mat = mat[:, :, window[0][0]:window[0][1]]
 
     if window[1][0] < 0:
-        output_mat = np.concatenate([padding * np.ones_like(output_mat[:, window[1][0]:]), output_mat[:, :window[1][1]]], 1)
-    elif window[1][1] > 2048:
-        output_mat = np.concatenate([output_mat[:, window[1][0]:], padding * np.ones_like(output_mat[:, :(window[1][1] - 2048)])], 1)
+        output_mat = np.concatenate([padding * np.ones_like(output_mat[..., window[1][0]:]), 
+                                     output_mat[..., :window[1][1]]], 3)
+    elif window[1][1] > y_full_size:
+        output_mat = np.concatenate([output_mat[..., window[1][0]:], 
+                                     padding * np.ones_like(output_mat[..., :(window[1][1] - y_full_size)])], 3)
     else:
-        output_mat = output_mat[:, window[1][0]:window[1][1]]
+        output_mat = output_mat[..., window[1][0]:window[1][1]]
     return output_mat
 
 
@@ -89,6 +94,7 @@ for i in range(size2):
         if np.sqrt((i-size2//2)**2 + (j-size2//2)**2) < size2//2:
             filter2[i, j] = 1
 
+
 def generate_mask(positions, positions_labels, cell_id, window, window_segmentation):
     """ Generate mask matrix for surrounding cells
 
@@ -100,7 +106,7 @@ def generate_mask(positions, positions_labels, cell_id, window, window_segmentat
             ((int, int), (int, int)) in the form of 
             ((x_low, x_up), (y_low, y_up))
         window_segmentation (np.array): pixel-level semantic segmentation in 
-            the window area, size (window_x, window_y, n_classes)
+            the window area, size (n_classes, z(1), window_x, window_y)
 
     Returns:
         np.array: remove mask (1s will be filled by median)
@@ -128,10 +134,10 @@ def generate_mask(positions, positions_labels, cell_id, window, window_segmentat
     # Target mask override remove mask
     remove_mask = ((remove_mask - target_mask2) > 0) * 1
     # Add negative boundary paddings
-    remove_mask[np.where(window_segmentation[:, :, 0] == -1)] = 1
-    return remove_mask.reshape((x_size, y_size, 1)), \
-        target_mask.reshape((x_size, y_size, 1)), \
-        target_mask2.reshape((x_size, y_size, 1))
+    remove_mask[np.where(window_segmentation[0, 0] == -1)] = 1
+    return remove_mask.reshape((x_size, y_size)), \
+        target_mask.reshape((x_size, y_size)), \
+        target_mask2.reshape((x_size, y_size))
 
 
 def instance_clustering(cell_segmentation, 
@@ -143,9 +149,10 @@ def instance_clustering(cell_segmentation,
     """ Perform instance clustering on a static frame
 
     Args:
-        cell_segmentation (np.array): segmentation mask for the frame
-        ct_thr (tuple, optional): lower and upper threshold for cell size (number 
-            of pixels in segmentation mask)
+        cell_segmentation (np.array): segmentation mask for the frame, 
+            size (n_classes(3), z(1), x, y)
+        ct_thr (tuple, optional): lower and upper threshold for cell size 
+            (number of pixels in segmentation mask)
         instance_map (bool, optional): if to save instance segmentation as an 
             image
         map_path (str or None, optional): path to the image (if `instance_map` 
@@ -162,7 +169,7 @@ def instance_clustering(cell_segmentation,
         np.array: array of cell IDs of foreground pixels
 
     """
-    all_cells = cell_segmentation[:, :, 0] < fg_thr
+    all_cells = cell_segmentation[0, 0] < fg_thr
     positions = np.array(list(zip(*np.where(all_cells))))
     if len(positions) < 1000:
         # No cell detected
@@ -192,10 +199,10 @@ def instance_clustering(cell_segmentation,
         outliers = [p for p in points if not within_range(window, p)]
         if len(outliers) > len(points) * 0.05:
             continue
-        cell_segmentation_labels = cell_segmentation[points[:, 0], points[:, 1]]
+        cell_segmentation_labels = cell_segmentation[:, 0, points[:, 0], points[:, 1]]
         # Calculate if MG/Non-MG/intermediate
-        mg_ratio = (np.argmax(cell_segmentation_labels, 1) == 1).sum()/len(points)
-        non_mg_ratio = (np.argmax(cell_segmentation_labels, 1) == 2).sum()/len(points)
+        mg_ratio = (np.argmax(cell_segmentation_labels, 0) == 1).sum()/len(points)
+        non_mg_ratio = (np.argmax(cell_segmentation_labels, 0) == 2).sum()/len(points)
         if mg_ratio > 0.9:
             mg_cell_positions.append((cell_id, mean_pos))
         elif non_mg_ratio > 0.9:
@@ -205,8 +212,9 @@ def instance_clustering(cell_segmentation,
 
     # Save instance segmentation results as image
     if instance_map and map_path is not None:
+        x_size, y_size = cell_segmentation.shape[-2:]
         # bg as -1
-        segmented = np.zeros(cell_segmentation.shape[:2]) - 1
+        segmented = np.zeros((x_size, y_size)) - 1
         for cell_id, mean_pos in mg_cell_positions:
             points = positions[np.where(positions_labels == cell_id)[0]]
             for p in points:
@@ -231,26 +239,6 @@ def instance_clustering(cell_segmentation,
     return (mg_cell_positions, non_mg_cell_positions, other_cells), positions, positions_labels
 
 
-def get_cell_rect_angle(tm):
-    """ Calculate the rotation angle for long axis alignment
-
-    Args:
-        tm (np.array): target mask
-
-    Returns:
-        float: long axis angle
-
-    """
-    contours, _ = cv2.findContours(tm.astype('uint8'), 1, 2)
-    areas = [cv2.contourArea(cnt) for cnt in contours]
-    rect = cv2.minAreaRect(contours[np.argmax(areas)])
-    w, h = rect[1]
-    ang = rect[2]
-    if w < h:
-        ang = ang - 90
-    return ang
-
-
 def process_site_instance_segmentation(site_path, 
                                        site_segmentation_path, 
                                        site_supp_files_folder):
@@ -270,16 +258,16 @@ def process_site_instance_segmentation(site_path,
     """
 
     # TODO: Size is hardcoded here
-    # Should be of size (n_time_points, 2048, 2048, 2), uint16
+    # Should be of size (n_frame, n_channels, z(1), x(2048), y(2048)), uint16
     image_stack = np.load(site_path)
-    # Should be of size (n_time_points, 2048, 2048, n_classes), float
+    # Should be of size (n_frame, n_classes, z(1), x(2048), y(2048)), float
     segmentation_stack = np.load(site_segmentation_path)
 
     cell_positions = {}
     cell_pixel_assignments = {}
     for t_point in range(image_stack.shape[0]):
         print("\tClustering time %d" % t_point)
-        cell_segmentation = segmentation_stack[t_point, :, :]
+        cell_segmentation = segmentation_stack[t_point]
         instance_map_path = os.path.join(site_supp_files_folder, 'segmentation_%d.png' % t_point)
         res = instance_clustering(cell_segmentation, instance_map=True, map_path=instance_map_path)
         cell_positions[t_point] = res[0] # MG, Non-MG, Chimeric Cells
@@ -321,7 +309,8 @@ def process_site_extract_patches(site_path,
     with open(os.path.join(site_supp_files_folder, 'cell_pixel_assignments.pkl'), 'rb') as f:
         cell_pixel_assignments = pickle.load(f)
 
-    for t_point in range(image_stack.shape[0]):
+    n_frames, n_channels, n_z, x_full_size, y_full_size = image_stack.shape
+    for t_point in range(n_frames):
         if os.path.exists(os.path.join(site_supp_files_folder, 'stacks_%d.pkl' % t_point)):
             try:
                 site_data = pickle.load(open(os.path.join(site_supp_files_folder, 'stacks_%d.pkl' % t_point), 'rb'))
@@ -332,16 +321,15 @@ def process_site_extract_patches(site_path,
         else:
             site_data = {}
         print("\tWriting time %d" % t_point)
-        raw_image = image_stack[t_point, :, :]
-        cell_segmentation = segmentation_stack[t_point, :, :]
-        
+        raw_image = image_stack[t_point]
+        cell_segmentation = segmentation_stack[t_point]
         positions, positions_labels = cell_pixel_assignments[t_point]
         mg_cells, non_mg_cells, other_cells = cell_positions[t_point]
 
         # Define fillings for the masked pixels in this slice
-        background_pool = raw_image[np.where(cell_segmentation[:, :, 0] > 0.9)]
-        background_pool = np.median(background_pool, 0)
-        background_filling = np.ones((window_size, window_size, 1)) * background_pool.reshape((1, 1, -1))
+        background_positions = np.where(cell_segmentation[0] > 0.9)
+        background_pool = np.array([np.median(raw_image[i][background_positions]) for i in range(n_channels)])
+        background_filling = np.ones((n_channels, n_z, window_size, window_size)) * background_pool.reshape((n_channels, 1, 1, 1))
 
         # Save all cells in this step, filtering will be performed during analysis
         for cell_id, cell_position in mg_cells + non_mg_cells + other_cells:
@@ -357,16 +345,61 @@ def process_site_extract_patches(site_path,
                                                  cell_id, 
                                                  window, 
                                                  window_segmentation)
+            
+            # Reshape (x, y) to (c, z, x, y)
+            remove_mask = np.expand_dims(np.stack([remove_mask] * n_z, 0), 0)
+            tm = np.expand_dims(np.stack([tm] * n_z, 0), 0)
+            tm2 = np.expand_dims(np.stack([tm2] * n_z, 0), 0)
+            
             # Select submatrix from the whole slice
             output_mat = select_window(raw_image, window, padding=0)
             masked_output_mat = output_mat * (1 - remove_mask) + background_filling * remove_mask
-            # To prevent backward compatibility issue cast to int64 and float 64 respectively
-            # TODO: solve compatibility issue here
-            output_mat = np.concatenate([output_mat, tm, tm2], 2).astype('float64')
-            masked_output_mat = np.concatenate([masked_output_mat, tm, tm2], 2).astype('float64')
-            site_data[cell_name] = {"mat": output_mat, "masked_mat": masked_output_mat}
+            
+            site_data[cell_name] = {
+                "mat": np.concatenate([output_mat, tm, tm2], 0).astype('float64'), 
+                "masked_mat": np.concatenate([masked_output_mat, tm, tm2], 0).astype('float64')
+                }
         with open(os.path.join(site_supp_files_folder, 'stacks_%d.pkl' % t_point), 'wb') as f:
             pickle.dump(site_data, f)
+
+
+def get_cell_rect_angle(tm):
+    """ Calculate the rotation angle for long axis alignment
+
+    Args:
+        tm (np.array): target mask
+
+    Returns:
+        float: long axis angle
+
+    """
+    _, contours, _ = cv2.findContours(tm.astype('uint8'), 1, 2)
+    areas = [cv2.contourArea(cnt) for cnt in contours]
+    rect = cv2.minAreaRect(contours[np.argmax(areas)])
+    w, h = rect[1]
+    ang = rect[2]
+    if w < h:
+        ang = ang - 90
+    return ang
+
+
+def cv2_fn_wrapper(cv2_fn, mat, *args, **kwargs):
+    """" A wrapper for cv2 functions
+    
+    Data in channel first format are adjusted to channel last format for 
+    cv2 functions
+    """
+    
+    mat_shape = mat.shape
+    x_size = mat_shape[-2]
+    y_size = mat_shape[-1]
+    _mat = mat.reshape((-1, x_size, y_size)).transpose((1, 2, 0))
+    _output = cv2_fn(_mat, *args, **kwargs)
+    _x_size = _output.shape[0]
+    _y_size = _output.shape[1]
+    output_shape = tuple(list(mat_shape[:-2]) + [_x_size, _y_size])
+    output = _output.transpose((2, 0, 1)).reshape(output_shape)
+    return output
 
 
 def process_site_extract_patches_align_axis(site_path, 
@@ -392,8 +425,9 @@ def process_site_extract_patches_align_axis(site_path,
         window_size (int, optional): default=256, x, y size of the patch
 
     """
-
+    
     # Use a larger window (for rotation)
+    output_window_size = window_size
     window_size = int(np.ceil(window_size * np.sqrt(2)) + 1)
     # Load data
     image_stack = np.load(site_path)
@@ -403,21 +437,24 @@ def process_site_extract_patches_align_axis(site_path,
     with open(os.path.join(site_supp_files_folder, 'cell_pixel_assignments.pkl'), 'rb') as f:
         cell_pixel_assignments = pickle.load(f)
 
+    n_frames, n_channels, n_z, x_full_size, y_full_size = image_stack.shape
     for t_point in range(image_stack.shape[0]):
         site_data = {}
         print("\tWriting time %d" % t_point)
-        raw_image = image_stack[t_point, :, :]
-        cell_segmentation = segmentation_stack[t_point, :, :]
-        
-        positions, positions_labels = cell_pixel_assignments[t_point]      
+        raw_image = image_stack[t_point]
+        cell_segmentation = segmentation_stack[t_point]
+        positions, positions_labels = cell_pixel_assignments[t_point]
         mg_cells, non_mg_cells, other_cells = cell_positions[t_point]
 
         # Define fillings for the masked pixels in this slice
-        background_pool = raw_image[np.where(cell_segmentation[:, :, 0] > 0.9)]
-        background_pool = np.median(background_pool, 0 )
-        background_filling = np.ones((window_size, window_size, 1)) * background_pool.reshape((1, 1, -1))
+        background_positions = np.where(cell_segmentation[0] > 0.9)
+        background_pool = np.array([np.median(raw_image[i][background_positions]) for i in range(n_channels)])
+        background_filling = np.ones((n_channels, n_z, window_size, window_size)) * background_pool.reshape((n_channels, 1, 1, 1))
 
-        for cell_id, cell_position in mg_cells:
+        # Save all cells in this step, filtering will be performed during analysis
+        for cell_id, cell_position in mg_cells + non_mg_cells + other_cells:
+            cell_name = os.path.join(site_supp_files_folder, '%d_%d.h5' % (t_point, cell_id))
+            # Define window based on cell center and extract mask
             window = [(cell_position[0]-window_size//2, cell_position[0]+window_size//2),
                       (cell_position[1]-window_size//2, cell_position[1]+window_size//2)]
             window_segmentation = select_window(cell_segmentation, window, padding=-1)
@@ -426,25 +463,44 @@ def process_site_extract_patches_align_axis(site_path,
                                                  cell_id, 
                                                  window, 
                                                  window_segmentation)
-            # Find long axis and rotate
+            
+            # Select submatrix from the whole slice
+            remove_mask = np.expand_dims(np.stack([remove_mask] * n_z, 0), 0)
+            output_mat = select_window(raw_image, window, padding=0)
+            masked_output_mat = output_mat * (1 - remove_mask) + background_filling * remove_mask
+            
             ang = get_cell_rect_angle(tm)
             M = cv2.getRotationMatrix2D((window_size/2, window_size/2), ang, 1)
-            tm_ = cv2.warpAffine(tm.astype('uint8'), M, (window_size, window_size)).reshape((window_size, window_size, 1))
-            tm2_ = cv2.warpAffine(tm2.astype('uint8'), M, (window_size, window_size)).reshape((window_size, window_size, 1))
-            output_mat_ = cv2.warpAffine(output_mat.astype('uint16'), M, (window_size, window_size))
-            masked_output_mat_ = cv2.warpAffine(masked_output_mat.astype('uint16'), M, (window_size, window_size))
+            _tm = cv2.warpAffine(tm.astype('uint8'), M, (window_size, window_size)).reshape((window_size, window_size))
+            _tm2 = cv2.warpAffine(tm2.astype('uint8'), M, (window_size, window_size)).reshape((window_size, window_size))
+            _output_mat = cv2_fn_wrapper(cv2.warpAffine, 
+                                         output_mat.astype('uint16'), 
+                                         M,
+                                         (window_size, window_size))
+            _masked_output_mat = cv2_fn_wrapper(cv2.warpAffine, 
+                                                masked_output_mat.astype('uint16'), 
+                                                M,
+                                                (window_size, window_size))
+            # Reshape (x, y) to (c, z, x, y)
+            _tm = np.expand_dims(np.stack([_tm] * n_z, 0), 0)
+            _tm2 = np.expand_dims(np.stack([_tm2] * n_z, 0), 0)
+            
+            tm = _tm[...,
+                (window_size//2 - output_window_size//2):(window_size//2 + output_window_size//2),
+                (window_size//2 - output_window_size//2):(window_size//2 + output_window_size//2)]
+            tm2 = _tm2[...,
+                (window_size//2 - output_window_size//2):(window_size//2 + output_window_size//2),
+                (window_size//2 - output_window_size//2):(window_size//2 + output_window_size//2)]
+            output_mat = _output_mat[...,
+                (window_size//2 - output_window_size//2):(window_size//2 + output_window_size//2),
+                (window_size//2 - output_window_size//2):(window_size//2 + output_window_size//2)]
+            masked_output_mat = _masked_output_mat[...,
+                (window_size//2 - output_window_size//2):(window_size//2 + output_window_size//2),
+                (window_size//2 - output_window_size//2):(window_size//2 + output_window_size//2)]
 
-            # Hardcoded for size to be 256 * 256
-            tm = tm_[(window_size//2 - 128):(window_size//2 + 128),
-                     (window_size//2 - 128):(window_size//2 + 128)]
-            tm2 = tm2_[(window_size//2 - 128):(window_size//2 + 128),
-                       (window_size//2 - 128):(window_size//2 + 128)]
-            output_mat = output_mat_[(window_size//2 - 128):(window_size//2 + 128),
-                                     (window_size//2 - 128):(window_size//2 + 128)]
-            masked_output_mat = masked_output_mat_[(window_size//2 - 128):(window_size//2 + 128),
-                                                   (window_size//2 - 128):(window_size//2 + 128)]
-            output_mat = np.concatenate([output_mat, tm, tm2], 2).astype('int64')
-            masked_output_mat = np.concatenate([masked_output_mat, tm, tm2], 2).astype('float64')
-            site_data[os.path.join(site_supp_files_folder, '%d_%d.h5' % (t_point, cell_id))] = {"mat": output_mat, "masked_mat": masked_output_mat}
+            site_data[cell_name] = {
+                "mat": np.concatenate([output_mat, tm, tm2], 0).astype('float64'), 
+                "masked_mat": np.concatenate([masked_output_mat, tm, tm2], 0).astype('float64')
+                }
         with open(os.path.join(site_supp_files_folder, 'stacks_rotated_%d.pkl' % t_point), 'wb') as f:
             pickle.dump(site_data, f)
