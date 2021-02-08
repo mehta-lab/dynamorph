@@ -14,7 +14,11 @@ from SingleCellPatch.extract_patches import process_site_extract_patches
 from HiddenStateExtractor.vq_vae import VQ_VAE, prepare_dataset_v2, rescale
 
 
-def extract_patches(paths):
+def extract_patches(summary_folder: str,
+                    supp_folder: str,
+                    channels: list,
+                    model_path: str,
+                    sites: list):
     """ Helper function for patch extraction
 
     Wrapper method `process_site_extract_patches` will be called, which 
@@ -24,15 +28,15 @@ def extract_patches(paths):
         "stacks_*.pkl": single cell patches for each time slice
 
     Args:
-        paths (list): list of paths, containing:
-            0 - folder for raw data, segmentation and summarized results
-            1 - folder for supplementary data
-            2 - path to model weight (not used in this method)
-            3 - list of site names
+        summary_folder (str): folder for raw data, segmentation and 
+            summarized results
+        supp_folder (str): folder for supplementary data
+        channels (list of int): indices of channels used for segmentation 
+            (not used, by default all channels should be saved)
+        model_path (str, optional): path to model weight (not used)
+        sites (list of str): list of site names
 
     """
-
-    summary_folder, supp_folder, model_path, sites = paths[0], paths[1], paths[2], paths[3]
 
     for site in sites:
         site_path = os.path.join(summary_folder + '/' + site + '.npy')
@@ -52,7 +56,11 @@ def extract_patches(paths):
     return
 
 
-def build_trajectories(paths):
+def build_trajectories(summary_folder: str,
+                       supp_folder: str,
+                       channels: list,
+                       model_path: str,
+                       sites: list):
     """ Helper function for trajectory building
 
     Wrapper method `process_site_build_trajectory` will be called, which 
@@ -64,15 +72,15 @@ def build_trajectories(paths):
             trajectory positions are dict of t_point: cell center position
 
     Args:
-        paths (list): list of paths, containing:
-            0 - folder for raw data, segmentation and summarized results
-            1 - folder for supplementary data
-            2 - path to model weight (not used in this method)
-            3 - list of site names
+        summary_folder (str): folder for raw data, segmentation and 
+            summarized results
+        supp_folder (str): folder for supplementary data
+        channels (list of int): indices of channels used for segmentation 
+            (not used)
+        model_path (str, optional): path to model weight (not used)
+        sites (list of str): list of site names
 
     """
-
-    summary_folder, supp_folder, model_path, sites = paths[0], paths[1], paths[2], paths[3]
 
     for site in sites:
         site_path = os.path.join(summary_folder + '/' + site + '.npy')
@@ -86,7 +94,11 @@ def build_trajectories(paths):
     return
 
 
-def assemble_VAE(paths):
+def assemble_VAE(summary_folder: str,
+                 supp_folder: str,
+                 channels: list,
+                 model_path: str,
+                 sites: list):
     """ Wrapper method for prepare dataset for VAE encoding
 
     This function loads data from multiple sites, adjusts intensities to correct
@@ -99,16 +111,17 @@ def assemble_VAE(paths):
             after adjusting phase/retardance intensities (avoid batch effect)
 
     Args:
-        paths (list): list of paths, containing:
-            0 - folder for raw data, segmentation and summarized results
-            1 - folder for supplementary data
-            2 - path to model weight (not used in this method)
-            3 - list of site names
+        summary_folder (str): folder for raw data, segmentation and 
+            summarized results
+        supp_folder (str): folder for supplementary data
+        channels (list of int): indices of channels used for segmentation 
+            (not used)
+        model_path (str, optional): path to model weight (not used)
+        sites (list of str): list of site names
 
     """
 
-    # these sites should be from a single condition (C5, C4, B-wells, etc..)
-    summary_folder, supp_folder, model_path, sites = paths[0], paths[1], paths[2], paths[3]
+    # sites should be from a single condition (C5, C4, B-wells, etc..)
     assert len(set(site[:2] for site in sites)) == 1, \
         "Sites should be from a single well/condition"
     well = sites[0][:2]
@@ -122,7 +135,7 @@ def assemble_VAE(paths):
         dat_fs.extend([os.path.join(supp_files_folder, f) \
             for f in os.listdir(supp_files_folder) if f.startswith('stacks')])
 
-    dataset, fs = prepare_dataset_v2(dat_fs, cs=[0, 1])
+    dataset, fs = prepare_dataset_v2(dat_fs, cs=channels)
     assert fs == sorted(fs)
     
     print(f"\tsaving {os.path.join(summary_folder, '%s_file_paths.pkl' % well)}")
@@ -131,21 +144,14 @@ def assemble_VAE(paths):
 
     print(f"\tsaving {os.path.join(summary_folder, '%s_static_patches.pt' % well)}")
     torch.save(dataset, os.path.join(summary_folder, '%s_static_patches.pt' % well))
-
-    # Adjust channel mean/std
-    # phase: 0.4980 plus/minus 0.0257
-    # retardance: 0.0285 plus/minus 0.0261, only adjust for mean
-    phase_slice = dataset.tensors[0][:, 0]
-    phase_slice = ((phase_slice - phase_slice.mean()) / phase_slice.std()) * 0.0257 + 0.4980
-    retard_slice = dataset.tensors[0][:, 1]
-    retard_slice = retard_slice / retard_slice.mean() * 0.0285
-    adjusted_dataset = TensorDataset(torch.stack([phase_slice, retard_slice], 1))
-    print(f"\tsaving {os.path.join(summary_folder, '%s_adjusted_static_patches.pt' % well)}")
-    torch.save(adjusted_dataset, os.path.join(summary_folder, '%s_adjusted_static_patches.pt' % well))
     return
 
 
-def process_VAE(paths):
+def process_VAE(summary_folder: str,
+                supp_folder: str,
+                channels: list,
+                model_path: str,
+                sites: list):
     """ Wrapper method for VAE encoding
 
     This function loads prepared dataset and applies trained VAE to encode 
@@ -160,15 +166,15 @@ def process_VAE(paths):
         "*_latent_space_after.pkl": array of latent vectors (after quantization)
 
     Args:
-        paths (list): list of paths, containing:
-            0 - folder for raw data, segmentation and summarized results
-            1 - folder for supplementary data
-            2 - path to VQ-VAE model weight
-            3 - list of site names
+        summary_folder (str): folder for raw data, segmentation and 
+            summarized results
+        supp_folder (str): folder for supplementary data
+        channels (list of int): indices of channels used for VAE encoding
+        model_path (str, optional): path to model weight
+        sites (list of str): list of site names
 
     """
-    # these sites should be from a single condition (C5, C4, B-wells, etc..)
-    summary_folder, supp_folder, model_path, sites = paths[0], paths[1], paths[2], paths[3]
+
     assert len(set(site[:2] for site in sites)) == 1, \
         "Sites should be from a single well/condition"
     well = sites[0][:2]
@@ -176,8 +182,9 @@ def process_VAE(paths):
     print(f"\tloading file paths {os.path.join(summary_folder, '%s_file_paths.pkl' % well)}")
     fs = pickle.load(open(os.path.join(summary_folder, '%s_file_paths.pkl' % well), 'rb'))
 
-    print(f"\tloading static patches {os.path.join(summary_folder, '%s_adjusted_static_patches.pt' % well)}")
-    dataset = torch.load(os.path.join(summary_folder, '%s_adjusted_static_patches.pt' % well))
+    print(f"\tloading static patches {os.path.join(summary_folder, '%s_static_patches.pt' % well)}")
+    dataset = torch.load(os.path.join(summary_folder, '%s_static_patches.pt' % well))
+
     dataset = rescale(dataset)
     
     model = VQ_VAE(alpha=0.0005, gpu=True)
