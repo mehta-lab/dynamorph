@@ -353,7 +353,8 @@ def predict_whole_map(file_path,
                       out_file_path=None, 
                       batch_size=8, 
                       n_supp=5, 
-                      time_slices=1):
+                      time_slices=1,
+                      **kwargs):
     """ Wrapper method for semantic segmentation on given input
 
     Inputs will be cropped into tiling patches and processed by `model` to 

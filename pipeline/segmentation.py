@@ -13,7 +13,12 @@ def segmentation(summary_folder: str,
                  supp_folder: str,
                  channels: list,
                  model_path: str,
-                 sites: list):
+                 sites: list,
+                 n_classes: int = 3,
+                 window_size: int = 256,
+                 batch_size: int = 8,
+                 n_supp: int = 5,
+                 **kwargs):
     """ Wrapper method for semantic segmentation
 
     This method performs predicion on all specified sites included in the 
@@ -33,10 +38,19 @@ def segmentation(summary_folder: str,
         channels (list of int): indices of channels used for segmentation
         model_path (str, optional): path to model weight
         sites (list of str): list of site names
+        n_classes (int, optional): number of prediction classes
+        window_size (int, optional): winsow size for segmentation model 
+            prediction
+        batch_size (int, optional): batch size
+        n_supp (int, optional): number of extra prediction rounds
+            each round of supplementary prediction will be initiated with 
+            different offset
 
     """
 
-    model = Segment(input_shape=(len(channels), 256, 256), n_classes=3)
+    model = Segment(input_shape=(len(channels), 
+                                 window_size,
+                                 window_size), n_classes=n_classes)
 
     try:
         if model_path:
@@ -58,8 +72,9 @@ def segmentation(summary_folder: str,
                 predict_whole_map(site_path, 
                                   model,
                                   use_channels=np.array(channels).astype(int),
-                                  batch_size=8, 
-                                  n_supp=5)
+                                  batch_size=batch_size, 
+                                  n_supp=n_supp,
+                                  **kwargs)
             except Exception as ex:
                 print(ex)
                 print("Error in predicting site %s" % site, flush=True)
@@ -70,7 +85,8 @@ def instance_segmentation(summary_folder: str,
                           supp_folder: str,
                           channels: list,
                           model_path: str,
-                          sites: list):
+                          sites: list,
+                          **kwargs):
     """ Helper function for instance segmentation
 
     Wrapper method `process_site_instance_segmentation` will be called, which
@@ -106,5 +122,6 @@ def instance_segmentation(summary_folder: str,
                 os.makedirs(site_supp_files_folder, exist_ok=True)
             process_site_instance_segmentation(site_path,
                                                site_segmentation_path,
-                                               site_supp_files_folder)
+                                               site_supp_files_folder,
+                                               **kwargs)
     return

@@ -16,13 +16,14 @@ class Worker(Process):
         #os.environ["CUDA_VISIBLE_DEVICES"] = str(self.gpuid)
 
         if self.method == 'assemble':
-            assemble_VAE(self.inputs)
+            assemble_VAE(*self.inputs)
         elif self.method == 'process':
-            process_VAE(self.inputs)
+            process_VAE(*self.inputs)
         elif self.method == 'pca':
-            process_PCA(self.inputs)
+            pass
+            #process_PCA(*self.inputs)
         elif self.method == 'trajectory_matching':
-            trajectory_matching(self.inputs)
+            trajectory_matching(*self.inputs)
 
 
 def main(arguments_):
@@ -31,6 +32,8 @@ def main(arguments_):
     outputs = arguments_.supplementary
     weights = arguments_.weights
     method = arguments_.method
+    channels = arguments_.channels
+    assert len(channels) > 0, "At least one channel must be specified"
 
     # assemble needs raw (write file_paths/static_patches/adjusted_patches), and supp (read site-supps)
     if arguments_.method == 'assemble':
@@ -65,7 +68,7 @@ def main(arguments_):
     for i, well in enumerate(wells):
         well_sites = [s for s in sites if s[:2] == well]
         print(well_sites)        
-        args = (inputs, outputs, weights, well_sites)
+        args = (inputs, outputs, channels, weights, well_sites)
         p = Worker(args, gpuid=i, method=method)
         p.start()
         p.join()
@@ -104,6 +107,13 @@ def parse_args():
         type=lambda s: [str(item.strip(' ').strip("'")) for item in s.split(',')],
         required=False,
         help="list of field-of-views to process (subfolders in raw data directory)",
+    )
+    parser.add_argument(
+        '-c', '--channels',
+        type=lambda s: [int(item.strip(' ').strip("'")) for item in s.split(',')],
+        required=False,
+        default=[0, 1], # Assuming two channels by default
+        help="comma-delimited list of channel indices (e.g. 1,2,3)",
     )
     parser.add_argument(
         '-w', '--weights',

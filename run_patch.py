@@ -19,9 +19,9 @@ class Worker(Process):
         os.environ["CUDA_VISIBLE_DEVICES"] = str(self.gpuid)
 
         if self.method == 'extract_patches':
-            extract_patches(self.inputs)
+            extract_patches(*self.inputs)
         elif self.method == 'build_trajectories':
-            build_trajectories(self.inputs)
+            build_trajectories(*self.inputs)
 
 
 def main(arguments_):
@@ -29,6 +29,8 @@ def main(arguments_):
     print("CLI arguments provided")
     raw = arguments_.raw
     supp = arguments_.supplementary
+    channels = arguments_.channels
+    assert len(channels) > 0, "At least one channel must be specified"
 
     n_gpu = arguments_.gpus
     method = arguments_.method
@@ -63,7 +65,7 @@ def main(arguments_):
     processes = []
     for i in range(n_gpu):
         _sites = segment_sites[sep[i]:sep[i + 1]]
-        args = (raw, supp, None, _sites)
+        args = (raw, supp, channels, None, _sites)
         p = Worker(args, gpuid=i, method=method)
         p.start()
         processes.append(p)
@@ -111,6 +113,13 @@ def parse_args():
         type=lambda s: [str(item.strip(' ').strip("'")) for item in s.split(',')],
         required=False,
         help="list of field-of-views to process (subfolders in raw data directory)",
+    )
+    parser.add_argument(
+        '-c', '--channels',
+        type=lambda s: [int(item.strip(' ').strip("'")) for item in s.split(',')],
+        required=False,
+        default=[0, 1], # Assuming two channels by default
+        help="comma-delimited list of channel indices (e.g. 1,2,3)",
     )
     return parser.parse_args()
 
