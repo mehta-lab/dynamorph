@@ -16,7 +16,7 @@ matplotlib.use('AGG')
 import matplotlib.pyplot as plt
 from copy import deepcopy
 from scipy.signal import convolve2d
-from instance_clustering import within_range
+from .instance_clustering import within_range
 
 """ Functions for extracting single cells from static frames """
 

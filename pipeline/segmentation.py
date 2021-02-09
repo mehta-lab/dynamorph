@@ -6,7 +6,7 @@ from NNsegmentation.models import Segment
 from NNsegmentation.data import load_input, predict_whole_map
 from keras import backend as K
 import tensorflow as tf
-from SingleCellPatch.extract_patches import process_site_instance_segmentation
+from SingleCellPatch.instance_clustering import process_site_instance_segmentation
 
 
 def segmentation(summary_folder: str,

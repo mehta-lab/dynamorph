@@ -20,7 +20,7 @@ import numpy as np
 import cv2
 from scipy.spatial.distance import cdist
 from scipy.optimize import linear_sum_assignment
-from extract_patches import get_patch_id
+from .extract_patches import get_patch_id
 
 def frame_matching(f1, f2, int1, int2, dist_cutoff=100, int_eff=1.4):
     """ Matching cells between two frames (LAP)
