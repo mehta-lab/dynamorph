@@ -18,9 +18,8 @@ from torch.utils.data import TensorDataset, DataLoader
 from scipy.sparse import csr_matrix
 
 
-CHANNEL_RANGE = [(0.3, 0.8), (0., 0.6)] 
-CHANNEL_VAR = np.array([0.0475, 0.0394]) # After normalized to CHANNEL_RANGE
-CHANNEL_MAX = np.array([65535., 65535.])
+CHANNEL_VAR = np.array([1., 1.])
+CHANNEL_MAX = 65535.
 eps = 1e-9
 
 
@@ -241,7 +240,7 @@ class VQ_VAE(nn.Module):
                  num_residual_layers=2,
                  num_embeddings=64,
                  commitment_cost=0.25,
-                 channel_var=[1, 1],
+                 channel_var=CHANNEL_VAR,
                  alpha=0.005,
                  gpu=True,
                  **kwargs):

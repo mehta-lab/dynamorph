@@ -39,15 +39,6 @@ def cv2_fn_wrapper(cv2_fn, mat, *args, **kwargs):
     return output
 
 
-def get_patch_id(fs, key):
-    """Return the index of the patch given its key"""
-    inds = []
-    for i, f in enumerate(fs):
-        if key in f:
-            inds.append(i)
-    return inds[0] if len(inds) == 1 else None
-
-
 def select_window(mat, window, padding=0., skip_boundary=False):
     """ Extract submatrix
 

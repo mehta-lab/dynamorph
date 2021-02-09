@@ -241,13 +241,13 @@ def vae_preprocess(dataset,
         channel_slice = channel_slice / CHANNEL_MAX # Scale to [0, 1]
         if preprocess_setting[channel][0] == "scale":
             target_mean = preprocess_setting[channel][1]
-            slice_mean = channel_slice.mean()
+            slice_mean = tensor[:, channel].mean() / CHANNEL_MAX
             output_slice = channel_slice / slice_mean * target_mean
         elif preprocess_setting[channel][0] == "normalize":
             target_mean = preprocess_setting[channel][1]
             target_sd = preprocess_setting[channel][2]
-            slice_mean = channel_slice.mean()
-            slice_sd = channel_slice.flatten().std()
+            slice_mean = tensor[:, channel].mean() / CHANNEL_MAX
+            slice_sd = tensor[:, channel].std() / CHANNEL_MAX
             z_channel_slice = (channel_slice - slice_mean) / slice_sd
             output_slice = z_channel_slice * target_sd + target_mean
         else:

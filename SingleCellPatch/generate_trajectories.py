@@ -20,7 +20,6 @@ import numpy as np
 import cv2
 from scipy.spatial.distance import cdist
 from scipy.optimize import linear_sum_assignment
-from .extract_patches import get_patch_id
 
 def frame_matching(f1, f2, int1, int2, dist_cutoff=100, int_eff=1.4):
     """ Matching cells between two frames (LAP)
@@ -456,6 +455,15 @@ def process_well_generate_trajectory_relations(fs,
     assert len(set(s[:2] for s in sites)) == 1 # Sites should all come from the same well
     relations = {}
 
+    def patch_name_to_tuple(f):
+        f = [seg for seg in f.split('/') if len(seg) > 0]
+        site_name = f[-2]
+        assert site_name in sites
+        t_point = int(f[-1].split('_')[0])
+        cell_id = int(f[-1].split('_')[1].split('.')[0])
+        return (site_name, t_point, cell_id)
+    patch_id_mapping = {patch_name_to_tuple(f): i for i, f in enumerate(fs)}
+
     for site in sites:
         print('site:', site)
         trajectories = pickle.load(open(os.path.join(well_supp_files_folder, 
@@ -466,15 +474,15 @@ def process_well_generate_trajectory_relations(fs,
             patch_ids = []
             for t_idx in t_ids:
                 # get reference patch ID
-                ref_patch_id = get_patch_id(fs, '/%s/%d_%d.' % (site, t_idx, trajectory[t_idx]))
-                assert not ref_patch_id is None, "Cannot find /%s/%d_%d" % (site, t_idx, trajectory[t_idx])
+                assert (site, t_idx, trajectory[t_idx]) in patch_id_mapping, "Cannot find /%s/%d_%d" % (site, t_idx, trajectory[t_idx])
+                ref_patch_id = patch_id_mapping[(site, t_idx, trajectory[t_idx])]
                 patch_ids.append(ref_patch_id)
                 # Adjacent frames
                 if t_idx - 1 in t_ids:
-                    adj_patch_id = get_patch_id(fs, '/%s/%d_%d.' % (site, t_idx - 1, trajectory[t_idx - 1]))
+                    adj_patch_id = patch_id_mapping[(site, t_idx - 1, trajectory[t_idx - 1])]
                     relations[(ref_patch_id, adj_patch_id)] = 2
                 if t_idx + 1 in t_ids:
-                    adj_patch_id = get_patch_id(fs, '/%s/%d_%d.' % (site, t_idx + 1, trajectory[t_idx + 1]))
+                    adj_patch_id = patch_id_mapping[(site, t_idx + 1, trajectory[t_idx + 1])]
                     relations[(ref_patch_id, adj_patch_id)] = 2
     
             # Same trajectory

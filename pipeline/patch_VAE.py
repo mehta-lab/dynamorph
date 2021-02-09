@@ -8,7 +8,7 @@ import numpy as np
 from sklearn.decomposition import PCA
 from torch.utils.data import TensorDataset
 
-from SingleCellPatch.extract_patches import get_patch_id, process_site_extract_patches
+from SingleCellPatch.extract_patches import process_site_extract_patches
 from SingleCellPatch.generate_trajectories import process_site_build_trajectory, process_well_generate_trajectory_relations
 
 from HiddenStateExtractor.vq_vae import VQ_VAE
@@ -163,7 +163,7 @@ def assemble_VAE(summary_folder: str,
     torch.save(dataset, os.path.join(summary_folder, '%s_static_patches.pt' % well))
     
     well_supp_files_folder = os.path.join(supp_folder, '%s-supps' % well)
-    relations = process_well_generate_trajectory_relations(fs, sites, well_supp_files_folder, **kwargs)
+    relations = process_well_generate_trajectory_relations(fs, sites, well_supp_files_folder)
     with open(os.path.join(summary_folder, "%s_static_patches_relations.pkl" % well), 'wb') as f:
         pickle.dump(relations, f)
     
@@ -203,6 +203,15 @@ def trajectory_matching(summary_folder: str,
     print(f"\tloading file_paths {os.path.join(summary_folder, '%s_file_paths.pkl' % well)}")
     fs = pickle.load(open(os.path.join(summary_folder, '%s_file_paths.pkl' % well), 'rb'))
 
+    def patch_name_to_tuple(f):
+        f = [seg for seg in f.split('/') if len(seg) > 0]
+        site_name = f[-2]
+        assert site_name in sites
+        t_point = int(f[-1].split('_')[0])
+        cell_id = int(f[-1].split('_')[1].split('.')[0])
+        return (site_name, t_point, cell_id)
+    patch_id_mapping = {patch_name_to_tuple(f): i for i, f in enumerate(fs)}
+    
     site_trajs = {}
     for site in sites:
         site_supp_files_folder = os.path.join(supp_folder, '%s-supps' % well, '%s' % site)
@@ -212,7 +221,7 @@ def trajectory_matching(summary_folder: str,
             name = site + '/' + str(i)
             traj = []
             for t_point in sorted(t.keys()):
-                frame_id = get_patch_id(fs, '/%s/%d_%d.' % (site, t_point, t[t_point]))
+                frame_id = patch_id_mapping[(site, t_point, t[t_point])]
                 if not frame_id is None:
                     traj.append(frame_id)
             if len(traj) > 0.95 * len(t):
@@ -288,15 +297,17 @@ def process_VAE(summary_folder: str,
         print(ex)
         raise ValueError("Error in loading model weights for VQ-VAE")
 
+    _, n_channels, n_z, x_size, y_size = dataset.tensors[0].shape
     z_bs = {}
     z_as = {}
     for i in range(len(dataset)):
-        sample = dataset[i:(i+1)][0].cuda()
+        sample = dataset[i:(i+1)][0]
+        sample = sample.reshape([-1, n_channels, x_size, y_size]).cuda()
         z_b = model.enc(sample)
         z_a, _, _ = model.vq(z_b)
         f_n = fs[i]
         z_bs[f_n] = z_b.cpu().data.numpy()
-        z_as[f_n] = z_a.cpu().data.numpy()      
+        z_as[f_n] = z_a.cpu().data.numpy()
 
     dats = np.stack([z_bs[f] for f in fs], 0).reshape((len(dataset), -1))
     print(f"\tsaving {os.path.join(summary_folder, '%s_latent_space.pkl' % well)}")
