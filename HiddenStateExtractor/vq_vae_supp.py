@@ -216,7 +216,8 @@ def vae_preprocess(dataset,
                        0: ("normalize", 0.4, 0.05), # Phase
                        1: ("scale", 0.05), # Retardance
                        2: ("normalize", 0.5, 0.05), # Brightfield
-                       }):
+                       },
+                   clamp=[0, 1]):
     """ Preprocess `dataset` to a suitable range
 
     Args:
@@ -251,7 +252,8 @@ def vae_preprocess(dataset,
             output_slice = z_channel_slice * target_sd + target_mean
         else:
             raise ValueError("Preprocessing mode not supported")
-        output_slice = t.clamp(output_slice, 0, 1)
+        if clamp:
+            output_slice = t.clamp(output_slice, clamp[0], clamp[1])
         output.append(output_slice)
     output = t.stack(output, 1)
     return TensorDataset(output)

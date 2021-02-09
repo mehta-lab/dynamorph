@@ -229,6 +229,8 @@ def process_VAE(summary_folder: str,
                 channels: list,
                 model_path: str,
                 sites: list,
+                input_clamp: list = [0., 1.],
+                save_output: bool = True,
                 **kwargs):
     """ Wrapper method for VAE encoding
 
@@ -248,8 +250,10 @@ def process_VAE(summary_folder: str,
             summarized results
         supp_folder (str): folder for supplementary data
         channels (list of int): indices of channels used for VAE encoding
-        model_path (str, optional): path to model weight
+        model_path (str): path to model weight
         sites (list of str): list of site names
+        input_clamp (list of float or None): if given, the lower/upper limit 
+            of input patches
 
     """
 
@@ -270,7 +274,8 @@ def process_VAE(summary_folder: str,
     dataset = torch.load(os.path.join(summary_folder, '%s_static_patches.pt' % well))
     dataset = vae_preprocess(dataset, 
                              use_channels=channels, 
-                             preprocess_setting=preprocess_setting)
+                             preprocess_setting=preprocess_setting,
+                             clamp=input_clamp)
     
     model = VQ_VAE(alpha=0.0005, gpu=True)
     model = model.cuda()
@@ -302,6 +307,7 @@ def process_VAE(summary_folder: str,
     print(f"\tsaving {os.path.join(summary_folder, '%s_latent_space_after.pkl' % well)}")
     with open(os.path.join(summary_folder, '%s_latent_space_after.pkl' % well), 'wb') as f:
         pickle.dump(dats, f)
+
     return
 
 
