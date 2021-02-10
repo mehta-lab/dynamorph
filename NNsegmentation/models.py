@@ -6,10 +6,10 @@ Created on Wed Feb  6 13:22:55 2019
 @author: zqwu
 """
 
-import segmentation_models
 import tensorflow as tf
 import numpy as np
 import keras
+keras.backend.set_image_data_format('channels_first')
 import tempfile
 import os
 import scipy
@@ -18,7 +18,8 @@ from copy import deepcopy
 from keras import backend as K
 from keras.models import Model, load_model
 from keras.layers import Dense, Layer, Input, BatchNormalization, Conv2D, Lambda
-from .layers import weighted_binary_cross_entropy, ValidMetrics, Reshape, MergeOnZ
+import segmentation_models
+from .layers import weighted_binary_cross_entropy, ValidMetrics, SplitSlice, MergeSlices
 from .data import load_input, preprocess
 
 
@@ -32,8 +33,8 @@ class Segment(object):
     """ Semantic segmentation model based on U-Net """
 
     def __init__(self,
-                 input_shape=(256, 256, 20),
-                 n_classes=2,
+                 input_shape=(2, 256, 256),
+                 n_classes=3,
                  freeze_encoder=False,
                  model_path=None,
                  **kwargs):
@@ -41,8 +42,8 @@ class Segment(object):
 
         Args:
             input_shape (tuple of int, optional): shape of input features 
-                (without batch dimension and time slice dimension if 
-                applicable), should be in the order of X, Y, C
+                (without batch dimension), should be in the order of 
+                (c, x, y) or (c, z, x, y)
             n_classes (int, optional): number of prediction classes
             freeze_encoder (bool, optional): if to freeze backbone weights
             model_path (str or None, optional): path to save model weights
@@ -51,6 +52,9 @@ class Segment(object):
         """
 
         self.input_shape = input_shape
+        self.n_channels = self.input_shape[0]
+        self.x_size, self.y_size = self.input_shape[-2:]
+        
         self.n_classes = n_classes
 
         self.freeze_encoder = freeze_encoder
@@ -70,32 +74,19 @@ class Segment(object):
         """ Define model structure and compile """
 
         self.input = Input(shape=self.input_shape, dtype='float32')
-        self.pre_conv = Dense(3, activation=None, name='pre_conv')(self.input)
+        self.pre_conv = Conv2D(3, (1, 1), activation=None, name='pre_conv')(self.input)
 
-        # Define U-Net backbone with self-defined inputs
-        # Requires segmentation_models==0.2.1
-        backbone = segmentation_models.backbones.get_backbone(
-            'resnet34',
-            input_shape=list(self.input_shape[:2]) + [3],
-            weights='imagenet',
-            include_top=False)
-        
-        if self.freeze_encoder:
-            for layer in backbone.layers:
-                if not isinstance(layer, BatchNormalization):
-                    layer.trainable=False
-
-        skip_connection_layers = segmentation_models.backbones.get_feature_layers('resnet34', n=4)
-        self.unet = segmentation_models.unet.builder.build_unet(
-            backbone,
-            self.n_classes,
-            skip_connection_layers,
-            decoder_filters=(256, 128, 64, 32, 16),
-            block_type='upsampling',
+        self.unet = segmentation_models.Unet(
+            backbone_name='resnet34', 
+            input_shape=(3, self.x_size, self.y_size),
+            classes=self.n_classes,
             activation='linear',
-            n_upsample_blocks=5,
-            upsample_rates=(2, 2, 2, 2, 2),
-            use_batchnorm=True)
+            encoder_weights='imagenet',
+            encoder_features='default',
+            decoder_block_type='upsampling',
+            decoder_filters=(256, 128, 64, 32, 16),
+            decoder_use_batchnorm=True)
+        
         output = self.unet(self.pre_conv)
         
         self.model = Model(self.input, output)
@@ -134,15 +125,27 @@ class Segment(object):
 
         if not os.path.exists(self.model_path):
             os.mkdir(self.model_path)
+        # `X` and `y` should originally be 5 dimensional: (batch, c, z, x, y),
+        # in default model z=1 will be neglected
         X, y = preprocess(patches, 
                           n_classes=self.n_classes, 
                           label_input=label_input, 
                           class_weights=class_weights)
+        X = X.reshape(self.batch_input_shape)
+        y = y.reshape(self.batch_label_shape)
+        assert X.shape[0] == y.shape[0]
+        
         validation_data = None
         if valid_patches is not None:
-            validation_data = preprocess(valid_patches, n_classes=self.n_classes, label_input=valid_label_input)
-            self.valid_score_callback.valid_data = validation_data
-          
+            valid_X, valid_y = preprocess(valid_patches, 
+                                          n_classes=self.n_classes, 
+                                          label_input=valid_label_input)
+            valid_X = valid_X.reshape(self.batch_input_shape)
+            valid_y = valid_y.reshape(self.batch_label_shape)
+            assert valid_X.shape[0] == valid_y.shape[0]
+            self.valid_score_callback.valid_data = (valid_X, valid_y)
+            validation_data = (valid_X, valid_y)
+        
         self.model.fit(x=X, 
                        y=y,
                        batch_size=batch_size,
@@ -166,84 +169,89 @@ class Segment(object):
 
         if patches.__class__ is list:
             X, _ = preprocess(patches, label_input=label_input)
+            X = X.reshape(self.batch_input_shape)
             y_pred = self.model.predict(X)
         elif patches.__class__ is np.ndarray:
-            y_pred = self.model.predict(patches)
+            X = patches.reshape(self.batch_input_shape)
+            y_pred = self.model.predict(X)
         else:
             raise ValueError("Input format not supported")
-        y_pred = _softmax(y_pred, -1)
+        y_pred = _softmax(y_pred, 1)
+        assert y_pred.shape[1:] == (self.n_classes, self.x_size, self.y_size)
+        y_pred = np.expand_dims(y_pred, 2) # Manually add z dimension
         return y_pred
+
+
+    @property
+    def batch_input_shape(self):
+        return tuple([-1,] + list(self.input_shape))
+
+
+    @property
+    def batch_label_shape(self):
+        return tuple([-1, self.n_classes + 1, self.x_size, self.y_size])
 
 
     def save(self, path):
         """ Save model weights to `path` """
         self.model.save_weights(path)
-    
+
 
     def load(self, path):
         """ Load model weights from `path` """
         self.model.load_weights(path)
 
 
-class Segment_with_time(Segment):
-    """ Semantic segmentation model with inputs having multiple time slices """
+
+class SegmentWithMultipleSlice(Segment):
+    """ Semantic segmentation model with inputs having multiple time/z slices """
 
     def __init__(self,
-                 n_time_slice=5,
                  unet_feat=32,
                  **kwargs):
         """ Define model
 
         Args:
-            n_time_slice (int, optional): number of time slices in inputs
             unet_feat (int, optional): output dimension of unet (used as 
                 hidden units)
             **kwargs: keyword arguments for `Segment`
+                note that `input_shape` should have 4 dimensions
 
         """
-        self.n_time_slice = n_time_slice
+        
         self.unet_feat = unet_feat
-        super(Segment_with_time, self).__init__(**kwargs)
+        super(SegmentWithMultipleSlice, self).__init__(**kwargs)
+        self.n_slices = self.input_shape[1] # Input shape (c, z, x, y)
 
 
     def build_model(self):
         """ Define model structure and compile """
 
-        self.input = Input(shape=tuple([self.n_time_slice] + list(self.input_shape)), dtype='float32')
+        # input shape: batch_size, n_channel, n_slice, x_size, y_size
+        self.input = Input(shape=self.input_shape, dtype='float32')
 
         # Combine time slice dimension and batch dimension
-        inp = Reshape([-1] + list(self.input_shape))(self.input)
-        pre_conv = Dense(3, activation=None, name='pre_conv')(inp)
-
-        backbone = segmentation_models.backbones.get_backbone(
-            'resnet34',
-            input_shape=list(self.input_shape[:2]) + [3],
-            weights='imagenet',
-            include_top=False)
-
-        if self.freeze_encoder:
-            for layer in backbone.layers:
-                if not isinstance(layer, BatchNormalization):
-                    layer.trainable=False
-
-        skip_connection_layers = segmentation_models.backbones.get_feature_layers('resnet34', n=4)
-        self.unet = segmentation_models.unet.builder.build_unet(
-            backbone,
-            self.unet_feat,
-            skip_connection_layers,
-            decoder_filters=(256, 128, 64, 32, 16),
-            block_type='upsampling',
+        inp = SplitSlice(self.n_channels, self.x_size, self.y_size)(self.input)
+        self.pre_conv = Conv2D(3, (1, 1), activation=None, name='pre_conv')(inp)
+        
+        self.unet = segmentation_models.Unet(
+            backbone_name='resnet34', 
+            input_shape=(3, self.x_size, self.y_size),
+            classes=self.unet_feat,
             activation='linear',
-            n_upsample_blocks=5,
-            upsample_rates=(2, 2, 2, 2, 2),
-            use_batchnorm=True)
+            encoder_weights='imagenet',
+            encoder_features='default',
+            decoder_block_type='upsampling',
+            decoder_filters=(256, 128, 64, 32, 16),
+            decoder_use_batchnorm=True)
 
-        output = self.unet(pre_conv)
+        output = self.unet(self.pre_conv)
 
         # Split time slice dimension and merge to channel dimension
-        output = MergeOnZ(self.n_time_slice, self.unet_feat)(output)
-        output = Dense(self.unet_feat, activation='relu')(output)
-        output = Dense(self.n_classes, activation=None)(output)
+        output = MergeSlices(self.n_slices, self.unet_feat)(output)
+        output = Conv2D(self.unet_feat, (1, 1), activation='relu', name='post_conv')(output)
+        output = Conv2D(self.n_classes, (1, 1), activation=None, name='pred_head')(output)
+        
         self.model = Model(self.input, output)
         self.model.compile(optimizer='Adam',
                            loss=self.loss_func,

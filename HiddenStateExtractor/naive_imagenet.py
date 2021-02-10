@@ -5,7 +5,7 @@ import pickle
 import cv2
 
 
-CHANNEL_MAX = [65535., 65535.]
+CHANNEL_MAX = 65535.
 
 
 def read_file_path(root):
