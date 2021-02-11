@@ -15,13 +15,14 @@ class Worker(Process):
 
     def run(self):
         if self.method == 'assemble':
-            assemble_VAE(self.inputs)
+            assemble_VAE(*self.inputs)
         elif self.method == 'process':
-            process_VAE(self.inputs, save_ouput=True)
+            process_VAE(*self.inputs, save_ouput=True)
         elif self.method == 'pca':
-            process_PCA_hcs(self.inputs)
+            # process_PCA_hcs(self.inputs)
+            pass
         elif self.method == 'trajectory_matching':
-            trajectory_matching(self.inputs)
+            trajectory_matching(*self.inputs)
 
 
 def main(arguments_):
@@ -30,6 +31,8 @@ def main(arguments_):
     outputs = arguments_.supplementary
     weights = arguments_.weights
     method = arguments_.method
+    channels = arguments_.channels
+    assert len(channels) > 0, "At least one channel must be specified"
     gpu = arguments_.gpu
 
     # assemble needs raw (write file_paths/static_patches/adjusted_patches), and supp (read site-supps)
@@ -72,8 +75,7 @@ def main(arguments_):
         for weight in weights:
             print('Encoding using model {}'.format(weight))
             well_sites = [s for s in sites if s[:2] == well]
-            # print(well_sites)
-            args = (inputs, outputs, weight, well_sites)
+            args = (inputs, outputs, channels, weight, well_sites)
             p = Worker(args, gpuid=gpu, method=method)
             p.start()
             p.join()
@@ -112,6 +114,13 @@ def parse_args():
         type=lambda s: [str(item.strip(' ').strip("'")) for item in s.split(',')],
         required=False,
         help="list of field-of-views to process (subfolders in raw data directory)",
+    )
+    parser.add_argument(
+        '-c', '--channels',
+        type=lambda s: [int(item.strip(' ').strip("'")) for item in s.split(',')],
+        required=False,
+        default=[0, 1], # Assuming two channels by default
+        help="comma-delimited list of channel indices (e.g. 1,2,3)",
     )
     parser.add_argument(
         '-w', '--weights',

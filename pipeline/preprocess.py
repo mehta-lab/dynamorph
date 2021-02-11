@@ -4,7 +4,9 @@ import numpy as np
 import cv2
 import os
 
-def load_raw(path, site, multipage=True):
+def load_raw(path: str, 
+             site: str, 
+             multipage: bool = True):
     """Raw data loader
 
     This function takes a path to an experiment folder and 
@@ -39,14 +41,19 @@ def load_raw(path, site, multipage=True):
                              flags=cv2.IMREAD_ANYDEPTH)
     _, phase = cv2.imreadmulti(fullpath + '/' + multi_tif_phase, 
                                flags=cv2.IMREAD_ANYDEPTH)
+    _, bf = cv2.imreadmulti(fullpath + '/' + multi_tif_bf, 
+                            flags=cv2.IMREAD_ANYDEPTH)
     ret = np.array(ret)
     phase = np.array(phase)
+    bf = np.array(bf)
 
-    assert(ret.shape == phase.shape)
+    assert ret.shape == phase.shape == bf.shape
 
-    out = np.empty(shape=ret.shape + (2,))
-    out[:, :, :, 0] = phase
-    out[:, :, :, 1] = ret
+    n_frame, x_size, y_size = ret.shape[:3]
+    out = np.empty(shape=(n_frame, 3, 1, x_size, y_size))
+    out[:, 0, 0] = phase
+    out[:, 1, 0] = ret
+    out[:, 2, 0] = bf
 
     return out
 
@@ -67,17 +74,23 @@ def adjust_range(arr):
 
     """
 
-    mean_c0 = arr[:, :, :, 0].mean()
-    mean_c1 = arr[:, :, :, 1].mean()
-    std_c0 = arr[:, :, :, 0].std()
-    std_c1 = arr[:, :, :, 1].std()
+    mean_c0 = arr[:, 0, 0].mean()
+    mean_c1 = arr[:, 1, 0].mean()
+    mean_c2 = arr[:, 2, 0].mean()
+    std_c0 = arr[:, 0, 0].std()
+    std_c1 = arr[:, 1, 0].std()
+    std_c2 = arr[:, 2, 0].std()
     print("\tPhase: %d plus/minus %d" % (mean_c0, std_c0))
     print("\tRetardance: %d plus/minus %d" % (mean_c1, std_c1))
+    print("\tBrightfield: %d plus/minus %d" % (mean_c2, std_c2))
     #TODO: manually adjust range if input doesn't satisfy
     return arr
 
 
-def write_raw_to_npy(path, site, output, multipage=True):
+def write_raw_to_npy(path: str, 
+                     site: str, 
+                     output: str, 
+                     multipage: bool = True):
     """Wrapper method for data loading
 
     This function takes a path to an experiment folder, loads specified 

@@ -21,9 +21,9 @@ class Worker(Process):
         os.environ["CUDA_VISIBLE_DEVICES"] = str(self.gpuid)
 
         if self.method == 'segmentation':
-            segmentation(self.inputs)
+            segmentation(*self.inputs)
         elif self.method == 'instance_segmentation':
-            instance_segmentation(self.inputs)
+            instance_segmentation(*self.inputs)
         elif self.method == 'segmentation_validation':
             segmentation_validation_michael(self.inputs, self.gpuid, 'unfiltered')
 
@@ -33,6 +33,8 @@ def main(arguments_):
     print("CLI arguments provided")
     inputs = arguments_.raw
     outputs = arguments_.supplementary
+    channels = arguments_.channels
+    assert len(channels) > 0, "At least one channel must be specified"
 
     n_gpu = arguments_.gpus
     method = arguments_.method
@@ -75,7 +77,7 @@ def main(arguments_):
     processes = []
     for i in range(n_gpu):
         _sites = segment_sites[sep[i]:sep[i + 1]]
-        args = (inputs, outputs, TARGET, _sites)
+        args = (inputs, outputs, channels, TARGET, _sites)
         process = Worker(args, gpuid=i, method=method)
         process.start()
         processes.append(process)
@@ -137,6 +139,22 @@ def parse_args():
         required=False,
         help="comma-delimited list of FOVs (subfolders in raw data directory)",
     )
+    parser.add_argument(
+        '-c', '--channels',
+        type=lambda s: [int(item.strip(' ').strip("'")) for item in s.split(',')],
+        required=False,
+        default=[0, 1], # Assuming two channels by default
+        help="comma-delimited list of channel indices (e.g. 1,2,3)",
+    )
+    
+    parser.add_argument(
+        '--n_classes',
+        type=int,
+        required=False,
+        default=3,
+        help="Number of classes for semantic segmentation",
+    )
+    
     return parser.parse_args()
 
 

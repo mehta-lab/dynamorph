@@ -82,6 +82,8 @@ To extract single cell patches and employ morphology encoding, follow steps belo
 
 ## Usage
 
+The dataset accopanying this repository is large and currently available upon request for demonstration. 
+
 Example scripts `run_preproc.py`, `run_segmentation.py`, `run_patch.py` and `run_VAE.py` provide command line interface, for detailed usages please check by using the `-h` option. 
 
 To run the dynamorph pipeline, data should first be assembled into 4-D numpy arrays ([step 3](#step3)). Assume raw data (named as `$SITE_NAMES.npy`) are saved under `$RAW_PATH`, and intermediate data will be saved under supplementary folder `$SUPP_PATH`. Related model weights are respectively located at `$UNET_WEIGHT_PATH`, `$VQVAE_WEIGHT_PATH` and `$PCA_WEIGHT_PATH`, below is a simple sequence of commands that could run dynamorph.
@@ -125,3 +127,4 @@ To cite DynaMorph, please use the bibtex entry below:
 If you have any questions regarding this work or codes in this repo, feel free to raise an issue or reach out to us through:
 - Zhenqin Wu <zqwu@stanford.edu>
 - Bryant Chhun <bryant.chhun@czbiohub.org>
+- Shalin Mehta <shalin.mehta@czbiohub.org> 

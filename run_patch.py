@@ -1,6 +1,6 @@
 # bchhun, {2020-02-21}
 
-from pipeline.patch_VAE import extract_patches, build_trajectories, generate_trajectory_relations
+from pipeline.patch_VAE import extract_patches, build_trajectories
 from multiprocessing import Pool, Queue, Process
 import os
 import numpy as np
@@ -19,11 +19,9 @@ class Worker(Process):
         os.environ["CUDA_VISIBLE_DEVICES"] = str(self.gpuid)
 
         if self.method == 'extract_patches':
-            extract_patches(self.inputs)
+            extract_patches(*self.inputs)
         elif self.method == 'build_trajectories':
-            build_trajectories(self.inputs)
-        elif self.method == 'generate_relations':
-            generate_trajectory_relations(self.inputs)
+            build_trajectories(*self.inputs)
 
 
 def main(arguments_):
@@ -31,6 +29,8 @@ def main(arguments_):
     print("CLI arguments provided")
     raw = arguments_.raw
     supp = arguments_.supplementary
+    channels = arguments_.channels
+    assert len(channels) > 0, "At least one channel must be specified"
 
     n_gpu = arguments_.gpus
     method = arguments_.method
@@ -46,12 +46,6 @@ def main(arguments_):
     elif arguments_.method == 'build_trajectories':
         if not arguments_.supplementary:
             raise AttributeError("supplementary directory must be specified when method = extract_patches")
-
-    elif arguments_.method == 'generate_relations':
-        if not arguments_.raw:
-            raise AttributeError("raw directory must be specified when method = generate_relations")
-        # generate_relations doesn't support multiprocessing
-        n_gpu = 1
 
     if arguments_.fov:
         sites = arguments_.fov
@@ -73,7 +67,7 @@ def main(arguments_):
     processes = []
     for i in range(n_gpu):
         _sites = segment_sites[sep[i]:sep[i + 1]]
-        args = (raw, supp, None, _sites)
+        args = (raw, supp, channels, None, _sites)
         p = Worker(args, gpuid=i, method=method)
         p.start()
         processes.append(p)
@@ -105,9 +99,9 @@ def parse_args():
         '-m', '--method',
         type=str,
         required=False,
-        choices=['extract_patches', 'build_trajectories', 'generate_relations'],
+        choices=['extract_patches', 'build_trajectories'],
         default='extract_patches',
-        help="Method: one of 'extract_patches', 'build_trajectories', 'generate_relations'",
+        help="Method: one of 'extract_patches', 'build_trajectories'",
     )
     parser.add_argument(
         '-g', '--gpus',
@@ -121,6 +115,13 @@ def parse_args():
         type=lambda s: [str(item.strip(' ').strip("'")) for item in s.split(',')],
         required=False,
         help="list of field-of-views to process (subfolders in raw data directory)",
+    )
+    parser.add_argument(
+        '-c', '--channels',
+        type=lambda s: [int(item.strip(' ').strip("'")) for item in s.split(',')],
+        required=False,
+        default=[0, 1], # Assuming two channels by default
+        help="comma-delimited list of channel indices (e.g. 1,2,3)",
     )
     return parser.parse_args()
 
