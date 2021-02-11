@@ -16,7 +16,7 @@ matplotlib.use('AGG')
 import matplotlib.pyplot as plt
 from copy import deepcopy
 from scipy.signal import convolve2d
-from .instance_clustering import within_range
+from .instance_clustering import within_range, check_segmentation_dim
 
 """ Functions for extracting single cells from static frames """
 
@@ -202,9 +202,9 @@ def process_site_extract_patches(site_path,
         print("\tWriting time %d" % t_point)
         raw_image = image_stack[t_point]
         cell_segmentation = segmentation_stack[t_point]
+        cell_segmentation = check_segmentation_dim(cell_segmentation)
         positions, positions_labels = cell_pixel_assignments[t_point]
-        mg_cells, non_mg_cells, other_cells = cell_positions[t_point]
-        all_cells = mg_cells + non_mg_cells + other_cells
+        all_cells = cell_positions[t_point]
 
         # Define fillings for the masked pixels in this slice
         background_positions = np.where(cell_segmentation[0] > 0.9)
@@ -212,6 +212,7 @@ def process_site_extract_patches(site_path,
         background_filling = np.ones((n_channels, n_z, window_size, window_size)) * background_pool.reshape((n_channels, 1, 1, 1))
 
         # Save all cells in this step, filtering will be performed during analysis
+        cells_to_keep = []
         for cell_id, cell_position in all_cells:
             cell_name = os.path.join(site_supp_files_folder, '%d_%d.h5' % (t_point, cell_id))
             if cell_name in site_data:
@@ -225,6 +226,8 @@ def process_site_extract_patches(site_path,
                                                 skip_boundary=skip_boundary)
             if window_segmentation is None:
                 continue
+            # only keep the cells that has patches
+            cells_to_keep.append(cell_id)
             remove_mask, tm, tm2 = generate_mask(positions, 
                                                  positions_labels, 
                                                  cell_id, 
@@ -252,6 +255,14 @@ def process_site_extract_patches(site_path,
             
         with open(stack_dat_path, 'wb') as f:
             pickle.dump(site_data, f)
+            
+        # remove cells that don't have patches, update cell_positions
+        updated_cell_positions_t = [cell for cell in all_cells if cell[0] in cells_to_keep]
+        cell_positions[t_point] = updated_cell_positions_t
+        with open(os.path.join(site_supp_files_folder, 'cell_positions.pkl'), 'wb') as f:
+            pickle.dump(cell_positions, f)
+        
+        return
 
 
 def save_single_cell_im(output_mat, 
@@ -378,8 +389,7 @@ def process_site_extract_patches_align_axis(site_path,
         raw_image = image_stack[t_point]
         cell_segmentation = segmentation_stack[t_point]
         positions, positions_labels = cell_pixel_assignments[t_point]
-        mg_cells, non_mg_cells, other_cells = cell_positions[t_point]
-        all_cells = mg_cells + non_mg_cells + other_cells
+        all_cells = cell_positions[t_point]
 
         # Define fillings for the masked pixels in this slice
         background_positions = np.where(cell_segmentation[0] > 0.9)
