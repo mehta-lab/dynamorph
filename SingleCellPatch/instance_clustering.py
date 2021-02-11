@@ -52,7 +52,7 @@ def check_segmentation_dim(segmentation):
     # binary segmentation has only foreground channel, add background channel
     if n_channels == 1:
         segmentation = np.concatenate([1 - segmentation, segmentation], axis=1)
-    assert np.allclose(segmentation.sum(1), 0.), "Semantic segmentation doens't sum up to 1"    
+    assert np.allclose(segmentation.sum(0), 1.), "Semantic segmentation doens't sum up to 1"    
     return segmentation
 
 
