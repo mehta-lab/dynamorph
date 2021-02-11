@@ -109,6 +109,15 @@ def parse_args():
         default='assemble',
         help="Method: one of 'assemble', 'process', 'pca' or 'trajectory_matching'",
     )
+    #TODO: get this info from train config
+    parser.add_argument(
+        '-n', '--network',
+        type=str,
+        required=True,
+        default='VQ_VAE_z16',
+        help="Network to run inference",
+    )
+
     parser.add_argument(
         '-f', '--fov',
         type=lambda s: [str(item.strip(' ').strip("'")) for item in s.split(',')],

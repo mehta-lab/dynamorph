@@ -12,10 +12,9 @@ import os
 import matplotlib
 matplotlib.use('AGG')
 import matplotlib.pyplot as plt
-from copy import deepcopy
 import pickle
 from sklearn.cluster import DBSCAN
-
+from SingleCellPatch.extract_patches import check_segmentation_dim
 """ Functions for clustering single cells from semantic segmentation """
 
 def within_range(r, pos):
@@ -66,6 +65,7 @@ def instance_clustering(cell_segmentation,
         np.array: array of cell IDs of foreground pixels
 
     """
+    cell_segmentation = check_segmentation_dim(cell_segmentation)
     all_cells = cell_segmentation[0, 0] < fg_thr
     positions = np.array(list(zip(*np.where(all_cells))))
     if len(positions) < 1000:

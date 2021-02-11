@@ -7,6 +7,8 @@ import torch
 import re
 import numpy as np
 import matplotlib.pyplot as plt
+import importlib
+import inspect
 from torch.utils.data import TensorDataset
 
 from SingleCellPatch.extract_patches import process_site_extract_patches, im_adjust
@@ -16,6 +18,7 @@ from run_training import VQ_VAE_z32, zscore
 from HiddenStateExtractor.vq_vae import VQ_VAE
 from HiddenStateExtractor.vq_vae_supp import prepare_dataset_v2, vae_preprocess
 
+NETWORK_MODULE = 'run_training'
 
 def extract_patches(summary_folder: str,
                     supp_folder: str,
@@ -238,13 +241,34 @@ def trajectory_matching(summary_folder: str,
         pickle.dump(site_trajs, f)
     return
 
+def import_object(module_name, obj_name, obj_type='class'):
+    """Imports a class or function dynamically
+
+    :param str module_name: modules such as input, utils, train etc
+    :param str obj_name: Object to find
+    :param str obj_type: Object type (class or function)
+    """
+
+    full_module_name = ".".join(('dynamorph', module_name))
+    try:
+        module = importlib.import_module(full_module_name)
+        obj = getattr(module, obj_name)
+        if obj_type == 'class':
+            assert inspect.isclass(obj),\
+                "Expected {} to be class".format(obj_name)
+        elif obj_type == 'function':
+            assert inspect.isfunction(obj),\
+                "Expected {} to be function".format(obj_name)
+        return obj
+    except ImportError:
+        raise
 
 def process_VAE(summary_folder: str,
                 supp_folder: str,
                 channels: list,
                 model_dir: str,
-                network: str,
                 sites: list,
+                network: str= 'VQ_VAE_z16',
                 input_clamp: list = [0., 1.],
                 save_output: bool = True,
                 **kwargs):
@@ -273,6 +297,9 @@ def process_VAE(summary_folder: str,
 
     """
     #TODO: add pooling datasets features and remove hardcoded normalization constants
+    # ideally normalization parameters should be determined from pooled training data,
+    # For inference same normalization parameters can be used or determined from the inference data,
+    # depending on if the inference data has the same distribution as training data
     channel_mean = [0.49998672, 0.007081]
     channel_std = [0.00074311, 0.00906428]
     # these sites should be from a single condition (C5, C4, B-wells, etc..)
@@ -304,7 +331,6 @@ def process_VAE(summary_folder: str,
     #                          clamp=input_clamp)
     #
     # model = VQ_VAE(alpha=0.0005, gpu=True)
-    #TODO: import network based on the input
     print(f"\tloading static patches {os.path.join(summary_folder, '%s_static_patches.pkl' % well)}")
     dataset = pickle.load(open(os.path.join(summary_folder, '%s_static_patches.pkl' % well), 'rb'))
     dataset = zscore(dataset, channel_mean=channel_mean, channel_std=channel_std)
@@ -314,7 +340,8 @@ def process_VAE(summary_folder: str,
     num_residual_hiddens = int(search_obj.group(2))
     num_embeddings = int(search_obj.group(3))
     # commitment_cost = float(search_obj.group(4))
-    model = VQ_VAE_z32(num_inputs=2,
+    network_cls = import_object(NETWORK_MODULE, network)
+    model = network_cls(num_inputs=2,
                        num_hiddens=num_hiddens,
                        num_residual_hiddens=num_residual_hiddens,
                        num_residual_layers=2,
@@ -352,7 +379,7 @@ def process_VAE(summary_folder: str,
     with open(os.path.join(output_dir, '%s_latent_space_after.pkl' % well), 'wb') as f:
         pickle.dump(dats, f, protocol=4)
 
-    if save_ouput:
+    if save_output:
         np.random.seed(0)
         random_inds = np.random.randint(0, len(dataset), (10,))
         for i in random_inds:
