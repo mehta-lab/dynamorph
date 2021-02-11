@@ -396,13 +396,12 @@ def process_site_build_trajectory(site_supp_files_folder, **kwargs):
     assert np.allclose(np.array(t_points)[1:] - 1, np.array(t_points)[:-1])
 
     # Mapping to centroid positions
-    cell_positions_dict = {k: dict(cell_positions[k][0] + cell_positions[k][1] + cell_positions[k][2]) for k in cell_positions}
+    cell_positions_dict = {k: dict(cell_positions[k]) for k in cell_positions}
     # Mapping to size of segmentation
     cell_size_dict = {}
     for t_point in t_points:
         positions, positions_labels = cell_pixel_assignments[t_point]
-        mg_cells, non_mg_cells, other_cells = cell_positions[t_point]
-        all_cells = mg_cells + non_mg_cells + other_cells
+        all_cells = cell_positions[t_point]
         cell_size_d = dict(zip(*np.unique(positions_labels, return_counts=True)))
         cell_size_d = {id: cell_size_d[id] for id, position in all_cells}
         cell_size_dict[t_point] = cell_size_d

@@ -37,6 +37,25 @@ def within_range(r, pos):
     return True
 
 
+def check_segmentation_dim(segmentation):
+    """ Check segmentation mask dimension. 
+    Add a background channel if n(channels)==1
+    
+    Args:
+        segmentation: (np.array): segmentation mask for the frame
+        
+    """
+    
+    assert len(segmentation.shape) == 5, "Semantic segmentation should be formatted with dimension (t, c, z, x, y)"
+    n_frames, n_channels, _, _, _ = segmentation.shape
+    
+    # binary segmentation has only foreground channel, add background channel
+    if n_channels == 1:
+        segmentation = np.concatenate([1 - segmentation, segmentation], axis=1)
+    assert np.allclose(segmentation.sum(1), 1.), "Semantic segmentation doens't sum up to 1"    
+    return segmentation
+
+
 def instance_clustering(cell_segmentation, 
                         ct_thr=(500, 12000), 
                         instance_map=True, 
@@ -66,20 +85,19 @@ def instance_clustering(cell_segmentation,
         np.array: array of cell IDs of foreground pixels
 
     """
+    cell_segmentation = check_segmentation_dim(cell_segmentation)
     all_cells = cell_segmentation[0, 0] < fg_thr
     positions = np.array(list(zip(*np.where(all_cells))))
     if len(positions) < 1000:
         # No cell detected
-        return ([], [], []), np.zeros((0, 2), dtype=int), np.zeros((0,), dtype=int)
+        return [], np.zeros((0, 2), dtype=int), np.zeros((0,), dtype=int)
 
     # DBSCAN clustering of cell pixels
     clustering = DBSCAN(eps=DBSCAN_thr[0], min_samples=DBSCAN_thr[1]).fit(positions)
     positions_labels = clustering.labels_
     cell_ids, point_cts = np.unique(positions_labels, return_counts=True)
     
-    mg_cell_positions = []
-    non_mg_cell_positions = []
-    other_cells = []
+    cell_positions = []
     for cell_id, ct in zip(cell_ids, point_cts):
         if cell_id < 0:
             # neglect unclustered pixels
@@ -96,27 +114,14 @@ def instance_clustering(cell_segmentation,
         outliers = [p for p in points if not within_range(window, p)]
         if len(outliers) > len(points) * 0.05:
             continue
-        cell_segmentation_labels = cell_segmentation[:, 0, points[:, 0], points[:, 1]]
-        # Calculate if MG/Non-MG/intermediate
-        mg_ratio = (np.argmax(cell_segmentation_labels, 0) == 1).sum()/len(points)
-        non_mg_ratio = (np.argmax(cell_segmentation_labels, 0) == 2).sum()/len(points)
-        if mg_ratio > 0.9:
-            mg_cell_positions.append((cell_id, mean_pos))
-        elif non_mg_ratio > 0.9:
-            non_mg_cell_positions.append((cell_id, mean_pos))
-        else:
-            other_cells.append((cell_id, mean_pos))
+        cell_positions.append((cell_id, mean_pos))
 
     # Save instance segmentation results as image
     if instance_map and map_path is not None:
         x_size, y_size = cell_segmentation.shape[-2:]
         # bg as -1
         segmented = np.zeros((x_size, y_size)) - 1
-        for cell_id, mean_pos in mg_cell_positions:
-            points = positions[np.where(positions_labels == cell_id)[0]]
-            for p in points:
-                segmented[p[0], p[1]] = cell_id%10
-        for cell_id, mean_pos in non_mg_cell_positions:
+        for cell_id, mean_pos in cell_positions:
             points = positions[np.where(positions_labels == cell_id)[0]]
             for p in points:
                 segmented[p[0], p[1]] = cell_id%10
@@ -124,16 +129,12 @@ def instance_clustering(cell_segmentation,
         cmap = matplotlib.cm.get_cmap('tab10')
         cmap.set_under(color='k')
         plt.imshow(segmented, cmap=cmap, vmin=-0.001, vmax=10.001)
-        # MG will be marked with white text, Non-MG with red text
-        font_mg = {'color': 'white', 'size': 4}
-        font_non_mg = {'color': 'red', 'size': 4}
-        for cell_id, mean_pos in mg_cell_positions:
-            plt.text(mean_pos[1], mean_pos[0], str(cell_id), fontdict=font_mg)
-        for cell_id, mean_pos in non_mg_cell_positions:
-            plt.text(mean_pos[1], mean_pos[0], str(cell_id), fontdict=font_non_mg)
+        font = {'color': 'white', 'size': 4}
+        for cell_id, mean_pos in cell_positions:
+            plt.text(mean_pos[1], mean_pos[0], str(cell_id), fontdict=font)
         plt.axis('off')
         plt.savefig(map_path, dpi=300)
-    return (mg_cell_positions, non_mg_cell_positions, other_cells), positions, positions_labels
+    return cell_positions, positions, positions_labels
 
 
 def process_site_instance_segmentation(site_path, 
@@ -168,7 +169,7 @@ def process_site_instance_segmentation(site_path,
         cell_segmentation = segmentation_stack[t_point]
         instance_map_path = os.path.join(site_supp_files_folder, 'segmentation_%d.png' % t_point)
         res = instance_clustering(cell_segmentation, instance_map=True, map_path=instance_map_path)
-        cell_positions[t_point] = res[0] # MG, Non-MG, Chimeric Cells
+        cell_positions[t_point] = res[0] # List of cell: (cell_id, mean_pos)
         cell_pixel_assignments[t_point] = res[1:]
     with open(os.path.join(site_supp_files_folder, 'cell_positions.pkl'), 'wb') as f:
         pickle.dump(cell_positions, f)
