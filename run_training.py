@@ -1045,46 +1045,6 @@ def prepare_dataset_from_collection(fs,
     dataset = TensorDataset(t.stack([tensors[f_n] for f_n in fs], 0))
     return dataset
 
-
-def prepare_dataset_v2(dat_fs, 
-                       cs=[0, 1],
-                       input_shape=(128, 128),
-                       channel_max=CHANNEL_MAX,
-                       key='mat'):
-    """ Prepare input dataset for VAE
-
-    This function reads assembled pickle files (dict)
-
-    Args:
-        dat_fs (list of str): list of pickle file paths
-        cs (list of int, optional): channels in the input
-        input_shape (tuple, optional): input shape (height and width only)
-        channel_max (np.array, optional): max intensities for channels
-
-    Returns:
-        TensorDataset: dataset of training inputs
-        list of str: identifiers of single cell image patches
-
-    """
-    tensors = {}
-    for dat_f in dat_fs:
-        print(f"\tloading data {dat_f}")
-        file_dats = pickle.load(open(dat_f, 'rb'))
-        for k in file_dats:
-            dat = file_dats[k][key]
-            if cs is None:
-                cs = np.arange(dat.shape[2])
-            stacks = []
-            for c, m in zip(cs, channel_max):
-                c_slice = cv2.resize(np.array(dat[:, :, c]).astype(float), input_shape)
-                # print('mean:', np.mean(c_slice/m))
-                stacks.append(c_slice/m)
-            tensors[k] = np.stack(stacks)
-    ts_keys = sorted(tensors.keys())
-    dataset = np.stack([tensors[key] for key in ts_keys], 0)
-    return dataset, ts_keys
-
-
 def reorder_with_trajectories(dataset, relations, seed=None, w_a=1.1, w_t=0.1):
     """ Reorder `dataset` to facilitate training with matching loss
 
@@ -1266,6 +1226,18 @@ if __name__ == '__main__':
     gpuid = 3
     w_a = 1
     w_t = 0.5
+    #### cardiomyocyte data###
+    # channel_mean = [0.49998672, 0.007081]
+    # channel_std = [0.00074311, 0.00906428]
+
+    ### microglia data####
+    # channel_mean = [0.4, 0, 0.5]
+    # channel_std = [0.05, 0.05, 0.05]
+
+    ### estimate mean and std from the data ###
+    channel_mean = None
+    channel_std = None
+
     supp_dirs = ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_supp_tstack',
                  '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_supp_tstack']
     train_dirs = ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_train_tstack',
@@ -1299,7 +1271,7 @@ if __name__ == '__main__':
         id_offsets.append(len(dataset))
     id_offsets = id_offsets[:-1]
     dataset = np.concatenate(datasets, axis=0)
-    dataset = zscore(dataset)
+    dataset = zscore(dataset, channel_mean=channel_mean, channel_std=channel_std)
     dataset = TensorDataset(t.from_numpy(dataset).float())
     relations = concat_relations(relations, offsets=id_offsets)
     patch_ids = [idx for ids in relations.keys() for idx in ids]
@@ -1330,7 +1302,7 @@ if __name__ == '__main__':
     #     transforms.RandomRotation(180, resample=PIL.Image.BILINEAR),
     #     transforms.ToTensor(),
     # ])
-    model_dir = os.path.join(train_dir, 'mock+low_moi_z32_nh{}_nrh{}_ne{}_alpha{}_wa{}_wt{}_aug'.format(
+    model_dir = os.path.join(train_dir, 'mock+low_moi_z32_nh{}_nrh{}_ne{}_alpha{}_wa{}_wt{}_test'.format(
         num_hiddens, num_residual_hiddens, num_embeddings, alpha, w_a, w_t))
     if gpu:
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"

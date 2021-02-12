@@ -163,9 +163,6 @@ def assemble_VAE(summary_folder: str,
     print(f"\tsaving {os.path.join(summary_folder, '%s_file_paths.pkl' % well)}")
     with open(os.path.join(summary_folder, '%s_file_paths.pkl' % well), 'wb') as f:
         pickle.dump(fs, f)
-    # TODO: reconcile the different output format here:
-    # print(f"\tsaving {os.path.join(summary_folder, '%s_static_patches.pt' % well)}")
-    # torch.save(dataset, os.path.join(summary_folder, '%s_static_patches.pt' % well))
 
     print(f"\tsaving {os.path.join(summary_folder, '%s_static_patches.pkl' % well)}")
     with open(os.path.join(summary_folder, '%s_static_patches.pkl' % well), 'wb') as f:
@@ -249,7 +246,8 @@ def import_object(module_name, obj_name, obj_type='class'):
     :param str obj_type: Object type (class or function)
     """
 
-    full_module_name = ".".join(('dynamorph', module_name))
+    # full_module_name = ".".join(('dynamorph', module_name))
+    full_module_name = module_name
     try:
         module = importlib.import_module(full_module_name)
         obj = getattr(module, obj_name)
@@ -300,8 +298,7 @@ def process_VAE(summary_folder: str,
     # ideally normalization parameters should be determined from pooled training data,
     # For inference same normalization parameters can be used or determined from the inference data,
     # depending on if the inference data has the same distribution as training data
-    channel_mean = [0.49998672, 0.007081]
-    channel_std = [0.00074311, 0.00906428]
+
     # these sites should be from a single condition (C5, C4, B-wells, etc..)
     model_path = os.path.join(model_dir, 'model.pt')
     model_name = os.path.basename(model_dir)
@@ -311,18 +308,21 @@ def process_VAE(summary_folder: str,
     assert len(set(site[:2] for site in sites)) == 1, \
         "Sites should be from a single well/condition"
     well = sites[0][:2]
+    # TODO: expose normalization parameters in train config
+    #### cardiomyocyte data###
+    # channel_mean = [0.49998672, 0.007081]
+    # channel_std = [0.00074311, 0.00906428]
 
-    preprocess_setting={
-        0: ("normalize", 0.4, 0.05), # Phase
-        1: ("scale", 0.05), # Retardance
-        2: ("normalize", 0.5, 0.05), # Brightfield
-    }
+    ### microglia data####
+    # channel_mean = [0.4, 0, 0.5]
+    # channel_std = [0.05, 0.05, 0.05]
+
+    ### estimate mean and std from the data ###
+    channel_mean = None
+    channel_std = None
 
     print(f"\tloading file paths {os.path.join(summary_folder, '%s_file_paths.pkl' % well)}")
     fs = pickle.load(open(os.path.join(summary_folder, '%s_file_paths.pkl' % well), 'rb'))
-    #TODO: reconcile the different implementations here:
-    # 1. normalization
-    # 2. numpy v.s. torch tesor
 
     # dataset = torch.load(os.path.join(summary_folder, '%s_static_patches.pt' % well))
     # dataset = vae_preprocess(dataset,
@@ -330,7 +330,6 @@ def process_VAE(summary_folder: str,
     #                          preprocess_setting=preprocess_setting,
     #                          clamp=input_clamp)
     #
-    # model = VQ_VAE(alpha=0.0005, gpu=True)
     print(f"\tloading static patches {os.path.join(summary_folder, '%s_static_patches.pkl' % well)}")
     dataset = pickle.load(open(os.path.join(summary_folder, '%s_static_patches.pkl' % well), 'rb'))
     dataset = zscore(dataset, channel_mean=channel_mean, channel_std=channel_std)

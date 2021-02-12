@@ -1,5 +1,4 @@
 from pipeline.patch_VAE import assemble_VAE, process_VAE, trajectory_matching
-from run_dim_reduction import process_PCA_hcs
 from torch.multiprocessing import Pool, Queue, Process
 import torch.multiprocessing as mp
 import os
@@ -18,9 +17,6 @@ class Worker(Process):
             assemble_VAE(*self.inputs)
         elif self.method == 'process':
             process_VAE(*self.inputs, save_ouput=True)
-        elif self.method == 'pca':
-            # process_PCA_hcs(self.inputs)
-            pass
         elif self.method == 'trajectory_matching':
             trajectory_matching(*self.inputs)
 
@@ -32,6 +28,7 @@ def main(arguments_):
     weights = arguments_.weights
     method = arguments_.method
     channels = arguments_.channels
+    network = arguments_.network
     assert len(channels) > 0, "At least one channel must be specified"
     gpu = arguments_.gpu
 
@@ -42,14 +39,14 @@ def main(arguments_):
         if not arguments_.supplementary:
             raise AttributeError("supplementary directory must be specified when method = assemble")
 
-    # process and pca needs raw (load _file_paths), and target (torch weights)
-    elif arguments_.method == 'process' or arguments_.method == 'pca':
+    # process needs raw (load _file_paths), and target (torch weights)
+    elif arguments_.method == 'process':
         if not arguments_.raw:
-            raise AttributeError("raw directory must be specified when method = process / pca")
+            raise AttributeError("raw directory must be specified when method = process")
         if type(weights) is not list:
             weights = [weights]
         if not weights:
-            raise AttributeError("pytorch VQ-VAE weights path must be specified when method = process / pca")
+            raise AttributeError("pytorch VQ-VAE weights path must be specified when method = process")
 
     # trajectory matching needs raw (load file_paths, write trajectories), supp (load cell_traj)
     elif arguments_.method == 'trajectory_matching':
@@ -75,7 +72,7 @@ def main(arguments_):
         for weight in weights:
             print('Encoding using model {}'.format(weight))
             well_sites = [s for s in sites if s[:2] == well]
-            args = (inputs, outputs, channels, weight, well_sites)
+            args = (inputs, outputs, channels, weight, well_sites, network)
             p = Worker(args, gpuid=gpu, method=method)
             p.start()
             p.join()
@@ -105,9 +102,9 @@ def parse_args():
         '-m', '--method',
         type=str,
         required=True,
-        choices=['assemble', 'process', 'pca', 'trajectory_matching'],
+        choices=['assemble', 'process', 'trajectory_matching'],
         default='assemble',
-        help="Method: one of 'assemble', 'process', 'pca' or 'trajectory_matching'",
+        help="Method: one of 'assemble', 'process' or 'trajectory_matching'",
     )
     #TODO: get this info from train config
     parser.add_argument(
@@ -137,7 +134,7 @@ def parse_args():
         default=[],
         type=str,
         required=False,
-        help="Path to directories containing VQ-VAE model weights or PCA weights",
+        help="Path to directories containing VQ-VAE model weights",
     )
     parser.add_argument(
         '-g', '--gpu',

@@ -8,14 +8,13 @@ Created on Wed Jun 26 15:43:41 2019
 
 import cv2
 import numpy as np
-import h5py
 import os
 import pickle
 import matplotlib
 matplotlib.use('AGG')
 import matplotlib.pyplot as plt
 from scipy.signal import convolve2d
-from .instance_clustering import within_range
+from .instance_clustering import within_range, check_segmentation_dim
 
 """ Functions for extracting single cells from static frames """
 
@@ -144,26 +143,6 @@ def generate_mask(positions, positions_labels, cell_id, window, window_segmentat
         target_mask.reshape((x_size, y_size)), \
         target_mask2.reshape((x_size, y_size))
 
-def check_segmentation_dim(segmentation):
-    """ Check segmentation mask dimension. Add a background channel if n(channels)==1
-    Args:
-        segmentation: (np.array): segmentation mask for the frame
-
-    Returns:
-
-    """
-    # TODO: update to support 5D input
-    segmentation = np.squeeze(segmentation)
-    # binary segmentation has only foreground channel, add background channel
-    if segmentation.ndim == 2:
-        segmentation = np.stack([1 - segmentation, segmentation], axis=-1)
-    # assueming the first channel to be background for multi-class segmentation
-    elif segmentation.ndim == 3:
-        pass
-    else:
-        raise ValueError('segmentation mask can only be 2 or 3 dimension, not {}'.
-                         format(segmentation.ndim))
-    return segmentation
 
 def process_site_extract_patches(site_path,
                                  site_segmentation_path, 
