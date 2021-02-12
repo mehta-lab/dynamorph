@@ -50,8 +50,10 @@ def main(arguments_):
     if arguments_.fov:
         sites = arguments_.fov
     else:
-        sites = [site for site in os.listdir(raw) if os.path.isdir(os.path.join(raw, site))]
-
+        # get all "XX-SITE_#" identifiers in raw data directory
+        img_names = [file for file in os.listdir(raw) if (file.endswith(".npy")) & ('_NN' not in file)]
+        sites = [os.path.splitext(img_name)[0] for img_name in img_names]
+        sites = list(set(sites))
     # if probabilities and formatted stack exist
     segment_sites = [site for site in sites if os.path.exists(os.path.join(raw, "%s.npy" % site)) and \
                      os.path.exists(os.path.join(raw, "%s_NNProbabilities.npy" % site))]
@@ -96,7 +98,7 @@ def parse_args():
     parser.add_argument(
         '-m', '--method',
         type=str,
-        required=True,
+        required=False,
         choices=['extract_patches', 'build_trajectories'],
         default='extract_patches',
         help="Method: one of 'extract_patches', 'build_trajectories'",

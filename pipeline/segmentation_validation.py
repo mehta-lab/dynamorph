@@ -28,7 +28,7 @@ def drawContour(m, s, c, RGB):
     thisEdges = thisContour.filter(ImageFilter.FIND_EDGES)
     thisEdgesN = np.array(thisEdges)
 
-    # Paint locations of found edges in color "RGB" onto "main"
+    # Paint locations of found edges in color "RGB" onto "dim_reduction"
     m[np.nonzero(thisEdgesN)] = RGB
     return m
 
