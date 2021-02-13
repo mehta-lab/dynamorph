@@ -431,20 +431,20 @@ def process_site_build_trajectory(site_supp_files_folder, **kwargs):
     except Exception as e:
         cell_trajectories = cell_trajectories_positions = []
         warnings.warn('No trajectory is generated due to the following error: {}'.format(e))
-      
+
     with open(os.path.join(site_supp_files_folder, 'cell_traj.pkl'), 'wb') as f:
         print(f"\tsaving cell_traj {os.path.join(site_supp_files_folder, 'cell_traj.pkl')}")
         pickle.dump([cell_trajectories, cell_trajectories_positions], f)
     return
 
 
-def process_well_generate_trajectory_relations(fs, 
-                                               sites, 
+def process_well_generate_trajectory_relations(fs,
+                                               sites,
                                                well_supp_files_folder,
                                                **kwargs):
     """ Find pair relations (adjacent frame, same trajectory) in static patches
     Results will be saved under `raw_folder`
-    
+
     Args:
         fs (list of str): all individual cell patch names
         sites (list of str): sites (from the same well)
@@ -465,8 +465,8 @@ def process_well_generate_trajectory_relations(fs,
 
     for site in sites:
         print('site:', site)
-        trajectories = pickle.load(open(os.path.join(well_supp_files_folder, 
-                                                     site, 
+        trajectories = pickle.load(open(os.path.join(well_supp_files_folder,
+                                                     site,
                                                      "cell_traj.pkl"), 'rb'))[0]
         for trajectory in trajectories:
             t_ids = sorted(trajectory.keys())
@@ -483,7 +483,7 @@ def process_well_generate_trajectory_relations(fs,
                 if t_idx + 1 in t_ids:
                     adj_patch_id = patch_id_mapping[(site, t_idx + 1, trajectory[t_idx + 1])]
                     relations[(ref_patch_id, adj_patch_id)] = 2
-    
+
             # Same trajectory
             for i in patch_ids:
                 for j in patch_ids:

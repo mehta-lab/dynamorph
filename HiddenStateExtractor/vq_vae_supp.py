@@ -70,8 +70,8 @@ def prepare_dataset(fs,
                 cs = np.arange(dat.shape[0])
             dat = np.array(dat)[np.array(cs)].astype(float)
             resized_dat = cv2_fn_wrapper(cv2.resize, dat, input_shape)
-            tensors.append(t.from_numpy(resized_dat).float())
-    dataset = TensorDataset(t.stack(tensors, 0))
+            tensors.append(resized_dat)
+    dataset = np.stack(tensors, 0)
     return dataset
 
 
@@ -107,14 +107,14 @@ def prepare_dataset_from_collection(fs,
                 cs = np.arange(dat.shape[0])
             dat = np.array(dat)[np.array(cs)].astype(float)
             resized_dat = cv2_fn_wrapper(cv2.resize, dat, input_shape)
-            tensors[f_n] = t.from_numpy(resized_dat).float()
-    dataset = TensorDataset(t.stack([tensors[f_n] for f_n in fs], 0))
+            tensors[f_n] = resized_dat
+    dataset = np.stack([tensors[key] for key in fs], 0)
     return dataset
 
-
-def prepare_dataset_v2(dat_fs, 
+def prepare_dataset_v2(dat_fs,
                        cs=[0, 1],
-                       input_shape=(128, 128)):
+                       input_shape=(128, 128),
+                       key='masked_mat'):
     """ Prepare input dataset for VAE
 
     This function reads assembled pickle files (dict)
@@ -123,9 +123,10 @@ def prepare_dataset_v2(dat_fs,
         dat_fs (list of str): list of pickle file paths
         cs (list of int, optional): channels in the input
         input_shape (tuple, optional): input shape (height and width only)
+        key (str): 'mat' or 'masked_mat'
 
     Returns:
-        TensorDataset: dataset of training inputs
+        np array: dataset of training inputs
         list of str: identifiers of single cell image patches
 
     """
@@ -134,16 +135,15 @@ def prepare_dataset_v2(dat_fs,
         print(f"\tloading data {dat_f}")
         file_dats = pickle.load(open(dat_f, 'rb'))
         for k in file_dats:
-            dat = file_dats[k]['masked_mat']
+            dat = file_dats[k][key]
             if cs is None:
                 cs = np.arange(dat.shape[0])
             dat = np.array(dat)[np.array(cs)].astype(float)
             resized_dat = cv2_fn_wrapper(cv2.resize, dat, input_shape)
-            tensors[k] = t.from_numpy(resized_dat).float()
-    fs = sorted(tensors.keys())
-    dataset = TensorDataset(t.stack([tensors[f_n] for f_n in fs], 0))
-    return dataset, fs
-
+            tensors[k] = resized_dat
+    ts_keys = sorted(tensors.keys())
+    dataset = np.stack([tensors[key] for key in ts_keys], 0)
+    return dataset, ts_keys
 
 def reorder_with_trajectories(dataset, relations, seed=None):
     """ Reorder `dataset` to facilitate training with matching loss
@@ -234,20 +234,20 @@ def vae_preprocess(dataset,
         
     """
     
-    tensor = dataset.tensors[0]
+    tensor = dataset
     output = []
     for channel in use_channels:
-        channel_slice = tensor[:, channel].float()
+        channel_slice = tensor[:, channel]
         channel_slice = channel_slice / CHANNEL_MAX # Scale to [0, 1]
         if preprocess_setting[channel][0] == "scale":
             target_mean = preprocess_setting[channel][1]
-            slice_mean = tensor[:, channel].mean() / CHANNEL_MAX
+            slice_mean = channel_slice.mean()
             output_slice = channel_slice / slice_mean * target_mean
         elif preprocess_setting[channel][0] == "normalize":
             target_mean = preprocess_setting[channel][1]
             target_sd = preprocess_setting[channel][2]
-            slice_mean = tensor[:, channel].mean() / CHANNEL_MAX
-            slice_sd = tensor[:, channel].std() / CHANNEL_MAX
+            slice_mean = channel_slice.mean()
+            slice_mean = channel_slice.std()
             z_channel_slice = (channel_slice - slice_mean) / slice_sd
             output_slice = z_channel_slice * target_sd + target_mean
         else:
@@ -255,8 +255,8 @@ def vae_preprocess(dataset,
         if clamp:
             output_slice = t.clamp(output_slice, clamp[0], clamp[1])
         output.append(output_slice)
-    output = t.stack(output, 1)
-    return TensorDataset(output)
+    output = np.stack(output, 1)
+    return TensorDataset(t.from_numpy(output).float())
 
 
 def train(model, 

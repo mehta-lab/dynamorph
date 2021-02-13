@@ -21,7 +21,7 @@ def segmentation(summary_folder: str,
                  **kwargs):
     """ Wrapper method for semantic segmentation
 
-    This method performs predicion on all specified sites included in the 
+    This method performs predicion on all specified sites included in the
     input paths.
 
     Model weight path should be provided, if not a default path will be used:
@@ -32,23 +32,23 @@ def segmentation(summary_folder: str,
 
 
     Args:
-        summary_folder (str): folder for raw data, segmentation and 
+        summary_folder (str): folder for raw data, segmentation and
             summarized results
         supp_folder (str): folder for supplementary data
         channels (list of int): indices of channels used for segmentation
         model_path (str, optional): path to model weight
         sites (list of str): list of site names
         n_classes (int, optional): number of prediction classes
-        window_size (int, optional): winsow size for segmentation model 
+        window_size (int, optional): winsow size for segmentation model
             prediction
         batch_size (int, optional): batch size
         n_supp (int, optional): number of extra prediction rounds
-            each round of supplementary prediction will be initiated with 
+            each round of supplementary prediction will be initiated with
             different offset
 
     """
 
-    model = Segment(input_shape=(len(channels), 
+    model = Segment(input_shape=(len(channels),
                                  window_size,
                                  window_size), n_classes=n_classes)
 
@@ -69,10 +69,10 @@ def segmentation(summary_folder: str,
             print("Predicting %s" % site_path, flush=True)
             try:
                 # Generate semantic segmentation
-                predict_whole_map(site_path, 
+                predict_whole_map(site_path,
                                   model,
                                   use_channels=np.array(channels).astype(int),
-                                  batch_size=batch_size, 
+                                  batch_size=batch_size,
                                   n_supp=n_supp,
                                   **kwargs)
             except Exception as ex:
@@ -94,7 +94,7 @@ def instance_segmentation(summary_folder: str,
 
     Results will be saved in the supplementary data folder, including:
         "cell_positions.pkl": dict of cells in each frame (IDs and positions);
-        "cell_pixel_assignments.pkl": dict of pixel compositions of cells 
+        "cell_pixel_assignments.pkl": dict of pixel compositions of cells
             in each frame;
         "segmentation_*.png": image of instance segmentation results.
 

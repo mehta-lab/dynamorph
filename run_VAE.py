@@ -1,5 +1,6 @@
-from pipeline.patch_VAE import assemble_VAE, process_VAE, process_PCA, trajectory_matching
-from multiprocessing import Pool, Queue, Process
+from pipeline.patch_VAE import assemble_VAE, process_VAE, trajectory_matching
+from torch.multiprocessing import Pool, Queue, Process
+import torch.multiprocessing as mp
 import os
 import argparse
 
@@ -12,16 +13,10 @@ class Worker(Process):
         self.method = method
 
     def run(self):
-        #os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-        #os.environ["CUDA_VISIBLE_DEVICES"] = str(self.gpuid)
-
         if self.method == 'assemble':
             assemble_VAE(*self.inputs)
         elif self.method == 'process':
-            process_VAE(*self.inputs)
-        elif self.method == 'pca':
-            pass
-            #process_PCA(*self.inputs)
+            process_VAE(*self.inputs, save_ouput=True)
         elif self.method == 'trajectory_matching':
             trajectory_matching(*self.inputs)
 
@@ -33,7 +28,9 @@ def main(arguments_):
     weights = arguments_.weights
     method = arguments_.method
     channels = arguments_.channels
+    network = arguments_.network
     assert len(channels) > 0, "At least one channel must be specified"
+    gpu = arguments_.gpu
 
     # assemble needs raw (write file_paths/static_patches/adjusted_patches), and supp (read site-supps)
     if arguments_.method == 'assemble':
@@ -42,12 +39,14 @@ def main(arguments_):
         if not arguments_.supplementary:
             raise AttributeError("supplementary directory must be specified when method = assemble")
 
-    # process and pca needs raw (load _file_paths), and target (torch weights)
-    elif arguments_.method == 'process' or arguments_.method == 'pca':
+    # process needs raw (load _file_paths), and target (torch weights)
+    elif arguments_.method == 'process':
         if not arguments_.raw:
-            raise AttributeError("raw directory must be specified when method = process / pca")
-        if not arguments_.weights:
-            raise AttributeError("pytorch VQ-VAE weights path must be specified when method = process / pca")
+            raise AttributeError("raw directory must be specified when method = process")
+        if type(weights) is not list:
+            weights = [weights]
+        if not weights:
+            raise AttributeError("pytorch VQ-VAE weights path must be specified when method = process")
 
     # trajectory matching needs raw (load file_paths, write trajectories), supp (load cell_traj)
     elif arguments_.method == 'trajectory_matching':
@@ -60,18 +59,23 @@ def main(arguments_):
         sites = arguments_.fov
     else:
         # get all "XX-SITE_#" identifiers in raw data directory
-        sites = [os.path.splitext(site)[0][0:9].split('_NN')[0] for site in os.listdir(inputs) if
-                 site.endswith(".npy")]
+        img_names = [file for file in os.listdir(inputs) if (file.endswith(".npy")) & ('_NN' not in file)]
+        sites = [os.path.splitext(img_name)[0] for img_name in img_names]
         sites = list(set(sites))
 
     wells = set(s[:2] for s in sites)
+    mp.set_start_method('spawn', force=True)
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu)
+    print("CUDA_VISIBLE_DEVICES=" + os.environ["CUDA_VISIBLE_DEVICES"])
     for i, well in enumerate(wells):
-        well_sites = [s for s in sites if s[:2] == well]
-        print(well_sites)        
-        args = (inputs, outputs, channels, weights, well_sites)
-        p = Worker(args, gpuid=i, method=method)
-        p.start()
-        p.join()
+        for weight in weights:
+            print('Encoding using model {}'.format(weight))
+            well_sites = [s for s in sites if s[:2] == well]
+            args = (inputs, outputs, channels, weight, well_sites, network)
+            p = Worker(args, gpuid=gpu, method=method)
+            p.start()
+            p.join()
 
 
 def parse_args():
@@ -98,10 +102,19 @@ def parse_args():
         '-m', '--method',
         type=str,
         required=True,
-        choices=['assemble', 'process', 'pca', 'trajectory_matching'],
+        choices=['assemble', 'process', 'trajectory_matching'],
         default='assemble',
-        help="Method: one of 'assemble', 'process', 'pca' or 'trajectory_matching'",
+        help="Method: one of 'assemble', 'process' or 'trajectory_matching'",
     )
+    #TODO: get this info from train config
+    parser.add_argument(
+        '-n', '--network',
+        type=str,
+        required=True,
+        default='VQ_VAE_z16',
+        help="Network to run inference",
+    )
+
     parser.add_argument(
         '-f', '--fov',
         type=lambda s: [str(item.strip(' ').strip("'")) for item in s.split(',')],
@@ -117,9 +130,18 @@ def parse_args():
     )
     parser.add_argument(
         '-w', '--weights',
+        nargs='+',
+        default=[],
         type=str,
         required=False,
-        help="Path to pytorch model weights for VQ-VAE or PCA weights",
+        help="Path to directories containing VQ-VAE model weights",
+    )
+    parser.add_argument(
+        '-g', '--gpu',
+        type=int,
+        required=False,
+        default=0,
+        help="ID of the GPU to use",
     )
     return parser.parse_args()
 
