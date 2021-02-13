@@ -70,8 +70,8 @@ def prepare_dataset(fs,
                 cs = np.arange(dat.shape[0])
             dat = np.array(dat)[np.array(cs)].astype(float)
             resized_dat = cv2_fn_wrapper(cv2.resize, dat, input_shape)
-            tensors.append(t.from_numpy(resized_dat).float())
-    dataset = TensorDataset(t.stack(tensors, 0))
+            tensors.append(resized_dat)
+    dataset = np.stack(tensors, 0)
     return dataset
 
 
@@ -107,8 +107,8 @@ def prepare_dataset_from_collection(fs,
                 cs = np.arange(dat.shape[0])
             dat = np.array(dat)[np.array(cs)].astype(float)
             resized_dat = cv2_fn_wrapper(cv2.resize, dat, input_shape)
-            tensors[f_n] = t.from_numpy(resized_dat).float()
-    dataset = TensorDataset(t.stack([tensors[f_n] for f_n in fs], 0))
+            tensors[f_n] = resized_dat
+    dataset = np.stack([tensors[key] for key in fs], 0)
     return dataset
 
 def prepare_dataset_v2(dat_fs,
@@ -234,20 +234,20 @@ def vae_preprocess(dataset,
         
     """
     
-    tensor = dataset.tensors[0]
+    tensor = dataset
     output = []
     for channel in use_channels:
-        channel_slice = tensor[:, channel].float()
+        channel_slice = tensor[:, channel]
         channel_slice = channel_slice / CHANNEL_MAX # Scale to [0, 1]
         if preprocess_setting[channel][0] == "scale":
             target_mean = preprocess_setting[channel][1]
-            slice_mean = tensor[:, channel].mean() / CHANNEL_MAX
+            slice_mean = channel_slice.mean()
             output_slice = channel_slice / slice_mean * target_mean
         elif preprocess_setting[channel][0] == "normalize":
             target_mean = preprocess_setting[channel][1]
             target_sd = preprocess_setting[channel][2]
-            slice_mean = tensor[:, channel].mean() / CHANNEL_MAX
-            slice_sd = tensor[:, channel].std() / CHANNEL_MAX
+            slice_mean = channel_slice.mean()
+            slice_mean = channel_slice.std()
             z_channel_slice = (channel_slice - slice_mean) / slice_sd
             output_slice = z_channel_slice * target_sd + target_mean
         else:
@@ -255,8 +255,8 @@ def vae_preprocess(dataset,
         if clamp:
             output_slice = t.clamp(output_slice, clamp[0], clamp[1])
         output.append(output_slice)
-    output = t.stack(output, 1)
-    return TensorDataset(output)
+    output = np.stack(output, 1)
+    return TensorDataset(t.from_numpy(output).float())
 
 
 def train(model, 
