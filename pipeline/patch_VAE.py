@@ -120,6 +120,8 @@ def assemble_VAE(summary_folder: str,
                  channels: list,
                  model_path: str,
                  sites: list,
+                 save_mask: bool=False,
+                 mask_channels: list=[-2, -1],
                  **kwargs):
     """ Wrapper method for prepare dataset for VAE encoding
 
@@ -168,12 +170,20 @@ def assemble_VAE(summary_folder: str,
     with open(os.path.join(summary_folder, '%s_static_patches.pkl' % well), 'wb') as f:
         pickle.dump(dataset, f, protocol=4)
 
+    if save_mask:
+        dataset_mask, fs_mask = prepare_dataset_v2(dat_fs, cs=mask_channels)
+        assert fs_mask == fs
+        print(f"\tsaving {os.path.join(summary_folder, '%s_static_patches_mask.pkl' % well)}")
+        with open(os.path.join(summary_folder, '%s_static_patches_mask.pkl' % well), 'wb') as f:
+            pickle.dump(dataset_mask, f, protocol=4)
+
     well_supp_files_folder = os.path.join(supp_folder, '%s-supps' % well)
     relations = process_well_generate_trajectory_relations(fs, sites, well_supp_files_folder)
     with open(os.path.join(summary_folder, "%s_static_patches_relations.pkl" % well), 'wb') as f:
         pickle.dump(relations, f)
 
     return
+
 
 
 def trajectory_matching(summary_folder: str,
