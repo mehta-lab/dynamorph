@@ -185,6 +185,84 @@ def assemble_VAE(summary_folder: str,
     return
 
 
+def combine_dataset(input_dataset_names, output_dataset_name, save_mask=True):
+    """ Combine multiple datasets
+
+    Args:
+        input_dataset_names (list): list of input datasets
+            named as $DIRECTORY/$DATASETNAME, this method reads files below:
+                $DIRECTORY/$DATASETNAME_file_paths.pkl
+                $DIRECTORY/$DATASETNAME_static_patches.pkl
+                $DIRECTORY/$DATASETNAME_static_patches_relations.pkl
+                $DIRECTORY/$DATASETNAME_static_patches_mask.pkl (if `save_mask`)
+        output_dataset_name (str): path to the output save
+            the combined dataset will be saved to the specified path with 
+            corresponding suffix
+        save_mask (bool, optional): if to read & save dataset mask
+
+    """
+
+    separate_fs = []
+    separate_dataset = []
+    separate_dataset_mask = []
+    separate_relations = []
+
+    for n in input_dataset_names:
+        assert os.path.exists(n + '_file_paths.pkl')
+        assert os.path.exists(n + '_static_patches.pkl')
+        assert os.path.exists(n + '_static_patches_relations.pkl')
+        separate_fs.append(pickle.load(open(n + '_file_paths.pkl', 'rb')))
+        separate_dataset.append(pickle.load(open(n + '_static_patches.pkl', 'rb')))
+        separate_relations.append(pickle.load(open(n + '_static_patches_relations.pkl', 'rb')))
+        if save_mask:
+            assert os.path.exists(n + '_static_patches_mask.pkl')
+            separate_dataset_mask.append(pickle.load(open(n + '_static_patches_mask.pkl', 'rb')))
+        else:
+            separate_dataset_mask.append([None] * len(separate_fs[-1]))
+
+    all_fs = sorted(sum(separate_fs, []))
+    assert len(all_fs) == len(set(all_fs)), "Found patches with identical name"
+    with open(output_dataset_name + '_file_paths.pkl', 'wb') as f:
+        pickle.dump(all_fs, f)
+
+    separate_name_to_idx = {}
+    for i, dataset_f in enumerate(separate_fs):
+        for j, n in enumerate(dataset_f):
+            separate_name_to_idx[n] = (i, j)
+
+    combined_name_to_idx = {}
+    for i, n in enumerate(all_fs):
+        combined_name_to_idx[n] = i
+
+    all_dataset = []
+    all_dataset_mask = []
+    for n in all_fs:
+        i, j = separate_name_to_idx[n]
+        all_dataset.append(separate_dataset[i][j])
+        all_dataset_mask.append(separate_dataset_mask[i][j])
+
+    all_dataset = np.stack(all_dataset, 0)
+    with open(output_dataset_name + '_static_patches.pkl', 'wb') as f:
+        pickle.dump(all_dataset, f)
+
+    if save_mask:
+        all_dataset_mask = np.stack(all_dataset_mask, 0)
+        with open(output_dataset_name + '_static_patches_mask.pkl', 'wb') as f:
+            pickle.dump(all_dataset_mask, f)
+
+    all_relations = {}
+    for fs, relation in zip(separate_fs, separate_relations):
+        for k in relation:
+            name1 = fs[k[0]]
+            name2 = fs[k[1]]
+            all_relations[(combined_name_to_idx[name1],
+                           combined_name_to_idx[name2])] = relation[k]
+
+    with open(output_dataset_name + '_static_patches_relations.pkl', 'wb') as f:
+        pickle.dump(all_relations, f)
+
+    return
+
 
 def trajectory_matching(summary_folder: str,
                         supp_folder: str,
