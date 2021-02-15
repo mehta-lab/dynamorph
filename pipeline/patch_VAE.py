@@ -243,12 +243,12 @@ def combine_dataset(input_dataset_names, output_dataset_name, save_mask=True):
 
     all_dataset = np.stack(all_dataset, 0)
     with open(output_dataset_name + '_static_patches.pkl', 'wb') as f:
-        pickle.dump(all_dataset, f)
+        pickle.dump(all_dataset, f, protocol=4)
 
     if save_mask:
         all_dataset_mask = np.stack(all_dataset_mask, 0)
         with open(output_dataset_name + '_static_patches_mask.pkl', 'wb') as f:
-            pickle.dump(all_dataset_mask, f)
+            pickle.dump(all_dataset_mask, f, protocol=4)
 
     all_relations = {}
     for fs, relation in zip(separate_fs, separate_relations):
