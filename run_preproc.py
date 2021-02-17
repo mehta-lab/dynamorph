@@ -8,31 +8,30 @@
 
 from pipeline.preprocess import write_raw_to_npy
 import os
-import time
 
 import argparse
+from configs.config_reader import YamlReader
 
 
-def main(arguments_):
+def main(input_, output_, config_):
 
-    path = arguments_.input
-    outputs = arguments_.output
+    chans = config_.preprocess.channels
+    multi = config_.preprocess.multipage
+    z_slice = config_.preprocess.z_slice
 
-    if arguments_.fov:
-        sites = arguments_.fov
+    if config_.preprocess.fov:
+        sites = config_.preprocess.fov
     else:
         # assume all subdirectories are site/FOVs
-        sites = [site for site in os.listdir(path) if os.path.isdir(os.path.join(path, site))]
+        sites = [site for site in os.listdir(input_) if os.path.isdir(os.path.join(input_, site))]
 
     for site in sites:
-        if not os.path.exists(outputs):
-            os.makedirs(outputs)
-
-        out = outputs
+        if not os.path.exists(output_):
+            os.makedirs(output_)
 
         try:
-            print(f"writing {site} to {out}", flush=True)
-            write_raw_to_npy(path, site, out, multipage=True)
+            print(f"writing {site} to {output_}", flush=True)
+            write_raw_to_npy(input_, site, output_, chans, multipage=multi, z_slice=z_slice)
         except Exception as e:
             print(f"\terror in writing {site}", flush=True)
 
@@ -49,7 +48,7 @@ def parse_args():
         '-i', '--input',
         type=str,
         required=True,
-        help="Path to multipage-tiff file of format [t, x, y]",
+        help="Path to multipage-tiff file of format [t, x, y], or to single-page-tiffs",
     )
     parser.add_argument(
         '-o', '--output',
@@ -57,19 +56,23 @@ def parse_args():
         required=True,
         help="Path to write results",
     )
-    # sites argument is a list of strings
     parser.add_argument(
-        '-f', '--fov',
-        type=lambda s: [str(item.strip(' ').strip("'")) for item in s.split(',')],
-        required=False,
-        help="list of field-of-views to process (subfolders in raw data directory)",
+        '-c', '--config',
+        type=str,
+        required=True,
+        help='path to yaml configuration file'
     )
+
     return parser.parse_args()
 
 
 if __name__ == '__main__':
-    print(time.asctime(time.localtime(time.time())), flush=True)
+    # print(time.asctime(time.localtime(time.time())), flush=True)
     arguments = parse_args()
-    main(arguments)
-    print(time.asctime(time.localtime(time.time())), flush=True)
+    config = YamlReader()
+    config.read_config(arguments.config)
+
+    main(arguments.input, arguments.output, config)
+
+    # print(time.asctime(time.localtime(time.time())), flush=True)
 

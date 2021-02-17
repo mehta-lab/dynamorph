@@ -3,10 +3,14 @@
 import numpy as np
 import cv2
 import os
+import tifffile as tf
+
 
 def load_raw(path: str, 
-             site: str, 
-             multipage: bool = True):
+             site: str,
+             chans: list,
+             multipage: bool = True,
+             z_slice: int = 2):
     """Raw data loader
 
     This function takes a path to an experiment folder and 
@@ -28,32 +32,59 @@ def load_raw(path: str,
         np.array: numpy array as described above
 
     """
+    fullpath = os.path.join(path, site)
+    shapes = []
+
     if not multipage:
-        raise NotImplementedError("loading non-stabilized, non-multipage tiffs not supported")
+        # load singlepage tiffs.  String parse assuming time series and z### format
+        for chan in chans:
+            files = [c for c in os.listdir(fullpath) if chan in c and f"z{z_slice:03d}" in c]
+            files = sorted(files)
+            if "Phase" in chan:
+                phase = np.stack([tf.imread(os.path.join(fullpath, f)) for f in files])
+                shapes.append(phase.shape)
+            if "Retardance" in chan:
+                ret = np.stack([tf.imread(os.path.join(fullpath, f)) for f in files])
+                shapes.append(ret.shape)
+            if "Brightfield" in chan:
+                bf = np.stack([tf.imread(os.path.join(fullpath, f)) for f in files])
+                shapes.append(bf.shape)
 
-    fullpath = path+'/'+site
+    else:
+        # load stabilized multipage tiffs.
+        for chan in chans:
+            if "Phase" in chan:
+                multi_tif_phase = 'img_Phase2D_stabilized.tif'
+                _, phase = cv2.imreadmulti(fullpath + '/' + multi_tif_phase,
+                                           flags=cv2.IMREAD_ANYDEPTH)
+                phase = np.array(phase)
+                shapes.append(phase.shape)
+            if "Retardance" in chan:
+                multi_tif_retard = 'img__Retardance__stabilized.tif'
+                _, ret = cv2.imreadmulti(fullpath + '/' + multi_tif_retard,
+                                         flags=cv2.IMREAD_ANYDEPTH)
+                ret = np.array(ret)
+                shapes.append(ret.shape)
+            if "Brightfield" in chan:
+                multi_tif_bf = 'img_Brightfield_computed_stabilized.tif'
+                _, bf = cv2.imreadmulti(fullpath + '/' + multi_tif_bf,
+                                        flags=cv2.IMREAD_ANYDEPTH)
+                bf = np.array(bf)
+                shapes.append(bf.shape)
 
-    multi_tif_retard = 'img__Retardance__stabilized.tif'
-    multi_tif_phase = 'img_Phase2D_stabilized.tif'
-    multi_tif_bf = 'img_Brightfield_computed_stabilized.tif'
+    # check that all shapes are the same
+    assert shapes.count(shapes[0]) == len(shapes)
 
-    _, ret = cv2.imreadmulti(fullpath + '/' + multi_tif_retard, 
-                             flags=cv2.IMREAD_ANYDEPTH)
-    _, phase = cv2.imreadmulti(fullpath + '/' + multi_tif_phase, 
-                               flags=cv2.IMREAD_ANYDEPTH)
-    _, bf = cv2.imreadmulti(fullpath + '/' + multi_tif_bf, 
-                            flags=cv2.IMREAD_ANYDEPTH)
-    ret = np.array(ret)
-    phase = np.array(phase)
-    bf = np.array(bf)
-
-    assert ret.shape == phase.shape == bf.shape
-
-    n_frame, x_size, y_size = ret.shape[:3]
+    # insert images into a composite array.  Composite always has 3 channels
+    n_frame, x_size, y_size = shapes[0][:3]
     out = np.empty(shape=(n_frame, 3, 1, x_size, y_size))
-    out[:, 0, 0] = phase
-    out[:, 1, 0] = ret
-    out[:, 2, 0] = bf
+    for chan in chans:
+        if "Phase" in chan:
+            out[:, 0, 0] = phase
+        if "Retardance" in chan:
+            out[:, 1, 0] = ret
+        if "Brightfield" in chan:
+            out[:, 2, 0] = bf
 
     return out
 
@@ -89,7 +120,9 @@ def adjust_range(arr):
 
 def write_raw_to_npy(path: str, 
                      site: str, 
-                     output: str, 
+                     output: str,
+                     chans: list,
+                     z_slice: int,
                      multipage: bool = True):
     """Wrapper method for data loading
 
@@ -110,7 +143,7 @@ def write_raw_to_npy(path: str,
     """
 
     output_name = output + '/' + site + '.npy'
-    raw = load_raw(path, site, multipage=multipage)
+    raw = load_raw(path, site, chans, z_slice=z_slice, multipage=multipage)
     raw_adjusted = adjust_range(raw)
     np.save(output_name, raw_adjusted)
     return
