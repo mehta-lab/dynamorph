@@ -5,7 +5,6 @@ import cv2
 import os
 import tifffile as tf
 
-
 def load_raw(path: str, 
              site: str,
              chans: list,
@@ -36,6 +35,7 @@ def load_raw(path: str,
     shapes = []
 
     if not multipage:
+        print(f"single-page tiffs specified")
         # load singlepage tiffs.  String parse assuming time series and z### format
         for chan in chans:
             files = [c for c in os.listdir(fullpath) if chan in c and f"z{z_slice:03d}" in c]
@@ -51,6 +51,7 @@ def load_raw(path: str,
                 shapes.append(bf.shape)
 
     else:
+        print(f"multi-page tiffs specified")
         # load stabilized multipage tiffs.
         for chan in chans:
             if "Phase" in chan:
@@ -78,6 +79,7 @@ def load_raw(path: str,
     # insert images into a composite array.  Composite always has 3 channels
     n_frame, x_size, y_size = shapes[0][:3]
     out = np.empty(shape=(n_frame, 3, 1, x_size, y_size))
+    print(f"writing channels ({chans}) to composite array")
     for chan in chans:
         if "Phase" in chan:
             out[:, 0, 0] = phase
@@ -104,6 +106,7 @@ def adjust_range(arr):
         np.array: numpy array with value range adjusted
 
     """
+    print(f"z scoring data")
 
     mean_c0 = arr[:, 0, 0].mean()
     mean_c1 = arr[:, 1, 0].mean()
@@ -145,5 +148,6 @@ def write_raw_to_npy(path: str,
     output_name = output + '/' + site + '.npy'
     raw = load_raw(path, site, chans, z_slice=z_slice, multipage=multipage)
     raw_adjusted = adjust_range(raw)
+    print(f"saving image stack to {output_name}")
     np.save(output_name, raw_adjusted)
     return
