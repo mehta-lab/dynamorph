@@ -7,6 +7,7 @@ import os
 import numpy as np
 
 import argparse
+from configs.config_reader import YamlReader
 
 
 class Worker(Process):
@@ -28,43 +29,36 @@ class Worker(Process):
             segmentation_validation_michael(self.inputs, self.gpuid, 'unfiltered')
 
 
-def main(arguments_):
+def main(method_, raw_dir_, supp_dir_, val_dir_, config_):
+    method = method_
 
-    print("CLI arguments provided")
-    inputs = arguments_.raw
-    outputs = arguments_.supplementary
-    channels = arguments_.channels
-    assert len(channels) > 0, "At least one channel must be specified"
+    inputs = raw_dir_
+    outputs = supp_dir_
+    gpus = config.inference.gpus
 
-    n_gpu = arguments_.gpus
-    method = arguments_.method
+    assert len(config_.inference.channels) > 0, "At least one channel must be specified"
 
     # segmentation validation requires raw, supp, and validation definitions
     if method == 'segmentation_validation':
-        if arguments_.validation:
-            TARGET = arguments_.validation
-        else:
+        if not val_dir_:
             raise AttributeError("validation directory must be specified when method=segmentation_validation")
-        if not arguments_.supplementary:
+        if not outputs:
             raise AttributeError("supplemntary directory must be specifie dwhen method=segmentation_validation")
 
     # segmentation requires raw (NNProb), and weights to be defined
     elif method == 'segmentation':
-        if arguments_.weights is None:
+        if config_.inference.weights is None:
             raise AttributeError("Weights supp_dir must be specified when method=segmentation")
-        else:
-            TARGET = arguments_.weights
 
     # instance segmentation requires raw (stack, NNprob), supp (to write outputs) to be defined
     elif method == 'instance_segmentation':
         TARGET = ''
-
     else:
-        raise AttributeError(f"method flag {arguments_.method} not implemented")
+        raise AttributeError(f"method flag {method} not implemented")
 
     # all methods all require
-    if arguments_.fov:
-        sites = arguments_.fov
+    if config_.inference.fov:
+        sites = config.inference.fov
     else:
         # get all "XX-SITE_#" identifiers in raw data directory
         img_names = [file for file in os.listdir(inputs) if (file.endswith(".npy")) & ('_NN' not in file)]
@@ -72,12 +66,12 @@ def main(arguments_):
         sites = list(set(sites))
 
     segment_sites = [site for site in sites if os.path.exists(os.path.join(inputs, "%s.npy" % site))]
-    sep = np.linspace(0, len(segment_sites), n_gpu + 1).astype(int)
+    sep = np.linspace(0, len(segment_sites), gpus + 1).astype(int)
 
     processes = []
-    for i in range(n_gpu):
+    for i in range(gpus):
         _sites = segment_sites[sep[i]:sep[i + 1]]
-        args = (inputs, outputs, channels, TARGET, _sites)
+        args = (inputs, outputs, val_dir_, _sites, config_)
         process = Worker(args, gpuid=i, method=method)
         process.start()
         processes.append(process)
@@ -94,31 +88,6 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        '-r', '--raw',
-        type=str,
-        required=True,
-        help="Path to the folder for raw inputs (multipage-tiff file of format [t, x, y]) and summary results",
-    )
-    parser.add_argument(
-        '-s', '--supplementary',
-        type=str,
-        required=False,
-        help="Path to the folder for supplementary results",
-    )
-    parser.add_argument(
-        '-v', '--validation',
-        type=str,
-        required=False,
-        help="Path to write validation images",
-    )
-    parser.add_argument(
-        '-w', '--weights',
-        type=str,
-        required=False,
-        default=None,
-        help="Path to keras weights for trained UNet segmentaton model",
-    )
-    parser.add_argument(
         '-m', '--method',
         type=str,
         required=True,
@@ -126,38 +95,23 @@ def parse_args():
         default='segmentation',
         help="Method: one of 'segmentation', 'instance_segmentation', or 'segmentation_validation'",
     )
+
     parser.add_argument(
-        '-g', '--gpus',
-        type=int,
-        required=False,
-        default=1,
-        help="Number of GPS to use",
-    )
-    parser.add_argument(
-        '-f', '--fov',
-        type=lambda s: [str(item.strip(' ').strip("'")) for item in s.split(',')],
-        required=False,
-        help="comma-delimited list of FOVs (subfolders in raw data directory)",
-    )
-    parser.add_argument(
-        '-c', '--channels',
-        type=lambda s: [int(item.strip(' ').strip("'")) for item in s.split(',')],
-        required=False,
-        default=[0, 1], # Assuming two channels by default
-        help="comma-delimited list of channel indices (e.g. 1,2,3)",
-    )
-    
-    parser.add_argument(
-        '--n_classes',
-        type=int,
-        required=False,
-        default=3,
-        help="Number of classes for semantic segmentation",
+        '-c', '--config',
+        type=str,
+        required=True,
+        help='path to yaml configuration file'
     )
     
     return parser.parse_args()
 
 
 if __name__ == '__main__':
+
     arguments = parse_args()
-    main(arguments)
+    config = YamlReader()
+    config.read_config(arguments.config)
+
+    # batch run
+    for (raw_dir, supp_dir, val_dir) in list(zip(config.files.raw_dirs, config.files.supp_dirs, config.files.val_dirs)):
+        main(arguments.method, raw_dir, supp_dir, val_dir, config)

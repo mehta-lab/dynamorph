@@ -7,17 +7,14 @@ from NNsegmentation.data import load_input, predict_whole_map
 from keras import backend as K
 import tensorflow as tf
 from SingleCellPatch.instance_clustering import process_site_instance_segmentation
+from configs.config_reader import YamlReader
 
 
-def segmentation(summary_folder: str,
-                 supp_folder: str,
-                 channels: list,
-                 model_path: str,
+def segmentation(raw_folder_: str,
+                 supp_folder_: str,
+                 val_folder: str,
                  sites: list,
-                 n_classes: int = 3,
-                 window_size: int = 256,
-                 batch_size: int = 8,
-                 n_supp: int = 5,
+                 config_: YamlReader,
                  **kwargs):
     """ Wrapper method for semantic segmentation
 
@@ -34,27 +31,37 @@ def segmentation(summary_folder: str,
     Args:
         summary_folder (str): folder for raw data, segmentation and
             summarized results
-        supp_folder (str): folder for supplementary data
-        channels (list of int): indices of channels used for segmentation
-        model_path (str, optional): path to model weight
+        supp_folder:
+        val_folder:
         sites (list of str): list of site names
+
         n_classes (int, optional): number of prediction classes
         window_size (int, optional): winsow size for segmentation model
             prediction
         batch_size (int, optional): batch size
-        n_supp (int, optional): number of extra prediction rounds
+        num_pred_rnd (int, optional): number of extra prediction rounds
             each round of supplementary prediction will be initiated with
             different offset
 
     """
 
-    model = Segment(input_shape=(len(channels),
-                                 window_size,
-                                 window_size), n_classes=n_classes)
+    weights = config_.inference.weights
+    n_classes = config_.inference.num_classes
+    channels = config_.inference.channnels
+    window_size = config_.inference.window_size
+    batch_size = config_.inference.batch_size
+    n_supp = config_.inference.num_pred_rnd
+
+    if config_.inference.model == 'UNet':
+        model = Segment(input_shape=(len(channels),
+                                     window_size,
+                                     window_size), n_classes=n_classes)
+    else:
+        raise AttributeError(f"segmentation model {config_.inference.model} not defined")
 
     try:
-        if model_path:
-            model.load(model_path)
+        if weights:
+            model.load(weights)
         else:
             model.load('NNsegmentation/temp_save_unsaturated/final.h5')
     except Exception as ex:
@@ -62,7 +69,7 @@ def segmentation(summary_folder: str,
         raise ValueError("Error in loading UNet weights")
 
     for site in sites:
-        site_path = os.path.join(summary_folder, '%s.npy' % site)
+        site_path = os.path.join(raw_folder_, '%s.npy' % site)
         if not os.path.exists(site_path):
             print("Site not found %s" % site_path, flush=True)
         else:
@@ -81,11 +88,11 @@ def segmentation(summary_folder: str,
     return
 
 
-def instance_segmentation(summary_folder: str,
+def instance_segmentation(raw_folder: str,
                           supp_folder: str,
-                          channels: list,
-                          model_path: str,
+                          val_folder: str,
                           sites: list,
+                          config_: YamlReader,
                           **kwargs):
     """ Helper function for instance segmentation
 
@@ -99,17 +106,16 @@ def instance_segmentation(summary_folder: str,
         "segmentation_*.png": image of instance segmentation results.
 
     Args:
-        summary_folder (str): folder for raw data, segmentation and summarized results
+        raw_folder (str): folder for raw data, segmentation and summarized results
         supp_folder (str): folder for supplementary data
-        channels (list of int): indices of channels used for segmentation (not used)
-        model_path (str, optional): path to model weight (not used)
         sites (list of str): list of site names
+        config (YamlReader):
 
     """
 
     for site in sites:
-        site_path = os.path.join(summary_folder, '%s.npy' % site)
-        site_segmentation_path = os.path.join(summary_folder,
+        site_path = os.path.join(raw_folder, '%s.npy' % site)
+        site_segmentation_path = os.path.join(raw_folder,
                                               '%s_NNProbabilities.npy' % site)
         if not os.path.exists(site_path) or not os.path.exists(site_segmentation_path):
             print("Site not found %s" % site_path, flush=True)
