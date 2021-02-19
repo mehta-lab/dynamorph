@@ -317,9 +317,9 @@ class VQ_VAE(nn.Module):
         decoded = self.dec(z_after)
         if batch_mask is None:
             batch_mask = t.ones_like(inputs)
-        recon_loss = t.mean(F.mse_loss(decoded * batch_mask, inputs * batch_mask, reduction='none')/self.channel_var)
+        recon_loss = t.mean(F.mse_loss(decoded * batch_mask, inputs * batch_mask, reduction='none') / self.channel_var)
         total_loss = recon_loss + c_loss
-        time_matching_loss = None
+        time_matching_loss = 0.
         if not time_matching_mat is None:
             z_before_ = z_before.reshape((z_before.shape[0], -1))
             len_latent = z_before_.shape[1]
@@ -426,7 +426,7 @@ class VAE(nn.Module):
             batch_mask = t.ones_like(inputs)
         recon_loss = t.sum(F.mse_loss(decoded * batch_mask, inputs * batch_mask, reduction='none')/self.channel_var)
         total_loss = recon_loss + KLD
-        time_matching_loss = None
+        time_matching_loss = 0.
         if not time_matching_mat is None:
             z_before_ = z_mean.reshape((z_mean.shape[0], -1))
             len_latent = z_before_.shape[1]
@@ -635,7 +635,7 @@ class AAE(nn.Module):
             batch_mask = t.ones_like(inputs)
         recon_loss = t.mean(F.mse_loss(decoded * batch_mask, inputs * batch_mask, reduction='none')/self.channel_var)
         total_loss = recon_loss
-        time_matching_loss = None
+        time_matching_loss = 0.
         if not time_matching_mat is None:
             z_ = z.reshape((z.shape[0], -1))
             len_latent = z_.shape[1]
