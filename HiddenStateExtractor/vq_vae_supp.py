@@ -15,8 +15,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import pickle
 from torch.utils.data import TensorDataset, DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from scipy.sparse import csr_matrix
-from .naive_imagenet import read_file_path
 
 CHANNEL_RANGE = [(0.3, 0.8), (0., 0.6)] 
 CHANNEL_VAR = np.array([0.0475, 0.0394]) # After normalized to CHANNEL_RANGE
@@ -219,7 +219,7 @@ def vae_preprocess(dataset,
                        1: ("scale", 0.05), # Retardance
                        2: ("normalize", 0.5, 0.05), # Brightfield
                        },
-                   clamp=[0, 1]):
+                   clip=[0, 1]):
     """ Preprocess `dataset` to a suitable range
 
     Args:
@@ -249,13 +249,13 @@ def vae_preprocess(dataset,
             target_mean = preprocess_setting[channel][1]
             target_sd = preprocess_setting[channel][2]
             slice_mean = channel_slice.mean()
-            slice_mean = channel_slice.std()
+            slice_sd = channel_slice.std()
             z_channel_slice = (channel_slice - slice_mean) / slice_sd
             output_slice = z_channel_slice * target_sd + target_mean
         else:
             raise ValueError("Preprocessing mode not supported")
-        if clamp:
-            output_slice = t.clamp(output_slice, clamp[0], clamp[1])
+        if clip:
+            output_slice = np.clip(output_slice, clip[0], clip[1])
         output.append(output_slice)
     output = np.stack(output, 1)
     return output
@@ -272,7 +272,8 @@ def train(model,
           batch_size=16, 
           device='cuda:0',
           shuffle_data=False,
-          transform=True):
+          transform=True,
+          seed=None):
     """ Train function for VQ-VAE, VAE, IWAE, etc.
 
     Args:
@@ -289,14 +290,18 @@ def train(model,
         lr (float, optional): learning rate
         batch_size (int, optional): batch size
         device (str, optional): device (cuda or cpu) where models are running
-        shuffle_data (bool): shuffle data at the end of the epoch to add 
-            randomness to mini-batch; Set False when using matching loss  
-        transform (bool): data augmentation
+        shuffle_data (bool, optional): shuffle data at the end of the epoch to
+            add randomness to mini-batch; Set False when using matching loss
+        transform (bool, optional): data augmentation
+        seed (int, optional): random seed
     
     Returns:
         nn.Module: trained model
 
     """
+    if not seed is None:
+        np.random.seed(seed)
+        t.manual_seed(seed)
     total_channels, n_z, x_size, y_size = dataset[0][0].shape[-4:]
     if len(use_channels) == 0:
         use_channels = list(range(total_channels))
@@ -395,7 +400,8 @@ def train_adversarial(model,
                       batch_size=16, 
                       device='cuda:0',  
                       shuffle_data=False,   
-                      transform=True):
+                      transform=True,
+                      seed=None):
     """ Train function for AAE.
 
     Args:
@@ -415,14 +421,18 @@ def train_adversarial(model,
         lr_gen (float, optional): learning rate for generator
         batch_size (int, optional): batch size
         device (str, optional): device (cuda or cpu) where models are running
-        shuffle_data (bool): shuffle data at the end of the epoch to add 
-            randomness to mini-batch; Set False when using matching loss  
-        transform (bool): data augmentation
+        shuffle_data (bool, optional): shuffle data at the end of the epoch to
+            add randomness to mini-batch; Set False when using matching loss
+        transform (bool, optional): data augmentation
+        seed (int, optional): random seed
     
     Returns:
         nn.Module: trained model
 
     """
+    if not seed is None:
+        np.random.seed(seed)
+        t.manual_seed(seed)
     total_channels, n_z, x_size, y_size = dataset[0][0].shape[-4:]
     if len(use_channels) == 0:
         use_channels = list(range(total_channels))

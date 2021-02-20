@@ -33,21 +33,21 @@ class VectorQuantizer(nn.Module):
     input)
 
     """
-    def __init__(self, embedding_dim=128, num_embeddings=128, commitment_cost=0.25, gpu=True):
+    def __init__(self, embedding_dim=128, num_embeddings=128, commitment_cost=0.25, device='cuda:0'):
         """ Initialize the module
 
         Args:
             embedding_dim (int, optional): size of embedding vector
             num_embeddings (int, optional): number of embedding vectors
             commitment_cost (float, optional): balance between latent losses
-            gpu (bool, optional): if weights are saved on gpu
+            device (str, optional): device the model will be running on
 
         """
         super(VectorQuantizer, self).__init__()
         self.embedding_dim = embedding_dim
         self.num_embeddings = num_embeddings
         self.commitment_cost = commitment_cost
-        self.gpu = gpu
+        self.device = device
         self.w = nn.Embedding(num_embeddings, embedding_dim)
 
     def forward(self, inputs):
@@ -77,10 +77,7 @@ class VectorQuantizer(nn.Module):
         loss = q_latent_loss + self.commitment_cost * e_latent_loss
 
         # Perplexity (used to monitor)
-        # TODO: better deal with the gpu case here
-        encoding_onehot = t.zeros(encoding_indices.flatten().shape[0], self.num_embeddings)
-        if self.gpu:
-            encoding_onehot = encoding_onehot.cuda()
+        encoding_onehot = t.zeros(encoding_indices.flatten().shape[0], self.num_embeddings).to(self.device)
         encoding_onehot.scatter_(1, encoding_indices.flatten().unsqueeze(1), 1)
         avg_probs = t.mean(encoding_onehot, 0)
         perplexity = t.exp(-t.sum(avg_probs*t.log(avg_probs + 1e-10)))
@@ -242,7 +239,7 @@ class VQ_VAE(nn.Module):
                  commitment_cost=0.25,
                  channel_var=CHANNEL_VAR,
                  alpha=0.005,
-                 gpu=True,
+                 device="cuda:0",
                  **kwargs):
         """ Initialize the model
 
@@ -258,7 +255,7 @@ class VQ_VAE(nn.Module):
             channel_var (list of float, optional): each channel's SD, used for 
                 balancing loss across channels
             alpha (float, optional): balance of matching loss
-            gpu (bool, optional): if the model is run on gpu
+            device (str, optional): device the model will be running on
             **kwargs: other keyword arguments
 
         """
@@ -285,7 +282,7 @@ class VQ_VAE(nn.Module):
             nn.Conv2d(self.num_hiddens, self.num_hiddens, 3, padding=1),
             nn.BatchNorm2d(self.num_hiddens),
             ResidualBlock(self.num_hiddens, self.num_residual_hiddens, self.num_residual_layers))
-        self.vq = VectorQuantizer(self.num_hiddens, self.num_embeddings, commitment_cost=self.commitment_cost, gpu=gpu)
+        self.vq = VectorQuantizer(self.num_hiddens, self.num_embeddings, commitment_cost=self.commitment_cost, device=device)
         self.dec = nn.Sequential(
             nn.ConvTranspose2d(self.num_hiddens, self.num_hiddens//2, 4, stride=2, padding=1),
             nn.ReLU(),
