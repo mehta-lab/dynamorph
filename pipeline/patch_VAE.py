@@ -1,4 +1,3 @@
-# bchhun, {2020-02-21}
 
 import os
 os.environ['KERAS_BACKEND'] = 'tensorflow'
@@ -9,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import importlib
 import inspect
+from configs.config_reader import YamlReader
 from torch.utils.data import TensorDataset
 
 from SingleCellPatch.extract_patches import process_site_extract_patches, im_adjust
@@ -20,19 +20,16 @@ from HiddenStateExtractor.vq_vae_supp import prepare_dataset_v2, vae_preprocess
 
 NETWORK_MODULE = 'run_training'
 
-def extract_patches(summary_folder: str,
+
+def extract_patches(raw_folder: str,
                     supp_folder: str,
-                    channels: list,
-                    model_path: str,
+                    # channels: list,
                     sites: list,
-                    window_size: int = 256,
-                    save_fig: bool = False,
-                    reload: bool = True,
-                    skip_boundary: bool = False,
+                    config: YamlReader,
                     **kwargs):
     """ Helper function for patch extraction
 
-    Wrapper method `process_site_extract_patches` will be called, which 
+    Wrapper method `process_site_extract_patches` will be called, which
     extracts individual cells from static frames for each site.
 
     Results will be saved in the supplementary data folder, including:
@@ -54,10 +51,18 @@ def extract_patches(summary_folder: str,
             the image size (do not pad)
 
     """
+    channels = config.inference.channels
+
+    assert len(channels) > 0, "At least one channel must be specified"
+
+    window_size = config.patch.window_size
+    save_fig = config.patch.save_fig
+    reload = config.patch.reload
+    skip_boundary = config.patch.skip_boundary
 
     for site in sites:
-        site_path = os.path.join(summary_folder + '/' + site + '.npy')
-        site_segmentation_path = os.path.join(summary_folder, '%s_NNProbabilities.npy' % site)
+        site_path = os.path.join(raw_folder + '/' + site + '.npy')
+        site_segmentation_path = os.path.join(raw_folder, '%s_NNProbabilities.npy' % site)
         site_supp_files_folder = os.path.join(supp_folder, '%s-supps' % site[:2], '%s' % site)
         if not os.path.exists(site_path) or \
             not os.path.exists(site_segmentation_path) or \
@@ -80,8 +85,8 @@ def extract_patches(summary_folder: str,
 def build_trajectories(summary_folder: str,
                        supp_folder: str,
                        channels: list,
-                       model_path: str,
                        sites: list,
+                       config: YamlReader,
                        **kwargs):
     """ Helper function for trajectory building
 

@@ -5,6 +5,7 @@ from multiprocessing import Pool, Queue, Process
 import os
 import numpy as np
 import argparse
+from configs.config_reader import YamlReader
 
 
 class Worker(Process):
@@ -24,31 +25,33 @@ class Worker(Process):
             build_trajectories(*self.inputs)
 
 
-def main(arguments_):
+def main(method_, raw_dir_, supp_dir_, config_):
 
     print("CLI arguments provided")
-    raw = arguments_.raw
-    supp = arguments_.supplementary
-    channels = arguments_.channels
+    raw = raw_dir_
+    supp = supp_dir_
+    method = method_
+    fov = config.patch.fov
+
+    channels = config.patch.channels
     assert len(channels) > 0, "At least one channel must be specified"
 
-    n_gpu = arguments_.gpus
-    method = arguments_.method
+    n_gpu = config.patch.gpus
 
     # extract patches needs raw (NN probs, stack), supp (cell_positions, cell_pixel_assignments)
-    if arguments_.method == 'extract_patches':
-        if not arguments_.raw:
+    if method == 'extract_patches':
+        if not raw:
             raise AttributeError("raw directory must be specified when method = extract_patches")
-        if not arguments_.supplementary:
+        if not supp:
             raise AttributeError("supplementary directory must be specified when method = extract_patches")
 
     # extract patches needs supp (cell_positions, cell_pixel_assignments)
-    elif arguments_.method == 'build_trajectories':
-        if not arguments_.supplementary:
+    elif method == 'build_trajectories':
+        if not supp:
             raise AttributeError("supplementary directory must be specified when method = extract_patches")
 
-    if arguments_.fov:
-        sites = arguments_.fov
+    if fov:
+        sites = fov
     else:
         # get all "XX-SITE_#" identifiers in raw data directory
         img_names = [file for file in os.listdir(raw) if (file.endswith(".npy")) & ('_NN' not in file)]
@@ -67,7 +70,7 @@ def main(arguments_):
     processes = []
     for i in range(n_gpu):
         _sites = segment_sites[sep[i]:sep[i + 1]]
-        args = (raw, supp, channels, None, _sites)
+        args = (raw, supp, channels, _sites, config_)
         p = Worker(args, gpuid=i, method=method)
         p.start()
         processes.append(p)
@@ -84,18 +87,6 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        '-r', '--raw',
-        type=str,
-        required=False,
-        help="Path to the folder for raw inputs (multipage-tiff file of format [t, x, y]) and summary results",
-    )
-    parser.add_argument(
-        '-s', '--supplementary',
-        type=str,
-        required=False,
-        help="Path to the folder for supplementary results",
-    )
-    parser.add_argument(
         '-m', '--method',
         type=str,
         required=False,
@@ -104,28 +95,23 @@ def parse_args():
         help="Method: one of 'extract_patches', 'build_trajectories'",
     )
     parser.add_argument(
-        '-g', '--gpus',
-        type=int,
-        required=False,
-        default=1,
-        help="Number of GPS to use",
+        '-c', '--config',
+        type=str,
+        required=True,
+        help='path to yaml configuration file'
     )
-    parser.add_argument(
-        '-f', '--fov',
-        type=lambda s: [str(item.strip(' ').strip("'")) for item in s.split(',')],
-        required=False,
-        help="list of field-of-views to process (subfolders in raw data directory)",
-    )
-    parser.add_argument(
-        '-c', '--channels',
-        type=lambda s: [int(item.strip(' ').strip("'")) for item in s.split(',')],
-        required=False,
-        default=[0, 1], # Assuming two channels by default
-        help="comma-delimited list of channel indices (e.g. 1,2,3)",
-    )
+
     return parser.parse_args()
 
 
 if __name__ == '__main__':
+    # arguments = parse_args()
+    # main(arguments)
+
     arguments = parse_args()
-    main(arguments)
+    config = YamlReader()
+    config.read_config(arguments.config)
+
+    # batch run
+    for (raw_dir, supp_dir) in list(zip(config.files.raw_dirs, config.files.supp_dirs)):
+        main(arguments.method, raw_dir, supp_dir, config)
