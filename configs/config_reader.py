@@ -94,6 +94,7 @@ class YamlReader(Object):
     def read_config(self, yml_config):
         with open(yml_config, 'r') as f:
             self.config = yaml.load(f)
+            print(f"successfully loaded yaml")
 
             self._parse_files()
             self._parse_preprocessing()
