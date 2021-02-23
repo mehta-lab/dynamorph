@@ -84,7 +84,7 @@ def extract_patches(raw_folder: str,
 
 def build_trajectories(summary_folder: str,
                        supp_folder: str,
-                       channels: list,
+                       # channels: list,
                        sites: list,
                        config: YamlReader,
                        **kwargs):
