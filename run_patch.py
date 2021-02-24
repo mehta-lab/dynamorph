@@ -70,7 +70,7 @@ def main(method_, raw_dir_, supp_dir_, config_):
     processes = []
     for i in range(n_gpu):
         _sites = segment_sites[sep[i]:sep[i + 1]]
-        args = (raw, supp, channels, _sites, config_)
+        args = (raw, supp, _sites, config_)
         p = Worker(args, gpuid=i, method=method)
         p.start()
         processes.append(p)

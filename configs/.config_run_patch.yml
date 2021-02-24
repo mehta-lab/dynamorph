@@ -1,0 +1,86 @@
+
+files:
+  raw_dirs: ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_input_tstack',
+             '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_input_tstack']
+
+  supp_dirs: ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_supp_tstack',
+              '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_supp_tstack']
+
+  train_dirs: ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_train_tstack',
+               '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_train_tstack']
+
+  val_dirs: ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_train_tstack/val',
+                    '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_train_tstack/val']
+
+  weights_dir: '/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_train_tstack/weights'
+  # path to save weights during training, subdirectory of train_dirs
+
+
+preprocess:
+  channels: ["Retardance", "Phase2D", "Brightfield"]
+  fov: ['C5-Site_0','C5-Site_1']
+  multipage: False
+  z_slice: 2
+
+
+patch:
+  channels: [0,1,2]
+  fov: ['C5-Site_0','C5-Site_1']
+  gpus: 1
+  window_size: 256
+  save_fig: False
+  reload: True
+  skip_boundary: False
+
+
+inference:
+  model: 'VQ_VAE_z16'
+  # VQ_VAE_z16 or UNet
+
+  weights: '/gpfs/CompMicro/projects/dynamorph/CellVAE/save_0005_bkp4.pt'
+  # pytorch weight file
+
+  save_output: True
+  # write .jpg results from run_vae.process
+
+  gpus: 1
+  gpu_id: 3
+  fov: ['C5-Site_0','C5-Site_1']
+  channels: [0,1,2]
+  num_classes: 3
+  window_size: 256
+  batch_size: 8
+  num_pred_rnd: 5
+  seg_val_cat: 'mg'
+
+
+training:
+  # model definitions
+  model: 'VQ_VAE_z32'
+  num_inputs: 2
+  num_hiddens: 64
+  num_residual_hiddens: 64
+  num_residual_layers: 2
+  num_embeddings: 512
+
+  # normalization
+  channel_mean: [0.4, 0, 0.5]
+  channel_std: [0.05, 0.05, 0.05]
+
+  w_a: 1
+  w_t: 0.5
+
+  # training parameters
+  commitment_cost: 0.25
+  alpha: 0.002
+  epochs: 5000
+  learning_rate: 0.0001
+  batch_size: 96
+  gpus: True
+  gpu_id: 3
+  shuffle_data: False
+  transform: True
+
+
+  
+
