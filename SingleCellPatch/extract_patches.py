@@ -205,7 +205,7 @@ def process_site_extract_patches(site_path,
         # Define fillings for the masked pixels in this slice
         cells_to_keep = []
         background_positions = np.where(cell_segmentation[0] > 0.9)
-        background_pool = np.array([np.median(raw_image[i][:][background_positions]) for i in range(n_channels)])
+        background_pool = np.array([np.median(raw_image[i][0][background_positions]) for i in range(n_channels)])
         background_filling = np.ones((n_channels, n_z, window_size, window_size)) * background_pool.reshape((n_channels, 1, 1, 1))
 
         # Save all cells in this step, filtering will be performed during analysis
