@@ -106,7 +106,6 @@ def build_trajectories(summary_folder: str,
         sites (list of str): list of site names
 
     """
-    # w = config.inference.window_size
 
     for site in sites:
         site_path = os.path.join(summary_folder + '/' + site + '.npy')
