@@ -18,7 +18,7 @@ files:
 
 preprocess:
   channels: ["Retardance", "Phase2D", "Brightfield"]
-  fov: ['C5-Site_0','C5-Site_1']
+  fov: ['C5-Site_0','C5-Site_1']    # positions to process. Put 'all' to process all available positions
   multipage: False
   z_slice: 2
   pos_dir: True   # "True" if images from each position are saved in separate directories
