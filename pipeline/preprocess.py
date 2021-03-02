@@ -3,7 +3,6 @@
 import numpy as np
 import cv2
 import os
-import tifffile as tf
 
 def read_image(file_path):
     """
