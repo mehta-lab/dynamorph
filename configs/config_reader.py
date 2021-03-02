@@ -21,6 +21,7 @@ FILES = {
 PREPROCESS = {
     'channels',
     'fov',
+    'pos_dir',
     'multipage',
     'z_slice'
 }

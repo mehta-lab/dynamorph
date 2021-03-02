@@ -8,7 +8,6 @@
 
 from pipeline.preprocess import write_raw_to_npy
 import os
-
 import argparse
 from configs.config_reader import YamlReader
 
@@ -18,12 +17,18 @@ def main(input_, output_, config_):
     chans = config_.preprocess.channels
     multi = config_.preprocess.multipage
     z_slice = config_.preprocess.z_slice
+    pos_dir = config_.preprocess.pos_dir
 
-    if config_.preprocess.fov:
-        sites = config_.preprocess.fov
+    if config_.preprocess.fov == 'all':
+        if pos_dir:
+            # assume all subdirectories are site/FOVs
+            sites = [site for site in os.listdir(input_) if os.path.isdir(os.path.join(input_, site))]
+        else:
+            # parse positions from file name img_{channel}_t###_p###_z###.tif
+            im_names = [fname for fname in os.listdir(input_) if 'im' in fname]
+            sites = [im_name.split("_")[3] for im_name in im_names]
     else:
-        # assume all subdirectories are site/FOVs
-        sites = [site for site in os.listdir(input_) if os.path.isdir(os.path.join(input_, site))]
+        sites = config_.preprocess.fov
 
     for site in sites:
         if not os.path.exists(output_):
@@ -31,9 +36,9 @@ def main(input_, output_, config_):
 
         try:
             print(f"writing {site} to {output_}", flush=True)
-            write_raw_to_npy(input_, site, output_, chans, multipage=multi, z_slice=z_slice)
+            write_raw_to_npy(input_, site, output_, chans, multipage=multi, z_slice=z_slice, pos_dir=pos_dir)
         except Exception as e:
-            print(f"\terror in writing {site}", flush=True)
+            print("\terror in writing {}. {}".format(site, e), flush=True)
 
 
 def parse_args():

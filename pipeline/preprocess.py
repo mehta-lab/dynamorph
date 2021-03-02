@@ -5,11 +5,31 @@ import cv2
 import os
 import tifffile as tf
 
+def read_image(file_path):
+    """
+    Read 2D grayscale image from file.
+    Checks file extension for npy and load array if true. Otherwise
+    reads regular image using OpenCV (png, tif, jpg, see OpenCV for supported
+    files) of any bit depth.
+
+    :param str file_path: Full path to image
+    :return array im: 2D image
+    :raise IOError if image can't be opened
+    """
+    if file_path[-3:] == 'npy':
+        im = np.load(file_path)
+    else:
+        im = cv2.imread(file_path, cv2.IMREAD_ANYDEPTH)
+        if im is None:
+            raise IOError('Image "{}" cannot be found.'.format(file_path))
+    return im
+
 def load_raw(path: str, 
              site: str,
              chans: list,
              multipage: bool = True,
-             z_slice: int = 2):
+             z_slice: int = 2,
+             pos_dir: bool=True):
     """Raw data loader
 
     This function takes a path to an experiment folder and 
@@ -26,52 +46,60 @@ def load_raw(path: str,
         multipage (bool, optional): default=True
             if folder contains stabilized multipage tiffs
             only multipage tiff is supported now
+         pos_dir (bool): "True" if images from each position are saved in separate directories
 
     Returns:
         np.array: numpy array as described above
 
     """
-    fullpath = os.path.join(path, site)
+
     shapes = []
 
     if not multipage:
         print(f"single-page tiffs specified")
         # load singlepage tiffs.  String parse assuming time series and z### format
+        if pos_dir:
+            fullpath = os.path.join(path, site)
+        else:
+            fullpath = path
         for chan in chans:
             files = [c for c in os.listdir(fullpath) if chan in c and f"z{z_slice:03d}" in c]
             files = sorted(files)
             if "Phase" in chan:
-                phase = np.stack([tf.imread(os.path.join(fullpath, f)) for f in files])
+                phase = np.stack([read_image(os.path.join(fullpath, f)) for f in files])
                 shapes.append(phase.shape)
             if "Retardance" in chan:
-                ret = np.stack([tf.imread(os.path.join(fullpath, f)) for f in files])
+                ret = np.stack([read_image(os.path.join(fullpath, f)) for f in files])
                 shapes.append(ret.shape)
             if "Brightfield" in chan:
-                bf = np.stack([tf.imread(os.path.join(fullpath, f)) for f in files])
+                bf = np.stack([read_image(os.path.join(fullpath, f)) for f in files])
                 shapes.append(bf.shape)
-
     else:
         print(f"multi-page tiffs specified")
         # load stabilized multipage tiffs.
-        for chan in chans:
-            if "Phase" in chan:
-                multi_tif_phase = 'img_Phase2D_stabilized.tif'
-                _, phase = cv2.imreadmulti(fullpath + '/' + multi_tif_phase,
-                                           flags=cv2.IMREAD_ANYDEPTH)
-                phase = np.array(phase)
-                shapes.append(phase.shape)
-            if "Retardance" in chan:
-                multi_tif_retard = 'img__Retardance__stabilized.tif'
-                _, ret = cv2.imreadmulti(fullpath + '/' + multi_tif_retard,
-                                         flags=cv2.IMREAD_ANYDEPTH)
-                ret = np.array(ret)
-                shapes.append(ret.shape)
-            if "Brightfield" in chan:
-                multi_tif_bf = 'img_Brightfield_computed_stabilized.tif'
-                _, bf = cv2.imreadmulti(fullpath + '/' + multi_tif_bf,
-                                        flags=cv2.IMREAD_ANYDEPTH)
-                bf = np.array(bf)
-                shapes.append(bf.shape)
+        if pos_dir:
+            fullpath = os.path.join(path, site)
+            for chan in chans:
+                if "Phase" in chan:
+                    multi_tif_phase = 'img_Phase2D_stabilized.tif'
+                    _, phase = cv2.imreadmulti(fullpath + '/' + multi_tif_phase,
+                                               flags=cv2.IMREAD_ANYDEPTH)
+                    phase = np.array(phase)
+                    shapes.append(phase.shape)
+                if "Retardance" in chan:
+                    multi_tif_retard = 'img__Retardance__stabilized.tif'
+                    _, ret = cv2.imreadmulti(fullpath + '/' + multi_tif_retard,
+                                             flags=cv2.IMREAD_ANYDEPTH)
+                    ret = np.array(ret)
+                    shapes.append(ret.shape)
+                if "Brightfield" in chan:
+                    multi_tif_bf = 'img_Brightfield_computed_stabilized.tif'
+                    _, bf = cv2.imreadmulti(fullpath + '/' + multi_tif_bf,
+                                            flags=cv2.IMREAD_ANYDEPTH)
+                    bf = np.array(bf)
+                    shapes.append(bf.shape)
+        else:
+            raise NotImplementedError('"pos_dir=False" is not supported for multi-page tiffs for now')
 
     # check that all shapes are the same
     assert shapes.count(shapes[0]) == len(shapes)
@@ -126,7 +154,8 @@ def write_raw_to_npy(path: str,
                      output: str,
                      chans: list,
                      z_slice: int,
-                     multipage: bool = True):
+                     multipage: bool = True,
+                     pos_dir: bool =True):
     """Wrapper method for data loading
 
     This function takes a path to an experiment folder, loads specified 
@@ -142,11 +171,12 @@ def write_raw_to_npy(path: str,
         multipage (bool, optional): default=True
             if folder contains stabilized multipage tiffs
             only multipage tiff is supported now
+        pos_dir (bool): "True" if images from each position are saved in separate directories
 
     """
 
     output_name = output + '/' + site + '.npy'
-    raw = load_raw(path, site, chans, z_slice=z_slice, multipage=multipage)
+    raw = load_raw(path, site, chans, z_slice=z_slice, multipage=multipage, pos_dir=pos_dir)
     raw_adjusted = adjust_range(raw)
     print(f"saving image stack to {output_name}")
     np.save(output_name, raw_adjusted)

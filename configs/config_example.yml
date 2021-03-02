@@ -21,6 +21,7 @@ preprocess:
   fov: ['C5-Site_0','C5-Site_1']
   multipage: False
   z_slice: 2
+  pos_dir: True   # "True" if images from each position are saved in separate directories
 
 
 patch:
