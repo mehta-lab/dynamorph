@@ -15,6 +15,7 @@ from torch.utils.tensorboard import SummaryWriter
 # from torchvision import transforms
 from scipy.sparse import csr_matrix
 from SingleCellPatch.extract_patches import im_adjust
+from pipeline.train_utils import EarlyStopping
 
 CHANNEL_RANGE = [(0.3, 0.8), (0., 0.6)] 
 CHANNEL_VAR = np.array([0.0475, 0.0394]) # After normalized to CHANNEL_RANGE
@@ -776,11 +777,50 @@ class AAE(nn.Module):
         """ Prediction fn, same as forward pass """
         return self.forward(inputs)
 
+def get_relation_tensor(relation_mat, sample_ids, gpu=True):
+    """
+    Slice relation matrix according to sample_ids; convert to torch tensor
+    Args:
+        relation_mat (scipy sparse array): symmetric matrix describing the relation between samples
+        sample_ids (list): row & column ids to select
+        gpu (bool): send the tensor to gpu if True
 
+    Returns:
+        batch_relation_mat (torch tensor or None): sliced relation matrix
+
+    """
+    if relation_mat is None:
+        return None
+    batch_relation_mat = relation_mat[sample_ids, :]
+    batch_relation_mat = batch_relation_mat[:, sample_ids]
+    batch_relation_mat = batch_relation_mat.todense()
+    batch_relation_mat = t.from_numpy(batch_relation_mat).float()
+    if gpu:
+        batch_relation_mat = batch_relation_mat.cuda()
+    return batch_relation_mat
+
+def get_mask(mask, sample_ids, gpu=True):
+    """
+    Slice cell masks according to sample_ids; convert to torch tensor
+    Args:
+        mask (numpy array): cell masks for dataset
+        sample_ids (list): mask ids to select
+        gpu (bool): send the tensor to gpu if True
+
+    Returns:
+        batch_mask (torch tensor or None): sliced relation matrix
+    """
+    if mask is None:
+        return None
+    batch_mask = mask[sample_ids][0][:, 1:2, :, :]  # Hardcoded second slice (large mask)
+    batch_mask = (batch_mask + 1.) / 2.
+    if gpu:
+        batch_mask = batch_mask.cuda()
+    return batch_mask
 
 def train(model, dataset, output_dir, relation_mat=None, mask=None,
           n_epochs=10, lr=0.001, batch_size=16, gpu=True, shuffle_data=False,
-          transform=None):
+          transform=None, val_split_ratio=0.2, patience=20):
     """ Train function for VQ-VAE, VAE, IWAE, etc.
 
     Args:
@@ -797,22 +837,42 @@ def train(model, dataset, output_dir, relation_mat=None, mask=None,
         shuffle_data (bool): shuffle data at the end of the epoch to add randomness to mini-batch.
             Set False when using matching loss
         transform (bool): data augmentation
+        val_split_ratio (float or None): fraction of the dataset used for validation
+        patience (int or None): Number of epochs to wait before stopping training if validation loss does not improve.
     
     Returns:
         nn.Module: trained model
 
     """
+    assert val_split_ratio is None or 0 < val_split_ratio < 1
+    # early stopping requires validation set
+    if patience is not None:
+        assert val_split_ratio is not None
     optimizer = t.optim.Adam(model.parameters(), lr=lr, betas=(.9, .999))
     model.zero_grad()
     n_samples = len(dataset)
-    n_batches = int(np.ceil(n_samples/batch_size))
     # Declare sample indices and do an initial shuffle
-    sample_ids = np.arange(n_samples)
+    sample_ids = list(range(n_samples))
+    split = int(np.floor(val_split_ratio * n_samples))
+    split_start = np.random.randint(0, n_samples - split)
     if shuffle_data:
         np.random.shuffle(sample_ids)
+    val_ids = sample_ids[split_start: split_start + split]
+    train_ids = sample_ids[:split_start] + sample_ids[split_start + split:]
+    n_train = len(train_ids)
+    n_val = len(val_ids)
+    n_batches = int(np.ceil(n_train / batch_size))
+    n_val_batches = int(np.ceil(n_val / batch_size))
+    val_set = dataset[val_ids][0]
+    if gpu:
+        val_set = val_set.cuda()
+    val_relation_mat = get_relation_tensor(relation_mat, val_ids, gpu=gpu)
+    val_mask = get_mask(mask, val_ids, gpu)
     writer = SummaryWriter(output_dir)
+    model_path = os.path.join(output_dir, 'model.pt')
+    early_stopping = EarlyStopping(patience=patience, verbose=True, path=model_path)
     for epoch in range(n_epochs):
-        mean_loss = {'recon_loss': [],
+        train_loss = {'recon_loss': [],
                      'commitment_loss': [],
                      'time_matching_loss': [],
                      'total_loss': [],
@@ -820,7 +880,7 @@ def train(model, dataset, output_dir, relation_mat=None, mask=None,
         print('start epoch %d' % epoch) 
         for i in range(n_batches):
             # deal with last batch might < batch size
-            sample_ids_batch = sample_ids[i * batch_size:min((i + 1) * batch_size, n_samples)]
+            sample_ids_batch = train_ids[i * batch_size:min((i + 1) * batch_size, n_train)]
             batch = dataset[sample_ids_batch][0]
             n_channels = len(batch[0])
             if transform is not None:
@@ -850,40 +910,31 @@ def train(model, dataset, output_dir, relation_mat=None, mask=None,
             if gpu:
                 batch = batch.cuda()
             # Relation (adjacent frame, same trajectory)
-            if not relation_mat is None:
-                batch_relation_mat = relation_mat[i*batch_size:(i+1)*batch_size, i*batch_size:(i+1)*batch_size]
-                batch_relation_mat = batch_relation_mat.todense()
-                batch_relation_mat = t.from_numpy(batch_relation_mat).float()
-                if gpu:
-                    batch_relation_mat = batch_relation_mat.cuda()
-            else:
-                batch_relation_mat = None
-            
+            batch_relation_mat = get_relation_tensor(relation_mat, sample_ids_batch, gpu=gpu)
             # Reconstruction mask
-            if not mask is None:
-                batch_mask = mask[i*batch_size:(i+1)*batch_size][0][:, 1:2, :, :] # Hardcoded second slice (large mask)
-                batch_mask = (batch_mask + 1.)/2.
-                if gpu:
-                    batch_mask = batch_mask.cuda()
-            else:
-                batch_mask = None
-              
-            _, loss_dict = model(batch, time_matching_mat=batch_relation_mat, batch_mask=batch_mask)
-            loss_dict['total_loss'].backward()
+            batch_mask = get_mask(mask, sample_ids_batch, gpu)
+            _, train_loss_dict = model(batch, time_matching_mat=batch_relation_mat, batch_mask=batch_mask)
+            train_loss_dict['total_loss'].backward()
             optimizer.step()
             model.zero_grad()
-            for key, loss in loss_dict.items():
-                mean_loss[key].append(loss)
+            for key, loss in train_loss_dict.items():
+                train_loss[key].append(loss)
+        _, val_loss_dict = model(val_set, time_matching_mat=val_relation_mat, batch_mask=val_mask)
         # shuffle samples ids at the end of the epoch
         if shuffle_data:
             np.random.shuffle(sample_ids)
-        for key, loss in mean_loss.items():
-            mean_loss[key] = sum(loss)/len(loss)
-            writer.add_scalar('Loss/' + key, mean_loss[key], epoch)
+        for key, loss in train_loss.items():
+            train_loss[key] = sum(loss)/len(loss)
+            writer.add_scalar('Loss/' + key, train_loss[key], epoch)
+        for key, loss in val_loss_dict.items():
+            writer.add_scalar('Valid loss/' + key, loss, epoch)
+        early_stopping(val_loss_dict['total_loss'], model)
+        if early_stopping.early_stop:
+            print("Early stopping")
+            break
         writer.flush()
         print('epoch %d' % epoch)
-        print(''.join(['{}:{:0.4f}  '.format(key, loss) for key, loss in mean_loss.items()]))
-        t.save(model.state_dict(), os.path.join(output_dir, 'model.pt'))
+        print(''.join(['{}:{:0.4f}  '.format(key, loss) for key, loss in train_loss.items()]))
     writer.close()
     return model
 
@@ -1226,6 +1277,8 @@ if __name__ == '__main__':
     gpuid = 3
     w_a = 1
     w_t = 0.5
+    val_split_ratio = 0.2
+    patience = 20
     #### cardiomyocyte data###
     # channel_mean = [0.49998672, 0.007081]
     # channel_std = [0.00074311, 0.00906428]
@@ -1321,8 +1374,9 @@ if __name__ == '__main__':
                   batch_size=96,
                   gpu=gpu,
                   transform=True,
+                  val_split_ratio=val_split_ratio,
+                  patience=patience,
                   )
-
 
     ### Check coverage of embedding vectors ###
     used_indices = []
