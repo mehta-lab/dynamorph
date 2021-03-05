@@ -59,10 +59,12 @@ def load_raw(path: str,
         # load singlepage tiffs.  String parse assuming time series and z### format
         if pos_dir:
             fullpath = os.path.join(path, site)
+            fname_pos = ""
         else:
             fullpath = path
+            fname_pos = site
         for chan in chans:
-            files = [c for c in os.listdir(fullpath) if chan in c and f"z{z_slice:03d}" in c]
+            files = [c for c in os.listdir(fullpath) if chan in c and f"z{z_slice:03d}" in c and fname_pos in c]
             files = sorted(files)
             if "Phase" in chan:
                 phase = np.stack([read_image(os.path.join(fullpath, f)) for f in files])
