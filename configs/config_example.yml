@@ -1,25 +1,27 @@
 
-files:
-  raw_dirs: ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_input_tstack',
-             '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_input_tstack']
-
-  supp_dirs: ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_supp_tstack',
-              '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_supp_tstack']
-
-  train_dirs: ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_train_tstack',
-               '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_train_tstack']
-
-  val_dirs: ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_train_tstack/val',
-                    '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_train_tstack/val']
-
-  weights_dir: '/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_train_tstack/weights'
-  # path to save weights during training, subdirectory of train_dirs
+#files:
+#  raw_dirs: ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_input_tstack',
+#             '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_input_tstack']
+#
+#  supp_dirs: ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_supp_tstack',
+#              '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_supp_tstack']
+#
+#  train_dirs: ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_train_tstack',
+#               '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_train_tstack']
+#
+#  val_dirs: ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_train_tstack/val',
+#                    '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_train_tstack/val']
+#
+#  weights_dir: '/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_train_tstack/weights'
+#  # path to save weights during training, subdirectory of train_dirs
 
 
 preprocess:
-  image_dirs: []
+  image_dirs: ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_input_tstack',
+               '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_input_tstack']
 
-  target_dirs: []
+  target_dirs: ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_supp_tstack',
+                '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_supp_tstack']
 
   channels: ["Retardance", "Phase2D", "Brightfield"]
   # Strings in filenames that identify the channels
@@ -37,6 +39,9 @@ preprocess:
 
 
 patch:
+  raw_dirs:
+  supp_dirs:
+
   channels: [0,1,2]
   fov: ['C5-Site_0','C5-Site_1']
   gpus: 1
@@ -47,11 +52,13 @@ patch:
 
 
 inference:
+  raw_dirs:
+  supp_dirs:
+  weights: ['/gpfs/CompMicro/projects/dynamorph/CellVAE/save_0005_bkp4.pt']
+  # pytorch weight files
+
   model: 'VQ_VAE_z16'
   # VQ_VAE_z16 or UNet
-
-  weights: '/gpfs/CompMicro/projects/dynamorph/CellVAE/save_0005_bkp4.pt'
-  # pytorch weight file
 
   save_output: True
   # write .jpg results from run_vae.process
@@ -68,6 +75,10 @@ inference:
 
 
 training:
+  raw_dirs:
+  supp_dirs:
+  weights_dirs:
+
   # model definitions
   model: 'VQ_VAE_z32'
   num_inputs: 2

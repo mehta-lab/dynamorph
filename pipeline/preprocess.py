@@ -2,8 +2,6 @@
 
 import numpy as np
 import cv2
-import os
-import tifffile as tf
 from typing import Union
 
 

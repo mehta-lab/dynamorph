@@ -10,15 +10,17 @@ def log_warning(msg, *args, **kwargs):
 
 
 # to add a new configuration parameter, simply add the string to the appropriate set here
-FILES = {
-    'raw_dirs',
-    'supp_dirs',
-    'train_dirs',
-    'val_dirs',
-    'weights_dir'
-}
+# FILES = {
+#     'raw_dirs',
+#     'supp_dirs',
+#     'train_dirs',
+#     'val_dirs',
+#     'weights_dir'
+# }
 
 PREPROCESS = {
+    'image_dirs',
+    'target_dirs',
     'channels',
     'fov',
     'multipage',
@@ -27,6 +29,8 @@ PREPROCESS = {
 }
 
 PATCH = {
+    'raw_dirs',
+    'supp_dirs',
     'channels',
     'fov',
     'gpus',
@@ -37,6 +41,8 @@ PATCH = {
 }
 
 INFERENCE = {
+    'raw_dirs',
+    'supp_dirs',
     'model',
     'weights',
     'save_output',
@@ -52,6 +58,9 @@ INFERENCE = {
 }
 
 TRAINING = {
+    'raw_dirs',
+    'supp_dirs',
+    'weights_dirs',
     'model',
     'num_inputs',
     'num_hiddens',
