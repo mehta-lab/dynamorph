@@ -17,10 +17,23 @@ files:
 
 
 preprocess:
+  image_dirs: []
+
+  target_dirs: []
+
   channels: ["Retardance", "Phase2D", "Brightfield"]
+  # Strings in filenames that identify the channels
+
   fov: ['C5-Site_0','C5-Site_1']
+  # list of subfolder or position indices that identifies a field-of-view
+  # use 'all' to preprocess all positions
+
   multipage: False
+
   z_slice: 2
+
+  pos_dir: True
+  # whether each position is in a subdirectory (True), or in the same directory (False)
 
 
 patch:

@@ -22,7 +22,8 @@ PREPROCESS = {
     'channels',
     'fov',
     'multipage',
-    'z_slice'
+    'z_slice',
+    'pos_dir'
 }
 
 PATCH = {
