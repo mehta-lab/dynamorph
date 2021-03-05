@@ -95,7 +95,7 @@ class YamlReader(Object):
         self.config = None
 
         # easy way to assign attributes to each category
-        self.files = Object()
+        # self.files = Object()
         self.preprocess = Object()
         self.patch = Object()
         self.inference = Object()
@@ -105,18 +105,18 @@ class YamlReader(Object):
         with open(yml_config, 'r') as f:
             self.config = yaml.load(f)
 
-            self._parse_files()
+            # self._parse_files()
             self._parse_preprocessing()
             self._parse_patch()
             self._parse_inference()
             self._parse_training()
 
-    def _parse_files(self):
-        for key, value in self.config['files'].items():
-            if key in FILES:
-                setattr(self.files, key, value)
-            else:
-                log_warning(f"yaml FILE config field {key} is not recognized")
+    # def _parse_files(self):
+    #     for key, value in self.config['files'].items():
+    #         if key in FILES:
+    #             setattr(self.files, key, value)
+    #         else:
+    #             log_warning(f"yaml FILE config field {key} is not recognized")
 
     def _parse_preprocessing(self):
         for key, value in self.config['preprocess'].items():
