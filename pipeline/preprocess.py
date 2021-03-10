@@ -58,7 +58,7 @@ def load_raw(fullpaths: list,
     shapes = []
 
     if not multipage:
-        log.debug(f"single-page tiffs specified")
+        log.info(f"single-page tiffs specified")
         # load singlepage tiffs.  String parse assuming time series and z### format
         for chan in chans:
             # files maps (key:value) = (z_index, t_y_x array)
@@ -72,7 +72,7 @@ def load_raw(fullpaths: list,
                 log.warning(f"no files with {chan} identified")
                 continue
 
-            # resulting shapes are in (z, t, y, x) order
+            # resulting shapes are in (t, y, x) order
             if "Phase" in chan:
                 phase = np.stack([read_image(f) for f in files])
                 # phase = phase.reshape((len(z_indicies), -1, phase.shape[-2], phase.shape[-1]))
@@ -89,7 +89,7 @@ def load_raw(fullpaths: list,
                 log.warning(f'not implemented: {chan} parse from single page files')
 
     else:
-        print(f"multi-page tiffs specified")
+        log.info(f"multi-page tiffs specified")
         # load stabilized multipage tiffs.
         for chan in chans:
             if "Phase" in chan:
@@ -134,6 +134,8 @@ def load_raw(fullpaths: list,
 
 def adjust_range(arr):
     """Check value range for both channels
+    *** currently does nothing but report mean and std ***
+    *** image z-scoring is done at a later stage ***
 
     To maintain stability, input arrays should be within:
         phase channel: mean - 32767, std - 1600~2000
@@ -175,8 +177,9 @@ def write_raw_to_npy(site: Union[int, str],
 
     Args:
         site: (int or str)
+            name of specific position/site being processed
         site_list (list):
-            list of files for a position/site
+            list of files for this position/site
         output (str):
             path to the output folder
         chans (list):

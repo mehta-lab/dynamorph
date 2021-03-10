@@ -17,6 +17,17 @@ log = logging.getLogger(__name__)
 
 
 def main(input_, output_, config_):
+    """
+    Using supplied config file parameters, prepare specified datasets for downstream analysis
+
+    :param input_: str
+        Path to a single experiment
+    :param output_: str
+        Path to output directory for prepared datasets
+    :param config_: YamlReader
+        YamlReader object containing parsed configuration values
+    :return:
+    """
 
     chans = config_.preprocess.channels
     multi = config_.preprocess.multipage
@@ -57,8 +68,6 @@ def main(input_, output_, config_):
 
         elif type(fovs) is list:
             for fov in fovs:
-                # regex = re.compile()
-                # sites[fov] = [os.path.join(input_, f) for f in sorted(fnmatch.filter(all_files, f'*p{fov:03d}*'))]
                 sites[fov] = [os.path.join(input_, f) for f in sorted(fnmatch.filter(all_files, f'*p{fov:03d}*'))]
         else:
             raise NotImplementedError("FOV index expected, or preprocess FOVs must be 'all' or list of positions")
@@ -91,19 +100,6 @@ def parse_args():
     :return: namespace containing the arguments passed.
     """
     parser = argparse.ArgumentParser()
-
-    # parser.add_argument(
-    #     '-i', '--input',
-    #     type=str,
-    #     required=False,
-    #     help="Path to multipage-tiff file of format [t, x, y], or to single-page-tiffs",
-    # )
-    # parser.add_argument(
-    #     '-o', '--output',
-    #     type=str,
-    #     required=False,
-    #     help="Path to write results",
-    # )
     parser.add_argument(
         '-c', '--config',
         type=str,
@@ -115,13 +111,10 @@ def parse_args():
 
 
 if __name__ == '__main__':
-    # print(time.asctime(time.localtime(time.time())), flush=True)
     arguments = parse_args()
     config = YamlReader()
     config.read_config(arguments.config)
 
     for (src, target) in list(zip(config.preprocess.image_dirs, config.preprocess.target_dirs)):
         main(src, target, config)
-
-    # print(time.asctime(time.localtime(time.time())), flush=True)
 
