@@ -100,7 +100,7 @@ def parse_args():
         '-c', '--config',
         type=str,
         required=True,
-        help='path to yaml configuration file'
+        help='path to yaml configuration file.  Run_segmentation takes arguments from "inference" category'
     )
     
     return parser.parse_args()
@@ -113,5 +113,5 @@ if __name__ == '__main__':
     config.read_config(arguments.config)
 
     # batch run
-    for (raw_dir, supp_dir, val_dir) in list(zip(config.files.raw_dirs, config.files.supp_dirs, config.files.val_dirs)):
+    for (raw_dir, supp_dir, val_dir) in list(zip(config.inference.raw_dirs, config.inference.supp_dirs, config.inference.val_dirs)):
         main(arguments.method, raw_dir, supp_dir, val_dir, config)
