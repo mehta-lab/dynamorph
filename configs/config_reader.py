@@ -2,13 +2,6 @@ import yaml
 import logging
 
 
-# def log_warning(msg, *args, **kwargs):
-#     """Log message with level WARNING."""
-#     # import logging
-#
-#     logging.getLogger(__name__).warning(msg, *args, **kwargs)
-
-
 # replicate from aicsimageio logging mechanism
 ###############################################################################
 

@@ -8,6 +8,8 @@ from keras import backend as K
 import tensorflow as tf
 from SingleCellPatch.instance_clustering import process_site_instance_segmentation
 from configs.config_reader import YamlReader
+import logging
+log = logging.getLogger(__name__)
 
 
 def segmentation(raw_folder_: str,
@@ -57,7 +59,7 @@ def segmentation(raw_folder_: str,
                                      window_size,
                                      window_size), n_classes=n_classes)
     else:
-        raise AttributeError(f"segmentation model {config_.inference.model} not defined")
+        raise NotImplementedError(f"segmentation model {config_.inference.model} not implemented")
 
     try:
         if weights:
@@ -65,15 +67,15 @@ def segmentation(raw_folder_: str,
         else:
             model.load('NNsegmentation/temp_save_unsaturated/final.h5')
     except Exception as ex:
-        print(ex)
+        log.error(ex)
         raise ValueError("Error in loading UNet weights")
 
     for site in sites:
         site_path = os.path.join(raw_folder_, '%s.npy' % site)
         if not os.path.exists(site_path):
-            print("Site not found %s" % site_path, flush=True)
+            log.info("Site not found %s" % site_path, flush=True)
         else:
-            print("Predicting %s" % site_path, flush=True)
+            log.info("Predicting %s" % site_path, flush=True)
             try:
                 # Generate semantic segmentation
                 predict_whole_map(site_path,
@@ -83,8 +85,8 @@ def segmentation(raw_folder_: str,
                                   n_supp=n_supp,
                                   **kwargs)
             except Exception as ex:
-                print(ex)
-                print("Error in predicting site %s" % site, flush=True)
+                log.error(ex)
+                log.error("Error in predicting site %s" % site, flush=True)
     return
 
 
@@ -118,9 +120,9 @@ def instance_segmentation(raw_folder: str,
         site_segmentation_path = os.path.join(raw_folder,
                                               '%s_NNProbabilities.npy' % site)
         if not os.path.exists(site_path) or not os.path.exists(site_segmentation_path):
-            print("Site not found %s" % site_path, flush=True)
+            log.info("Site not found %s" % site_path, flush=True)
         else:
-            print("Clustering %s" % site_path, flush=True)
+            log.info("Clustering %s" % site_path, flush=True)
             site_supp_files_folder = os.path.join(supp_folder,
                                                   '%s-supps' % site[:2],
                                                   '%s' % site)
