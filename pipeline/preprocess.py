@@ -92,21 +92,30 @@ def load_raw(fullpaths: list,
         log.info(f"multi-page tiffs specified")
         # load stabilized multipage tiffs.
         for chan in chans:
+            files = [c for c in fullpaths if chan in c.split('/')[-1] and '.tif' in c.split('/')[-1]]
+            files = sorted(files)
+            if not files:
+                log.warning(f"no files with {chan} identified")
+                continue
+            if len(files) > 1:
+                log.warning(f"duplicate matches for channel name in folder, skipping channel")
+                continue
+
             if "Phase" in chan:
-                multi_tif_phase = 'img_Phase2D_stabilized.tif'
-                _, phase = cv2.imreadmulti(fullpaths + '/' + multi_tif_phase,
+                # multi_tif_phase = 'img_Phase2D_stabilized.tif'
+                _, phase = cv2.imreadmulti(files[0],
                                            flags=cv2.IMREAD_ANYDEPTH)
                 phase = np.array(phase)
                 shapes.append(phase.shape)
             if "Retardance" in chan:
-                multi_tif_retard = 'img__Retardance__stabilized.tif'
-                _, ret = cv2.imreadmulti(fullpaths + '/' + multi_tif_retard,
+                # multi_tif_retard = 'img__Retardance__stabilized.tif'
+                _, ret = cv2.imreadmulti(files[0],
                                          flags=cv2.IMREAD_ANYDEPTH)
                 ret = np.array(ret)
                 shapes.append(ret.shape)
             if "Brightfield" in chan:
-                multi_tif_bf = 'img_Brightfield_computed_stabilized.tif'
-                _, bf = cv2.imreadmulti(fullpaths + '/' + multi_tif_bf,
+                # multi_tif_bf = 'img_Brightfield_computed_stabilized.tif'
+                _, bf = cv2.imreadmulti(files[0],
                                         flags=cv2.IMREAD_ANYDEPTH)
                 bf = np.array(bf)
                 shapes.append(bf.shape)
