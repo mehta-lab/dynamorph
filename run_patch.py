@@ -113,5 +113,5 @@ if __name__ == '__main__':
     config.read_config(arguments.config)
 
     # batch run
-    for (raw_dir, supp_dir) in list(zip(config.files.raw_dirs, config.files.supp_dirs)):
+    for (raw_dir, supp_dir) in list(zip(config.patch.raw_dirs, config.patch.supp_dirs)):
         main(arguments.method, raw_dir, supp_dir, config)

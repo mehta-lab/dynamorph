@@ -27,8 +27,8 @@ preprocess:
 
 
 patch:
-  raw_dirs:
-  supp_dirs:
+  raw_dirs: []
+  supp_dirs: []
 
   channels: [0,1,2]
   fov: ['C5-Site_0','C5-Site_1']
@@ -40,12 +40,12 @@ patch:
 
 
 inference:
-  raw_dirs:
-  supp_dirs:
+  raw_dirs: ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_input_tstack']
+  supp_dirs: ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_supp_tstack']
   weights: ['/gpfs/CompMicro/projects/dynamorph/CellVAE/save_0005_bkp4.pt']
   # pytorch weight files
 
-  model: 'VQ_VAE_z16'
+  model: 'UNet'
   # VQ_VAE_z16 or UNet
 
   save_output: True

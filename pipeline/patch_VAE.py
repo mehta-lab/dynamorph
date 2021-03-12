@@ -50,7 +50,7 @@ def extract_patches(raw_folder: str,
             the image size (do not pad)
 
     """
-    channels = config.inference.channels
+    channels = config.patch.channels
 
     assert len(channels) > 0, "At least one channel must be specified"
 
