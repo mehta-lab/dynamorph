@@ -49,7 +49,7 @@ def segmentation(raw_folder_: str,
 
     weights = config_.inference.weights
     n_classes = config_.inference.num_classes
-    channels = config_.inference.channnels
+    channels = config_.inference.channels
     window_size = config_.inference.window_size
     batch_size = config_.inference.batch_size
     n_supp = config_.inference.num_pred_rnd

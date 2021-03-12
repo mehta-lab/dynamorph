@@ -33,7 +33,7 @@ class Worker(Process):
             log.info(f"running instance segmentation worker on {self.gpuid}")
             instance_segmentation(*self.inputs)
         elif self.method == 'segmentation_validation':
-            segmentation_validation_michael(self.inputs, self.gpuid, 'unfiltered')
+            segmentation_validation_michael(*self.inputs)
 
 
 def main(method_, raw_dir_, supp_dir_, val_dir_, config_):
