@@ -120,9 +120,9 @@ def instance_segmentation(raw_folder: str,
         site_segmentation_path = os.path.join(raw_folder,
                                               '%s_NNProbabilities.npy' % site)
         if not os.path.exists(site_path) or not os.path.exists(site_segmentation_path):
-            log.info("Site not found %s" % site_path, flush=True)
+            log.info("Site not found %s" % site_path)
         else:
-            log.info("Clustering %s" % site_path, flush=True)
+            log.info("Clustering %s" % site_path)
             site_supp_files_folder = os.path.join(supp_folder,
                                                   '%s-supps' % site[:2],
                                                   '%s' % site)
