@@ -59,17 +59,11 @@ def worker(f_n):
     return y
 
 
-def get_size(dat):
+def get_size(mask):
     """ Calculate cell size based on mask
     
-    Input `dat` has 4 channels:
-        0 - Phase
-        1 - Retardance
-        2 - Target mask
-        3 - Enlarged target mask
-
     Args:
-        dat (np.array): single cell patch
+        mask (np.array): segmentation mask of a single cell
 
     Returns:
         int: number of pixels in the cell area
@@ -77,83 +71,72 @@ def get_size(dat):
 
     """
 
-    mask = np.array(dat[:, :, 2])
     _, contours, _ = cv2.findContours(mask.astype('uint8'), 1, 2)
     areas = [cv2.contourArea(cnt) for cnt in contours]
     return mask.sum(), np.max(areas)
 
 
-def get_density(dat):
+def get_intensity_profile(dat, mask=None):
     """ Calculate peak phase/retardance values
     
     See docs of `get_size` for input details
 
     Args:
-        dat (np.array): single cell patch
+        dat (list): list of 2D np.arrays for each channel of the patch
+        mask (np.array, optional): segmentation mask
 
     Returns:
-        (int, int, int, int): peak intensities of phase, including:
+        list (of tuples): list of intensity properties for each channel
             max phase intensity;
             95th percentile phase intensity;
             200-th value of top phase intensities;
             summed phase intensities.
-        (int, int, int, int): peak intensities of retardance, including:
-            max retardance intensity;
-            95th percentile retardance intensity;
-            200-th value of top retardance intensities;
-            summed retardance intensities.
 
     """
-
-    phase = np.array(dat[:, :, 0]) / 65535.
-    retardance = np.array(dat[:, :, 1]) / 65535.
-    mask = np.array(dat[:, :, 2])
     
-    # bg_phase = np.median(phase[np.where(mask == 0)])
-    # bg_retardance = np.median(retardance[np.where(mask == 0)])
-    bg_phase = 0.
-    bg_retardance = 0.
+    output = []
+    for channel_ind in range(len(dat)):
+        channel_slice = dat[channel_ind]
+        channel_slice = channel_slice / 65535.
+        
+        # bg = np.median(channel_slice[np.where(mask == 0)])
+        bg = 0.
 
-    peak_phase = ((phase - bg_phase) * mask).max()
-    sum_phase = ((phase - bg_phase) * mask).sum()
-    phase_vals = (phase - bg_phase)[np.where(mask)]
-    quantile_phase = np.percentile(phase_vals, 95)
-    top200_phase = np.mean(sorted(phase_vals)[-200:])
+        peak_int = ((channel_slice - bg) * mask).max()
+        sum_int = ((channel_slice - bg) * mask).sum()
+        intensities = (channel_slice - bg)[np.where(mask)]
+        quantile_int = np.percentile(intensities, 95)
+        top200_int = np.mean(sorted(intensities)[-200:])
 
-    peak_retardance = ((retardance - bg_retardance) * mask).max()
-    sum_retardance = ((retardance - bg_retardance) * mask).sum()
-    retardance_vals = (retardance - bg_retardance)[np.where(mask)]
-    quantile_retardance = np.percentile(retardance_vals, 95)
-    top200_retardance = np.mean(sorted(retardance_vals)[-200:])
+        output.append((peak_int, quantile_int, top200_int, sum_int))
 
-    return (peak_phase, quantile_phase, top200_phase, sum_phase), \
-           (peak_retardance, quantile_retardance, top200_retardance, sum_retardance)
+    return output
 
 
-def get_aspect_ratio(dat):
-    """ Calcualte aspect ratio (cv2.minAreaRect)
+# def get_aspect_ratio(dat):
+#     """ Calcualte aspect ratio (cv2.minAreaRect)
       
-    This function is deprecated and should be replaced by `get_angle_apr`
+#     This function is deprecated and should be replaced by `get_angle_apr`
 
-    See docs of `get_size` for input details.
+#     See docs of `get_size` for input details.
 
-    Args:
-        dat (np.array): single cell patch
+#     Args:
+#         dat (np.array): single cell patch
 
-    Returns:
-        float: width
-        float: height
-        float: angle of long axis
+#     Returns:
+#         float: width
+#         float: height
+#         float: angle of long axis
 
-    """
-    _, contours, _ = cv2.findContours(dat[:, :, 2].astype('uint8'), 1, 2)
-    areas = [cv2.contourArea(cnt) for cnt in contours]
-    rect = cv2.minAreaRect(contours[np.argmax(areas)])
-    w, h = rect[1]
-    ang = rect[2]
-    if w < h:
-        ang = ang - 90
-    return w, h, ang
+#     """
+#     _, contours, _ = cv2.findContours(dat[:, :, 2].astype('uint8'), 1, 2)
+#     areas = [cv2.contourArea(cnt) for cnt in contours]
+#     rect = cv2.minAreaRect(contours[np.argmax(areas)])
+#     w, h = rect[1]
+#     ang = rect[2]
+#     if w < h:
+#         ang = ang - 90
+#     return w, h, ang
 
 
 def rotate_bound(image, angle):
@@ -186,20 +169,20 @@ def rotate_bound(image, angle):
     return cv2.warpAffine(image, M, (nW, nH))
 
 
-def get_angle_apr(dat):
+def get_angle_apr(mask):
     """ Find long axis and calcualte aspect ratio
 
     See docs of `get_size` for input details.
 
     Args:
-        dat (np.array): single cell patch
+        mask (np.array): segmentation mask of a single cell
 
     Returns:
         float: aspect ratio
         float: angle of long axis
 
     """
-    y, x = np.nonzero(dat[:, :, 2])
+    y, x = np.nonzero(mask)
     x = x - np.mean(x)
     y = y - np.mean(y)
     coords = np.stack([x, y], 0)
@@ -208,28 +191,27 @@ def get_angle_apr(dat):
     main_axis = evecs[:, np.argmax(evals)]  # Eigenvector with largest eigenvalue
     angle = cmath.polar(complex(*main_axis))[1]
       
-    rotated = rotate_bound(dat[:, :, 2], -angle/np.pi * 180)
+    rotated = rotate_bound(mask, -angle/np.pi * 180)
     _, contours, _ = cv2.findContours(rotated.astype('uint8'), 1, 2)
     areas = [cv2.contourArea(cnt) for cnt in contours]
     rect = cv2.boundingRect(contours[np.argmax(areas)])
-    aps = rect[2]/rect[3]
-    return aps, angle
+    return rect[2], rect[3], angle
 
 
-def get_aspect_ratio_no_rotation(dat):
+def get_aspect_ratio_no_rotation(mask):
     """ Calcualte aspect ratio of untouched target mask
 
     See docs of `get_size` for input details.
 
     Args:
-        dat (np.array): single cell patch
+        mask (np.array): segmentation mask of a single cell
 
     Returns:
         float: width
         float: height
 
     """
-    _, contours, _ = cv2.findContours(dat[:, :, 2].astype('uint8'), 1, 2)
+    _, contours, _ = cv2.findContours(mask.astype('uint8'), 1, 2)
     areas = [cv2.contourArea(cnt) for cnt in contours]
     rect = cv2.boundingRect(contours[np.argmax(areas)])
     return rect[2], rect[3]
