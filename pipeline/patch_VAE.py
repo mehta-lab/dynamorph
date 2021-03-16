@@ -120,6 +120,8 @@ def assemble_VAE(summary_folder: str,
                  channels: list,
                  model_path: str,
                  sites: list,
+                 network: str='VQ_VAE_z16',
+                 patch_type: str='masked_mat',
                  **kwargs):
     """ Wrapper method for prepare dataset for VAE encoding
 
@@ -157,7 +159,7 @@ def assemble_VAE(summary_folder: str,
         dat_fs.extend([os.path.join(supp_files_folder, f) \
             for f in os.listdir(supp_files_folder) if f.startswith('stacks')])
 
-    dataset, fs = prepare_dataset_v2(dat_fs, cs=channels)
+    dataset, fs = prepare_dataset_v2(dat_fs, cs=channels, key=patch_type)
     assert fs == sorted(fs)
     
     print(f"\tsaving {os.path.join(summary_folder, '%s_file_paths.pkl' % well)}")
@@ -355,8 +357,12 @@ def process_VAE(summary_folder: str,
     except Exception as ex:
         print(ex)
         raise ValueError("Error in loading model weights for VQ-VAE")
-
-    _, n_channels, n_z, x_size, y_size = dataset.tensors[0].shape
+    if len(dataset.tensors[0].shape) == 4:  # old 4D format
+        _, n_channels, x_size, y_size = dataset.tensors[0].shape
+    elif len(dataset.tensors[0].shape) == 5:  # 5D format
+        _, n_channels, n_z, x_size, y_size = dataset.tensors[0].shape
+    else:
+        raise ValueError("dataset tensor dimension can only be 4 or 5, not {}".format(len(dataset.tensors[0].shape)))
     z_bs = {}
     z_as = {}
     for i in range(len(dataset)):
@@ -380,9 +386,10 @@ def process_VAE(summary_folder: str,
 
     if save_output:
         np.random.seed(0)
-        random_inds = np.random.randint(0, len(dataset), (10,))
+        random_inds = np.random.randint(0, len(dataset), (20,))
         for i in random_inds:
             sample = dataset[i:(i + 1)][0].cuda()
+            sample = sample.reshape([-1, n_channels, x_size, y_size]).cuda()
             output = model(sample)[0]
             im_phase = im_adjust(sample[0, 0].cpu().data.numpy())
             im_phase_recon = im_adjust(output[0, 0].cpu().data.numpy())

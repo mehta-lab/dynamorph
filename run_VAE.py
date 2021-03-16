@@ -13,8 +13,9 @@ class Worker(Process):
         self.method = method
 
     def run(self):
+        # TODO: get different keyword args for each module from the config file
         if self.method == 'assemble':
-            assemble_VAE(*self.inputs)
+            assemble_VAE(*self.inputs, patch_type='mat')
         elif self.method == 'process':
             process_VAE(*self.inputs, save_ouput=True)
         elif self.method == 'trajectory_matching':

@@ -241,6 +241,10 @@ class VQ_VAE_z32(nn.Module):
                  commitment_cost=0.25,
                  channel_var=np.ones(2),
                  alpha=0.005,
+                 w_a=1.1,
+                 w_t=0.1,
+                 w_n=-0.5,
+                 margin=0.5,
                  gpu=True,
                  **kwargs):
         """ Initialize the model
@@ -270,6 +274,10 @@ class VQ_VAE_z32(nn.Module):
         self.commitment_cost = commitment_cost
         self.channel_var = nn.Parameter(t.from_numpy(channel_var).float().reshape((1, num_inputs, 1, 1)), requires_grad=False)
         self.alpha = alpha
+        self.w_a = w_a
+        self.w_t = w_t
+        self.w_n = w_n
+        self.margin = margin
         self.enc = nn.Sequential(
             nn.Conv2d(self.num_inputs, self.num_hiddens // 2, 4, stride=2, padding=1),
             nn.BatchNorm2d(self.num_hiddens // 2),
@@ -315,8 +323,16 @@ class VQ_VAE_z32(nn.Module):
             len_latent = z_before_.shape[1]
             sim_mat = t.pow(z_before_.reshape((1, -1, len_latent)) - \
                             z_before_.reshape((-1, 1, len_latent)), 2).mean(2)
+            time_matching_weights = time_matching_mat.clone()
+            # time_matching_weights.requires_grad = True
+            time_matching_weights[time_matching_mat == 2] = self.w_a
+            time_matching_weights[time_matching_mat == 1] = self.w_t
+            time_matching_weights[time_matching_mat == 0] = self.w_n
             assert sim_mat.shape == time_matching_mat.shape
-            time_matching_loss = (sim_mat * time_matching_mat).sum()
+            time_matching_loss = sim_mat * time_matching_weights.clone()
+            time_matching_loss[time_matching_mat == 0] = \
+                t.clamp(time_matching_loss.clone()[time_matching_mat == 0] + self.margin, min=0)
+            time_matching_loss = time_matching_loss.sum()
             total_loss += time_matching_loss * self.alpha
         return decoded, \
                {'recon_loss': recon_loss,
@@ -780,7 +796,7 @@ class AAE(nn.Module):
 
 def train(model, dataset, output_dir, relation_mat=None, mask=None,
           n_epochs=10, lr=0.001, batch_size=16, gpu=True, shuffle_data=False,
-          transform=None):
+          transform=None, retrain=False, log_step_offset=0):
     """ Train function for VQ-VAE, VAE, IWAE, etc.
 
     Args:
@@ -797,11 +813,16 @@ def train(model, dataset, output_dir, relation_mat=None, mask=None,
         shuffle_data (bool): shuffle data at the end of the epoch to add randomness to mini-batch.
             Set False when using matching loss
         transform (bool): data augmentation
+        retrain (bool): Retrain the model from scratch if True. Load existing model and continue training otherwise
     
     Returns:
         nn.Module: trained model
 
     """
+    model_path = os.path.join(output_dir, 'model.pt')
+    if os.path.exists(model_path) and not retrain:
+        print('Found previously saved model state {}. Continue training...'.format(model_path))
+        model.load_state_dict(t.load(model_path))
     optimizer = t.optim.Adam(model.parameters(), lr=lr, betas=(.9, .999))
     model.zero_grad()
     n_samples = len(dataset)
@@ -811,7 +832,7 @@ def train(model, dataset, output_dir, relation_mat=None, mask=None,
     if shuffle_data:
         np.random.shuffle(sample_ids)
     writer = SummaryWriter(output_dir)
-    for epoch in range(n_epochs):
+    for epoch in range(log_step_offset, n_epochs):
         mean_loss = {'recon_loss': [],
                      'commitment_loss': [],
                      'time_matching_loss': [],
@@ -851,7 +872,8 @@ def train(model, dataset, output_dir, relation_mat=None, mask=None,
                 batch = batch.cuda()
             # Relation (adjacent frame, same trajectory)
             if not relation_mat is None:
-                batch_relation_mat = relation_mat[i*batch_size:(i+1)*batch_size, i*batch_size:(i+1)*batch_size]
+                batch_relation_mat = relation_mat[sample_ids_batch, :]
+                batch_relation_mat = batch_relation_mat[:, sample_ids_batch]
                 batch_relation_mat = batch_relation_mat.todense()
                 batch_relation_mat = t.from_numpy(batch_relation_mat).float()
                 if gpu:
@@ -861,7 +883,7 @@ def train(model, dataset, output_dir, relation_mat=None, mask=None,
             
             # Reconstruction mask
             if not mask is None:
-                batch_mask = mask[i*batch_size:(i+1)*batch_size][0][:, 1:2, :, :] # Hardcoded second slice (large mask)
+                batch_mask = mask[sample_ids_batch][0][:, 1:2, :, :] # Hardcoded second slice (large mask)
                 batch_mask = (batch_mask + 1.)/2.
                 if gpu:
                     batch_mask = batch_mask.cuda()
@@ -1045,7 +1067,7 @@ def prepare_dataset_from_collection(fs,
     dataset = TensorDataset(t.stack([tensors[f_n] for f_n in fs], 0))
     return dataset
 
-def reorder_with_trajectories(dataset, relations, seed=None, w_a=1.1, w_t=0.1):
+def reorder_with_trajectories(dataset, relations, seed=None):
     """ Reorder `dataset` to facilitate training with matching loss
 
     Args:
@@ -1100,9 +1122,9 @@ def reorder_with_trajectories(dataset, relations, seed=None, w_a=1.1, w_t=0.1):
     for k, v in relations.items():
         # 2 - adjacent, 1 - same trajectory
         if v == 1:
-            values.append(w_t)
+            values.append(1)
         elif v == 2:
-            values.append(w_a)
+            values.append(2)
         new_relations.append(k)
     new_relations = np.array(new_relations)
     relation_mat = csr_matrix((np.array(values), (new_relations[:, 0], new_relations[:, 1])),
@@ -1223,9 +1245,11 @@ if __name__ == '__main__':
     cs_mask = [2, 3]
     input_shape = (128, 128)
     gpu = True
-    gpuid = 3
+    gpuid = 2
     w_a = 1
     w_t = 0.5
+    w_n = -0.5
+    margin = 1
     #### cardiomyocyte data###
     # channel_mean = [0.49998672, 0.007081]
     # channel_std = [0.00074311, 0.00906428]
@@ -1278,21 +1302,25 @@ if __name__ == '__main__':
     patch_id_last = max(patch_ids)
     print('patch_id_last:', patch_id_last)
     print('len(ts_keys):', len(ts_keys))
-    dataset, relation_mat, inds_in_order = reorder_with_trajectories(dataset, relations, seed=123, w_a=w_a, w_t=w_t)
+    dataset, relation_mat, inds_in_order = reorder_with_trajectories(dataset, relations, seed=123)
 
     ## Initialize Model ###
     num_hiddens = 64
     num_residual_hiddens = num_hiddens
     num_embeddings = 512
     commitment_cost = 0.25
-    alpha = 0.002
+    alpha = 0.05
     model = VQ_VAE_z32(num_inputs=2,
                        num_hiddens=num_hiddens,
                        num_residual_hiddens=num_residual_hiddens,
                        num_residual_layers=2,
                        num_embeddings=num_embeddings,
                        commitment_cost=commitment_cost,
-                       alpha=alpha)
+                       alpha=alpha,
+                       w_a=w_a,
+                       w_t=w_t,
+                       w_n=w_n,
+                       margin=margin)
     #TODO: Torchvision data augmentation does not work for Pytorch tensordataset. Rewrite with dataloader
     #
     # transform = transforms.Compose([
@@ -1302,8 +1330,8 @@ if __name__ == '__main__':
     #     transforms.RandomRotation(180, resample=PIL.Image.BILINEAR),
     #     transforms.ToTensor(),
     # ])
-    model_dir = os.path.join(train_dir, 'mock+low_moi_z32_nh{}_nrh{}_ne{}_alpha{}_wa{}_wt{}_test'.format(
-        num_hiddens, num_residual_hiddens, num_embeddings, alpha, w_a, w_t))
+    model_dir = os.path.join(train_dir, 'mock+low_moi_z32_nh{}_nrh{}_ne{}_alpha{}_wa{}_wt{}_wn{}_mrg{}_aug_shuff'.format(
+        num_hiddens, num_residual_hiddens, num_embeddings, alpha, w_a, w_t, w_n, margin))
     if gpu:
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         os.environ["CUDA_VISIBLE_DEVICES"] = str(gpuid)
@@ -1318,9 +1346,10 @@ if __name__ == '__main__':
                   mask=None,
                   n_epochs=5000,
                   lr=0.0001,
-                  batch_size=96,
+                  batch_size=112,
                   gpu=gpu,
                   transform=True,
+                  shuffle_data=True,
                   )
 
 

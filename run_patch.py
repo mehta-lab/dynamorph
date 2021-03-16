@@ -19,7 +19,7 @@ class Worker(Process):
         os.environ["CUDA_VISIBLE_DEVICES"] = str(self.gpuid)
 
         if self.method == 'extract_patches':
-            extract_patches(*self.inputs)
+            extract_patches(*self.inputs, save_fig=False, skip_boundary=True, window_size=128, reload=True)
         elif self.method == 'build_trajectories':
             build_trajectories(*self.inputs)
 
@@ -32,7 +32,7 @@ def main(arguments_):
     channels = arguments_.channels
     assert len(channels) > 0, "At least one channel must be specified"
 
-    n_gpu = arguments_.gpus
+    workers = arguments_.workers
     method = arguments_.method
 
     # extract patches needs raw (NN probs, stack), supp (cell_positions, cell_pixel_assignments)
@@ -61,11 +61,11 @@ def main(arguments_):
         raise AttributeError("no sites found in raw directory with preprocessed data and matching NNProbabilities")
 
     # process each site on a different GPU if using multi-gpu
-    sep = np.linspace(0, len(segment_sites), n_gpu + 1).astype(int)
+    sep = np.linspace(0, len(segment_sites), workers + 1).astype(int)
 
     # TARGET is never used in either extract_patches or build_trajectory
     processes = []
-    for i in range(n_gpu):
+    for i in range(workers):
         _sites = segment_sites[sep[i]:sep[i + 1]]
         args = (raw, supp, channels, None, _sites)
         p = Worker(args, gpuid=i, method=method)
@@ -104,11 +104,11 @@ def parse_args():
         help="Method: one of 'extract_patches', 'build_trajectories'",
     )
     parser.add_argument(
-        '-g', '--gpus',
+        '-w', '--workers',
         type=int,
         required=False,
         default=1,
-        help="Number of GPS to use",
+        help="Number of workers to use",
     )
     parser.add_argument(
         '-f', '--fov',
