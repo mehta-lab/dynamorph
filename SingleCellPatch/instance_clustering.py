@@ -175,25 +175,3 @@ def process_site_instance_segmentation(site_path,
     with open(os.path.join(site_supp_files_folder, 'cell_pixel_assignments.pkl'), 'wb') as f:
         pickle.dump(cell_pixel_assignments, f)
     return
-
-
-def check_segmentation_dim(segmentation):
-    """ Check segmentation mask dimension. Add a background channel if n(channels)==1
-    Args:
-        segmentation: (np.array): segmentation mask for the frame
-
-    Returns:
-
-    """
-    # TODO: update to support 5D input
-    segmentation = np.squeeze(segmentation)
-    # binary segmentation has only foreground channel, add background channel
-    if segmentation.ndim == 2:
-        segmentation = np.stack([1 - segmentation, segmentation], axis=-1)
-    # assueming the first channel to be background for multi-class segmentation
-    elif segmentation.ndim == 3:
-        pass
-    else:
-        raise ValueError('segmentation mask can only be 2 or 3 dimension, not {}'.
-                         format(segmentation.ndim))
-    return segmentation

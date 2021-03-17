@@ -15,8 +15,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import pickle
 from torch.utils.data import TensorDataset, DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from scipy.sparse import csr_matrix
-from .naive_imagenet import read_file_path
 
 CHANNEL_RANGE = [(0.3, 0.8), (0., 0.6)] 
 CHANNEL_VAR = np.array([0.0475, 0.0394]) # After normalized to CHANNEL_RANGE
@@ -145,7 +145,7 @@ def prepare_dataset_v2(dat_fs,
     dataset = np.stack([tensors[key] for key in ts_keys], 0)
     return dataset, ts_keys
 
-def reorder_with_trajectories(dataset, relations, seed=None):
+def reorder_with_trajectories(dataset, relations, seed=None, w_a=1.1, w_t=0.1):
     """ Reorder `dataset` to facilitate training with matching loss
 
     Args:
@@ -153,6 +153,8 @@ def reorder_with_trajectories(dataset, relations, seed=None):
         relations (dict): dict of pairwise relationship (adjacent frames, same 
             trajectory)
         seed (int or None, optional): if given, random seed
+        w_a (float): weight for adjacent frames
+        w_t (float): weight for non-adjecent frames in the same trajectory
 
     Returns:
         TensorDataset: dataset of training inputs (after reordering)
@@ -192,22 +194,22 @@ def reorder_with_trajectories(dataset, relations, seed=None):
             inds_in_order.extend(traj)
             for e in traj:
                 inds_pool.remove(e)
-    new_tensor = dataset.tensors[0][np.array(inds_in_order)]
+    new_tensor = dataset[np.array(inds_in_order)]
     
     values = []
     new_relations = []
     for k, v in relations.items():
         # 2 - adjacent, 1 - same trajectory
         if v == 1:
-            values.append(0.1)
+            values.append(w_t)
         elif v == 2:
-            values.append(1.1)
+            values.append(w_a)
         new_relations.append(k)
     new_relations = np.array(new_relations)
     relation_mat = csr_matrix((np.array(values), (new_relations[:, 0], new_relations[:, 1])),
                               shape=(len(dataset), len(dataset)))
     relation_mat = relation_mat[np.array(inds_in_order)][:, np.array(inds_in_order)]
-    return TensorDataset(new_tensor), relation_mat, inds_in_order
+    return new_tensor, relation_mat, inds_in_order
 
 
 def vae_preprocess(dataset,
@@ -217,7 +219,7 @@ def vae_preprocess(dataset,
                        1: ("scale", 0.05), # Retardance
                        2: ("normalize", 0.5, 0.05), # Brightfield
                        },
-                   clamp=[0, 1]):
+                   clip=[0, 1]):
     """ Preprocess `dataset` to a suitable range
 
     Args:
@@ -247,32 +249,37 @@ def vae_preprocess(dataset,
             target_mean = preprocess_setting[channel][1]
             target_sd = preprocess_setting[channel][2]
             slice_mean = channel_slice.mean()
-            slice_mean = channel_slice.std()
+            slice_sd = channel_slice.std()
             z_channel_slice = (channel_slice - slice_mean) / slice_sd
             output_slice = z_channel_slice * target_sd + target_mean
         else:
             raise ValueError("Preprocessing mode not supported")
-        if clamp:
-            output_slice = t.clamp(output_slice, clamp[0], clamp[1])
+        if clip:
+            output_slice = np.clip(output_slice, clip[0], clip[1])
         output.append(output_slice)
     output = np.stack(output, 1)
-    return TensorDataset(t.from_numpy(output).float())
+    return output
 
 
 def train(model, 
           dataset, 
+          output_dir, 
           use_channels=[],
           relation_mat=None, 
           mask=None, 
           n_epochs=10, 
           lr=0.001, 
           batch_size=16, 
-          device='cuda:0'):
+          device='cuda:0',
+          shuffle_data=False,
+          transform=True,
+          seed=None):
     """ Train function for VQ-VAE, VAE, IWAE, etc.
 
     Args:
         model (nn.Module): autoencoder model
         dataset (TensorDataset): dataset of training inputs
+        output_dir (str): path for writing model saves and loss curves
         use_channels (list, optional): list of channel indices used for model
             training, by default all channels will be used
         relation_mat (scipy csr matrix or None, optional): if given, sparse 
@@ -283,11 +290,18 @@ def train(model,
         lr (float, optional): learning rate
         batch_size (int, optional): batch size
         device (str, optional): device (cuda or cpu) where models are running
+        shuffle_data (bool, optional): shuffle data at the end of the epoch to
+            add randomness to mini-batch; Set False when using matching loss
+        transform (bool, optional): data augmentation
+        seed (int, optional): random seed
     
     Returns:
         nn.Module: trained model
 
     """
+    if not seed is None:
+        np.random.seed(seed)
+        t.manual_seed(seed)
     total_channels, n_z, x_size, y_size = dataset[0][0].shape[-4:]
     if len(use_channels) == 0:
         use_channels = list(range(total_channels))
@@ -297,23 +311,43 @@ def train(model,
     model = model.to(device)
     optimizer = t.optim.Adam(model.parameters(), lr=lr, betas=(.9, .999))
     model.zero_grad()
-    
-    n_batches = int(np.ceil(len(dataset)/batch_size))
+
+    n_samples = len(dataset)
+    n_batches = int(np.ceil(n_samples/batch_size))
+    # Declare sample indices and do an initial shuffle
+    sample_ids = np.arange(n_samples)
+    if shuffle_data:
+        np.random.shuffle(sample_ids)
+    writer = SummaryWriter(output_dir)
+
     for epoch in range(n_epochs):
-        recon_loss = []
-        perplexities = []
+        mean_loss = {'recon_loss': [],  
+                     'commitment_loss': [], 
+                     'time_matching_loss': [],  
+                     'total_loss': [],  
+                     'perplexity': []}
         print('start epoch %d' % epoch) 
         for i in range(n_batches):
-            # Input data
-            batch = dataset[i*batch_size:(i+1)*batch_size][0]
+            # Deal with last batch might < batch size
+            sample_ids_batch = sample_ids[i * batch_size:min((i + 1) * batch_size, n_samples)]
+            batch = dataset[sample_ids_batch][0]
             assert len(batch.shape) == 5, "Input should be formatted as (batch, c, z, x, y)"
             batch = batch[:, np.array(use_channels)].permute(0, 2, 1, 3, 4).reshape((-1, n_channels, x_size, y_size))
             batch = batch.to(device)
-              
+
+            # Data augmentation
+            if transform:
+                for idx_in_batch in range(len(sample_ids_batch)):
+                    img = batch[idx_in_batch]
+                    flip_idx = np.random.choice([0, 1, 2])
+                    if flip_idx != 0:
+                        img = t.flip(img, dims=(flip_idx,))
+                    rot_idx = int(np.random.choice([0, 1, 2, 3]))
+                    batch[idx_in_batch] = t.rot90(img, k=rot_idx, dims=[1, 2])
+
             # Relation (adjacent frame, same trajectory)
             if not relation_mat is None:
-                batch_relation_mat = relation_mat[i*batch_size:(i+1)*batch_size, 
-                                                  i*batch_size:(i+1)*batch_size]
+                batch_relation_mat = relation_mat[sample_ids_batch][:, sample_ids_batch]
                 batch_relation_mat = batch_relation_mat.todense()
                 batch_relation_mat = t.from_numpy(batch_relation_mat).float().to(device)
             else:
@@ -321,7 +355,7 @@ def train(model,
             
             # Reconstruction mask
             if not mask is None:
-                batch_mask = mask[i*batch_size:(i+1)*batch_size][0][:, 1:2] # Hardcoded second slice (large mask)
+                batch_mask = mask[sample_ids_batch][0][:, 1:2] # Hardcoded second slice (large mask)
                 batch_mask = (batch_mask + 1.)/2. # Add a baseline weight
                 batch_mask = batch_mask.permute(0, 2, 1, 3, 4).reshape((-1, 1, x_size, y_size))
                 batch_mask = batch_mask.to(device)
@@ -335,15 +369,27 @@ def train(model,
             optimizer.step()
             model.zero_grad()
 
-            recon_loss.append(loss_dict['recon_loss'])
-            perplexities.append(loss_dict['perplexity'])
-        print('epoch %d recon loss: %f perplexity: %f' % \
-            (epoch, sum(recon_loss).item()/len(recon_loss), sum(perplexities).item()/len(perplexities)))
+            for key, loss in loss_dict.items():
+                if not key in mean_loss:
+                    mean_loss[key] = []
+                mean_loss[key].append(loss)
+        # shuffle samples ids at the end of the epoch
+        if shuffle_data:
+            np.random.shuffle(sample_ids)
+        for key, loss in mean_loss.items():
+            mean_loss[key] = sum(loss)/len(loss) if len(loss) > 0 else -1.
+            writer.add_scalar('Loss/' + key, mean_loss[key], epoch)
+        writer.flush()
+        print('epoch %d' % epoch)
+        print(''.join(['{}:{:0.4f}  '.format(key, loss) for key, loss in mean_loss.items()]))
+        t.save(model.state_dict(), os.path.join(output_dir, 'model_epoch%d.pt' % epoch))
+    writer.close()
     return model
 
 
 def train_adversarial(model, 
                       dataset,
+                      output_dir,
                       use_channels=[],
                       relation_mat=None, 
                       mask=None, 
@@ -352,12 +398,16 @@ def train_adversarial(model,
                       lr_dis=0.001, 
                       lr_gen=0.001, 
                       batch_size=16, 
-                      device='cuda:0'):
+                      device='cuda:0',  
+                      shuffle_data=False,   
+                      transform=True,
+                      seed=None):
     """ Train function for AAE.
 
     Args:
         model (nn.Module): autoencoder model (AAE)
         dataset (TensorDataset): dataset of training inputs
+        output_dir (str): path for writing model saves and loss curves
         use_channels (list, optional): list of channel indices used for model
             training, by default all channels will be used
         relation_mat (scipy csr matrix or None, optional): if given, sparse 
@@ -365,17 +415,24 @@ def train_adversarial(model,
         mask (TensorDataset or None, optional): if given, dataset of training 
             sample weight masks
         n_epochs (int, optional): number of epochs
-        lr_recon (float, optional): learning rate for reconstruction (encoder + 
+        lr_recon (float, optional): learning rate for reconstruction (encoder +
             decoder)
         lr_dis (float, optional): learning rate for discriminator
         lr_gen (float, optional): learning rate for generator
         batch_size (int, optional): batch size
         device (str, optional): device (cuda or cpu) where models are running
+        shuffle_data (bool, optional): shuffle data at the end of the epoch to
+            add randomness to mini-batch; Set False when using matching loss
+        transform (bool, optional): data augmentation
+        seed (int, optional): random seed
     
     Returns:
         nn.Module: trained model
 
     """
+    if not seed is None:
+        np.random.seed(seed)
+        t.manual_seed(seed)
     total_channels, n_z, x_size, y_size = dataset[0][0].shape[-4:]
     if len(use_channels) == 0:
         use_channels = list(range(total_channels))
@@ -389,22 +446,38 @@ def train_adversarial(model,
     optim_enc_d = t.optim.Adam(model.enc_d.parameters(), lr_dis)
     model.zero_grad()
 
-    n_batches = int(np.ceil(len(dataset)/batch_size))
+    n_samples = len(dataset)    
+    n_batches = int(np.ceil(n_samples/batch_size))  
+    # Declare sample indices and do an initial shuffle  
+    sample_ids = np.arange(n_samples)   
+    if shuffle_data:    
+        np.random.shuffle(sample_ids)   
+    writer = SummaryWriter(output_dir)
+
     for epoch in range(n_epochs):
-        recon_loss = []
-        scores = []
+        mean_loss = {}
         print('start epoch %d' % epoch) 
-        for i in range(n_batches):
-            # Input data
-            batch = dataset[i*batch_size:(i+1)*batch_size][0]
+        for i in range(n_batches):  
+            # Deal with last batch might < batch size   
+            sample_ids_batch = sample_ids[i * batch_size:min((i + 1) * batch_size, n_samples)]  
+            batch = dataset[sample_ids_batch][0]
             assert len(batch.shape) == 5, "Input should be formatted as (batch, c, z, x, y)"
             batch = batch[:, np.array(use_channels)].permute(0, 2, 1, 3, 4).reshape((-1, n_channels, x_size, y_size))
             batch = batch.to(device)
+
+            # Data augmentation
+            if transform:
+                for idx_in_batch in range(len(sample_ids_batch)):
+                    img = batch[idx_in_batch]   
+                    flip_idx = np.random.choice([0, 1, 2])
+                    if flip_idx != 0:
+                        img = t.flip(img, dims=(flip_idx,))
+                    rot_idx = int(np.random.choice([0, 1, 2, 3]))
+                    batch[idx_in_batch] = t.rot90(img, k=rot_idx, dims=[1, 2])
             
             # Relation (adjacent frame, same trajectory)
             if not relation_mat is None:
-                batch_relation_mat = relation_mat[i*batch_size:(i+1)*batch_size, 
-                                                  i*batch_size:(i+1)*batch_size]
+                batch_relation_mat = relation_mat[sample_ids_batch][:, sample_ids_batch]
                 batch_relation_mat = batch_relation_mat.todense()
                 batch_relation_mat = t.from_numpy(batch_relation_mat).float().to(device)
             else:
@@ -412,7 +485,7 @@ def train_adversarial(model,
             
             # Reconstruction mask
             if not mask is None:
-                batch_mask = mask[i*batch_size:(i+1)*batch_size][0][:, 1:2] # Hardcoded second slice (large mask)
+                batch_mask = mask[sample_ids_batch][0][:, 1:2] # Hardcoded second slice (large mask)
                 batch_mask = (batch_mask + 1.)/2. # Add a baseline weight
                 batch_mask = batch_mask.permute(0, 2, 1, 3, 4).reshape((-1, 1, x_size, y_size))
                 batch_mask = batch_mask.to(device)
@@ -432,7 +505,26 @@ def train_adversarial(model,
             optim_enc_g.step()
             model.zero_grad()
 
-            recon_loss.append(loss_dict['recon_loss'])
-            scores.append(loss_dict2['score'])
-        print('epoch %d recon loss: %f pred score: %f' % (epoch, sum(recon_loss).item()/len(recon_loss), sum(scores).item()/len(scores)))
+            # Record loss
+            for key, loss in loss_dict.items(): 
+                if not key in mean_loss:    
+                    mean_loss[key] = [] 
+                mean_loss[key].append(loss)
+
+            for key, loss in loss_dict2.items(): 
+                if not key in mean_loss:    
+                    mean_loss[key] = [] 
+                mean_loss[key].append(loss)
+
+        # shuffle samples ids at the end of the epoch   
+        if shuffle_data:    
+            np.random.shuffle(sample_ids)   
+        for key, loss in mean_loss.items(): 
+            mean_loss[key] = sum(loss)/len(loss) if len(loss) > 0 else -1.  
+            writer.add_scalar('Loss/' + key, mean_loss[key], epoch) 
+        writer.flush()  
+        print('epoch %d' % epoch)   
+        print(''.join(['{}:{:0.4f}  '.format(key, loss) for key, loss in mean_loss.items()]))   
+        t.save(model.state_dict(), os.path.join(output_dir, 'model_epoch%d.pt' % epoch))    
+    writer.close()
     return model

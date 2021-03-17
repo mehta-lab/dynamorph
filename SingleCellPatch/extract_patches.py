@@ -258,16 +258,8 @@ def process_site_extract_patches(site_path,
         with open(os.path.join(site_supp_files_folder, 'cell_positions.pkl'), 'wb') as f:
             pickle.dump(cell_positions, f)
         
-        return
+    return
 
-        # remove cells that don't have patches, update cell_positions
-        cell_positions_t = []
-        for cells in [mg_cells, non_mg_cells, other_cells]:
-            cells = [cell for cell in cells if cell[0] in cells_to_keep]
-            cell_positions_t.append(cells)
-        cell_positions[t_point] = cell_positions_t
-        with open(os.path.join(site_supp_files_folder, 'cell_positions.pkl'), 'wb') as f:
-            pickle.dump(cell_positions, f)
 
 def save_single_cell_im(output_mat,
                         masked_output_mat,
