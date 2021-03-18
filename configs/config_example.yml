@@ -1,0 +1,98 @@
+
+
+preprocess:
+  image_dirs: ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_input_tstack',
+               '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_input_tstack']
+
+  target_dirs: ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_supp_tstack',
+                '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_supp_tstack']
+
+  channels: ["Retardance", "Phase2D", "Brightfield"]
+  # list of channels to include.  Resulting array is (phase, retardance, brightfield) = (0, 1, 2) index
+
+  fov: ['C5-Site_0','C5-Site_1']
+  # list of subfolder or position indices that identifies a field-of-view
+  # ex: 'all' to preprocess all positions
+  # ex: ['C5-Site_0', 'C5-Site_1', 'C5-Site_2']
+  # ex: [1, 3, 10, 100]
+
+  multipage: False
+  # if images are multipage-tiffs
+
+  z_slice: 2
+  # single integer to select the z-plane.  "z###" must exist in file names
+
+  pos_dir: True
+  # whether each position is in a subdirectory (True), or in the same directory (False)
+
+
+patch:
+  raw_dirs:
+  supp_dirs:
+
+  channels: [0,1,2]
+  fov: ['C5-Site_0','C5-Site_1']
+  gpus: 1
+  window_size: 256
+  save_fig: False
+  reload: True
+  skip_boundary: False
+
+
+inference:
+  raw_dirs:
+  supp_dirs:
+  weights: ['/gpfs/CompMicro/projects/dynamorph/CellVAE/save_0005_bkp4.pt']
+  # pytorch weight files
+
+  model: 'VQ_VAE_z16'
+  # VQ_VAE_z16 or UNet
+
+  save_output: True
+  # write .jpg results from run_vae.process
+
+  gpus: 1
+  gpu_id: 3
+  fov: ['C5-Site_0','C5-Site_1']
+  channels: [0,1,2]
+  num_classes: 3
+  window_size: 256
+  batch_size: 8
+  num_pred_rnd: 5
+  seg_val_cat: 'mg'
+
+
+training:
+  raw_dirs:
+  supp_dirs:
+  weights_dirs:
+
+  # model definitions
+  model: 'VQ_VAE_z32'
+  num_inputs: 2
+  num_hiddens: 64
+  num_residual_hiddens: 64
+  num_residual_layers: 2
+  num_embeddings: 512
+
+  # normalization
+  channel_mean: [0.4, 0, 0.5]
+  channel_std: [0.05, 0.05, 0.05]
+
+  w_a: 1
+  w_t: 0.5
+
+  # training parameters
+  commitment_cost: 0.25
+  alpha: 0.002
+  epochs: 5000
+  learning_rate: 0.0001
+  batch_size: 96
+  gpus: True
+  gpu_id: 3
+  shuffle_data: False
+  transform: True
+
+
+  
+
