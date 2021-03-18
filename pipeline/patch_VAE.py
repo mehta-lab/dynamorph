@@ -320,14 +320,12 @@ def trajectory_matching(summary_folder: str,
         for i, (t, t_pos) in enumerate(zip(cell_trajectories_inds, cell_trajectories_positions)):
             t_name = site + '/' + str(i)
             traj_ind = []
-            traj_position = []
             traj_mg_ratio = []
 
             for t_point in sorted(t.keys()):
                 cell_id = t[t_point]
                 frame_id = patch_id_mapping[(site, t_point, cell_id)]
                 traj_ind.append(frame_id)
-                traj_position.append(t_pos[t_point])
 
                 inds = np.where(cell_pixel_assignments[t_point][1] == cell_id)
                 cell_pixels = cell_pixel_assignments[t_point][0][inds]
@@ -335,12 +333,13 @@ def trajectory_matching(summary_folder: str,
                 mg_ratio = (cell_segmentation[:, 1] > 0.5).sum() / cell_segmentation.shape[0]
                 traj_mg_ratio.append(mg_ratio)
 
-            traj_profiles[t_name] = (traj_ind, traj_position, traj_mg_ratio)
+            traj_profiles[t_name] = (traj_ind, traj_mg_ratio, t, t_pos)
 
     with open(os.path.join(summary_folder, '%s_trajectory_profiles.pkl' % well), 'wb') as f:
         print(f"\twriting trajectory profiles {os.path.join(summary_folder, '%s_trajectory_profiles.pkl' % well)}")
         pickle.dump(traj_profiles, f)
     return
+
 
 def import_object(module_name, obj_name, obj_type='class'):
     """Imports a class or function dynamically
