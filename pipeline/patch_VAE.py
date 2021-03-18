@@ -277,7 +277,7 @@ def trajectory_matching(summary_folder: str,
     list of frame IDs for each trajectory
 
     Results will be saved in the summary folder, including:
-        "*_trajectories.pkl": list of frame IDs
+        "*_trajectories.pkl": list of frame IDs, list of cell centroid positions, list of cell identification
 
     Args:
         summary_folder (str): folder for raw data, segmentation and
@@ -305,25 +305,41 @@ def trajectory_matching(summary_folder: str,
         cell_id = int(f[-1].split('_')[1].split('.')[0])
         return (site_name, t_point, cell_id)
     patch_id_mapping = {patch_name_to_tuple(f): i for i, f in enumerate(fs)}
+    traj_profiles = {}
 
-    site_trajs = {}
     for site in sites:
-        site_supp_files_folder = os.path.join(supp_folder, '%s-supps' % well, '%s' % site)
-        print(f"\tloading cell_traj {os.path.join(site_supp_files_folder, 'cell_traj.pkl')}")
-        trajs = pickle.load(open(os.path.join(site_supp_files_folder, 'cell_traj.pkl'), 'rb'))
-        for i, t in enumerate(trajs[0]):
-            name = site + '/' + str(i)
-            traj = []
-            for t_point in sorted(t.keys()):
-                frame_id = patch_id_mapping[(site, t_point, t[t_point])]
-                if not frame_id is None:
-                    traj.append(frame_id)
-            if len(traj) > 0.95 * len(t):
-                site_trajs[name] = traj
+        print(site)
+        path = os.path.join(supp_folder, '%s-supps' % well, '%s' % site, 'cell_traj.pkl')
+        cell_trajectories_inds, cell_trajectories_positions = pickle.load(open(path, 'rb'))
 
-    with open(os.path.join(summary_folder, '%s_trajectories.pkl' % well), 'wb') as f:
-        print(f"\twriting trajectories {os.path.join(summary_folder, '%s_trajectories.pkl' % well)}")
-        pickle.dump(site_trajs, f)
+        path = os.path.join(supp_folder, '%s-supps' % well, '%s' % site, 'cell_pixel_assignments.pkl')
+        cell_pixel_assignments = pickle.load(open(path, 'rb'))
+
+        path = os.path.join(summary_folder, '%s_NNProbabilities.npy' % site)
+        segmentation_stack = np.load(path)
+        for i, (t, t_pos) in enumerate(zip(cell_trajectories_inds, cell_trajectories_positions)):
+            t_name = site + '/' + str(i)
+            traj_ind = []
+            traj_position = []
+            traj_mg_ratio = []
+
+            for t_point in sorted(t.keys()):
+                cell_id = t[t_point]
+                frame_id = patch_id_mapping[(site, t_point, cell_id)]
+                traj_ind.append(frame_id)
+                traj_position.append(t_pos[t_point])
+
+                inds = np.where(cell_pixel_assignments[t_point][1] == cell_id)
+                cell_pixels = cell_pixel_assignments[t_point][0][inds]
+                cell_segmentation = segmentation_stack[t_point, :, :, cell_pixels[:, 0], cell_pixels[:, 1]]
+                mg_ratio = (cell_segmentation[:, 1] > 0.5).sum() / cell_segmentation.shape[0]
+                traj_mg_ratio.append(mg_ratio)
+
+            traj_profiles[t_name] = (traj_ind, traj_position, traj_mg_ratio)
+
+    with open(os.path.join(summary_folder, '%s_trajectory_profiles.pkl' % well), 'wb') as f:
+        print(f"\twriting trajectory profiles {os.path.join(summary_folder, '%s_trajectory_profiles.pkl' % well)}")
+        pickle.dump(traj_profiles, f)
     return
 
 def import_object(module_name, obj_name, obj_type='class'):
