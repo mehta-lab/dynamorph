@@ -198,6 +198,7 @@ def write_raw_to_npy(site: Union[int, str],
         multipage (bool, optional): default=True
             if folder contains stabilized multipage tiffs
             only multipage tiff is supported now
+        pos_dir (bool): "True" if images from each position are saved in separate directories
 
     """
 

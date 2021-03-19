@@ -41,6 +41,7 @@ PREPROCESS = {
     'target_dirs',
     'channels',
     'fov',
+    'pos_dir',
     'multipage',
     'z_slice',
     'pos_dir'
