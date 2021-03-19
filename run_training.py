@@ -864,7 +864,7 @@ def run_one_batch(model, batch, train_loss, optimizer=None, batch_relation_mat=N
 
 def train(model, dataset, output_dir, relation_mat=None, mask=None,
           n_epochs=10, lr=0.001, batch_size=16, gpu=True, shuffle_data=False,
-          transform=None, val_split_ratio=0.2, patience=20):
+          transform=None, val_split_ratio=0.15, patience=20):
     """ Train function for VQ-VAE, VAE, IWAE, etc.
 
     Args:
