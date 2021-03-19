@@ -818,6 +818,50 @@ def get_mask(mask, sample_ids, gpu=True):
         batch_mask = batch_mask.cuda()
     return batch_mask
 
+def run_one_batch(model, batch, train_loss, optimizer=None, batch_relation_mat=None,
+                    batch_mask=None, gpu=True, transform=None, training=True):
+    """ Train on a single batch of data
+    Args:
+        model (nn.Module): pytorch model object
+        batch (TensorDataset): batch of training or validation inputs
+        train_loss (dict): batch-wise training or validation loss
+        optimizer: pytorch optimizer
+        batch_relation_mat (np array or None): matrix of pairwise relations
+        batch_mask (TensorDataset or None): if given, dataset of training
+            sample weight masks
+        gpu (bool, optional): Ture if the model is run on gpu
+        transform (bool): data augmentation if true
+        training (bool): Set True for training and False for validation (no weights update)
+
+    Returns:
+        model (nn.Module): updated model object
+        train_loss (dict): updated batch-wise training or validation loss
+
+    """
+    if transform is not None:
+        for idx_in_batch in range(len(batch)):
+            img = batch[idx_in_batch]
+            flip_idx = np.random.choice([0, 1, 2])
+            if flip_idx != 0:
+                img = t.flip(img, dims=(flip_idx,))
+            rot_idx = int(np.random.choice([0, 1, 2, 3]))
+            batch[idx_in_batch] = t.rot90(img, k=rot_idx, dims=[1, 2])
+    if gpu:
+        batch = batch.cuda()
+    _, train_loss_dict = model(batch, time_matching_mat=batch_relation_mat, batch_mask=batch_mask)
+    if training:
+        train_loss_dict['total_loss'].backward()
+        optimizer.step()
+        model.zero_grad()
+    for key, loss in train_loss_dict.items():
+        if key in train_loss:
+            train_loss[key].append(loss.item())
+        else:
+            train_loss[key] = []
+    del batch, train_loss_dict
+    t.cuda.empty_cache()
+    return model, train_loss
+
 def train(model, dataset, output_dir, relation_mat=None, mask=None,
           n_epochs=10, lr=0.001, batch_size=16, gpu=True, shuffle_data=False,
           transform=None, val_split_ratio=0.2, patience=20):
@@ -833,10 +877,10 @@ def train(model, dataset, output_dir, relation_mat=None, mask=None,
         n_epochs (int, optional): number of epochs
         lr (float, optional): learning rate
         batch_size (int, optional): batch size
-        gpu (bool, optional): if the model is run on gpu
+        gpu (bool, optional): Ture if the model is run on gpu
         shuffle_data (bool): shuffle data at the end of the epoch to add randomness to mini-batch.
             Set False when using matching loss
-        transform (bool): data augmentation
+        transform (bool): data augmentation if true
         val_split_ratio (float or None): fraction of the dataset used for validation
         patience (int or None): Number of epochs to wait before stopping training if validation loss does not improve.
     
@@ -854,6 +898,7 @@ def train(model, dataset, output_dir, relation_mat=None, mask=None,
     # Declare sample indices and do an initial shuffle
     sample_ids = list(range(n_samples))
     split = int(np.floor(val_split_ratio * n_samples))
+    # randomly choose the split start
     split_start = np.random.randint(0, n_samples - split)
     if shuffle_data:
         np.random.shuffle(sample_ids)
@@ -863,78 +908,55 @@ def train(model, dataset, output_dir, relation_mat=None, mask=None,
     n_val = len(val_ids)
     n_batches = int(np.ceil(n_train / batch_size))
     n_val_batches = int(np.ceil(n_val / batch_size))
-    val_set = dataset[val_ids][0]
-    if gpu:
-        val_set = val_set.cuda()
-    val_relation_mat = get_relation_tensor(relation_mat, val_ids, gpu=gpu)
-    val_mask = get_mask(mask, val_ids, gpu)
     writer = SummaryWriter(output_dir)
     model_path = os.path.join(output_dir, 'model.pt')
     early_stopping = EarlyStopping(patience=patience, verbose=True, path=model_path)
     for epoch in range(n_epochs):
-        train_loss = {'recon_loss': [],
-                     'commitment_loss': [],
-                     'time_matching_loss': [],
-                     'total_loss': [],
-                     'perplexity': []}
-        print('start epoch %d' % epoch) 
+        train_loss = {}
+        val_loss = {}
+        print('start epoch %d' % epoch)
+        # loop through training batches
         for i in range(n_batches):
             # deal with last batch might < batch size
-            sample_ids_batch = train_ids[i * batch_size:min((i + 1) * batch_size, n_train)]
-            batch = dataset[sample_ids_batch][0]
-            n_channels = len(batch[0])
-            if transform is not None:
-                for idx_in_batch in range(len(sample_ids_batch)):
-                    img = batch[idx_in_batch]
-                    flip_idx = np.random.choice([0, 1, 2])
-                    if flip_idx != 0:
-                        img = t.flip(img, dims=(flip_idx,))
-                    rot_idx = int(np.random.choice([0, 1, 2, 3]))
-                    batch[idx_in_batch] = t.rot90(img, k=rot_idx, dims=[1, 2])
-            # n_rows = 3
-            # n_cols = 4
-            # fig, ax = plt.subplots(n_rows, n_cols, squeeze=False)
-            # ax = ax.flatten()
-            # fig.set_size_inches((15, 5 * n_rows))
-            # axis_count = 0
-            # for j in range(12):
-            #     sample = batch[j]
-            #     im_phase = im_adjust(sample[0].data.numpy())
-            #     im_retard = im_adjust(sample[1].data.numpy())
-            #     ax[axis_count].imshow(np.squeeze(im_phase), cmap='gray')
-            #     ax[axis_count].axis('off')
-            #     axis_count += 1
-            # fig.savefig(os.path.join(output_dir, 'batch_%d_aug.jpg' % i),
-            #             dpi=300, bbox_inches='tight')
-            # plt.close(fig)
-            if gpu:
-                batch = batch.cuda()
+            train_ids_batch = train_ids[i * batch_size:min((i + 1) * batch_size, n_train)]
+            batch = dataset[train_ids_batch][0]
             # Relation (adjacent frame, same trajectory)
-            batch_relation_mat = get_relation_tensor(relation_mat, sample_ids_batch, gpu=gpu)
+            batch_relation_mat = get_relation_tensor(relation_mat, train_ids_batch, gpu=gpu)
             # Reconstruction mask
-            batch_mask = get_mask(mask, sample_ids_batch, gpu)
-            _, train_loss_dict = model(batch, time_matching_mat=batch_relation_mat, batch_mask=batch_mask)
-            train_loss_dict['total_loss'].backward()
-            optimizer.step()
-            model.zero_grad()
-            for key, loss in train_loss_dict.items():
-                train_loss[key].append(loss)
-        _, val_loss_dict = model(val_set, time_matching_mat=val_relation_mat, batch_mask=val_mask)
-        # shuffle samples ids at the end of the epoch
+            batch_mask = get_mask(mask, train_ids_batch, gpu)
+            model, train_loss = \
+                run_one_batch(model, batch, train_loss, optimizer=optimizer,
+                                batch_relation_mat=batch_relation_mat,
+                                batch_mask=batch_mask, gpu=gpu, transform=transform, training=True)
+        # loop through validation batches
+        for i in range(n_val_batches):
+            val_ids_batch = val_ids[i * batch_size:min((i + 1) * batch_size, n_val)]
+            batch = dataset[val_ids_batch][0]
+            # Relation (adjacent frame, same trajectory)
+            batch_relation_mat = get_relation_tensor(relation_mat, val_ids_batch, gpu=gpu)
+            # Reconstruction mask
+            batch_mask = get_mask(mask, val_ids_batch, gpu)
+            model, val_loss = \
+                run_one_batch(model, batch, val_loss, optimizer=optimizer,
+                              batch_relation_mat=batch_relation_mat,
+                              batch_mask=batch_mask, gpu=gpu, transform=transform, training=False)
+        # shuffle train ids at the end of the epoch
         if shuffle_data:
-            np.random.shuffle(sample_ids)
+            np.random.shuffle(train_ids)
         for key, loss in train_loss.items():
-            train_loss[key] = sum(loss)/len(loss)
+            train_loss[key] = sum(loss) / len(loss)
             writer.add_scalar('Loss/' + key, train_loss[key], epoch)
-        for key, loss in val_loss_dict.items():
-            writer.add_scalar('Valid loss/' + key, loss, epoch)
-        early_stopping(val_loss_dict['total_loss'], model)
+        for key, loss in val_loss.items():
+            val_loss[key] = sum(loss) / len(loss)
+            writer.add_scalar('Val loss/' + key, val_loss[key], epoch)
+        early_stopping(val_loss['total_loss'], model)
         if early_stopping.early_stop:
             print("Early stopping")
             break
         writer.flush()
         print('epoch %d' % epoch)
-        print(''.join(['{}:{:0.4f}  '.format(key, loss) for key, loss in train_loss.items()]))
+        print('train: ', ''.join(['{}:{:0.4f}  '.format(key, loss) for key, loss in train_loss.items()]))
+        print('validation: ', ''.join(['{}:{:0.4f}  '.format(key, loss) for key, loss in val_loss.items()]))
     writer.close()
     return model
 
@@ -1369,9 +1391,9 @@ if __name__ == '__main__':
                   output_dir=model_dir,
                   relation_mat=relation_mat,
                   mask=None,
-                  n_epochs=5000,
+                  n_epochs=20,
                   lr=0.0001,
-                  batch_size=96,
+                  batch_size=112,
                   gpu=gpu,
                   transform=True,
                   val_split_ratio=val_split_ratio,
