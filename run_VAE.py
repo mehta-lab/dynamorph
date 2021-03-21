@@ -132,7 +132,7 @@ def parse_args():
     parser.add_argument(
         '-w', '--weights',
         nargs='+',
-        default=[],
+        default=[None],
         type=str,
         required=False,
         help="Path to directories containing VQ-VAE model weights",

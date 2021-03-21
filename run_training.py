@@ -330,9 +330,11 @@ class VQ_VAE_z32(nn.Module):
             time_matching_weights[time_matching_mat == 0] = self.w_n
             assert sim_mat.shape == time_matching_mat.shape
             time_matching_loss = sim_mat * time_matching_weights.clone()
+            time_matching_loss_np = time_matching_loss.cpu().detach().numpy()
             time_matching_loss[time_matching_mat == 0] = \
                 t.clamp(time_matching_loss.clone()[time_matching_mat == 0] + self.margin, min=0)
-            time_matching_loss = time_matching_loss.sum()
+            time_matching_loss_np = time_matching_loss.cpu().detach().numpy()
+            time_matching_loss = time_matching_loss.mean()
             total_loss += time_matching_loss * self.alpha
         return decoded, \
                {'recon_loss': recon_loss,
@@ -874,7 +876,8 @@ def train(model, dataset, output_dir, relation_mat=None, mask=None,
             if not relation_mat is None:
                 batch_relation_mat = relation_mat[sample_ids_batch, :]
                 batch_relation_mat = batch_relation_mat[:, sample_ids_batch]
-                batch_relation_mat = batch_relation_mat.todense()
+                batch_relation_mat = batch_relation_mat.toarray()
+                n_pos_pairs = np.sum(batch_relation_mat == 1)
                 batch_relation_mat = t.from_numpy(batch_relation_mat).float()
                 if gpu:
                     batch_relation_mat = batch_relation_mat.cuda()
@@ -1330,7 +1333,7 @@ if __name__ == '__main__':
     #     transforms.RandomRotation(180, resample=PIL.Image.BILINEAR),
     #     transforms.ToTensor(),
     # ])
-    model_dir = os.path.join(train_dir, 'mock+low_moi_z32_nh{}_nrh{}_ne{}_alpha{}_wa{}_wt{}_wn{}_mrg{}_aug_shuff'.format(
+    model_dir = os.path.join(train_dir, 'mock+low_moi_z32_nh{}_nrh{}_ne{}_alpha{}_wa{}_wt{}_wn{}_mrg{}_aug_shuff_test'.format(
         num_hiddens, num_residual_hiddens, num_embeddings, alpha, w_a, w_t, w_n, margin))
     if gpu:
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -1346,10 +1349,10 @@ if __name__ == '__main__':
                   mask=None,
                   n_epochs=5000,
                   lr=0.0001,
-                  batch_size=112,
+                  batch_size=24,
                   gpu=gpu,
                   transform=True,
-                  shuffle_data=True,
+                  shuffle_data=False,
                   )
 
 
