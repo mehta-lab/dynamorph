@@ -9,13 +9,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 import PIL
 import pickle
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 from torch.utils.data import TensorDataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
 # from torchvision import transforms
 from scipy.sparse import csr_matrix
 from SingleCellPatch.extract_patches import im_adjust
-from pipeline.train_utils import EarlyStopping
+from pipeline.train_utils import EarlyStopping, TripletDataset
+from HiddenStateExtractor.losses import AllTripletMiner, HardNegativeTripletMiner
 
 CHANNEL_RANGE = [(0.3, 0.8), (0., 0.6)] 
 CHANNEL_VAR = np.array([0.0475, 0.0394]) # After normalized to CHANNEL_RANGE
@@ -84,7 +86,6 @@ class VectorQuantizer(nn.Module):
         encoding_onehot.scatter_(1, encoding_indices.flatten().unsqueeze(1), 1)
         avg_probs = t.mean(encoding_onehot, 0)
         perplexity = t.exp(-t.sum(avg_probs*t.log(avg_probs + 1e-10)))
-
         return output_quantized, loss, perplexity
 
     @property
@@ -246,6 +247,7 @@ class VQ_VAE_z32(nn.Module):
                  w_t=0.1,
                  w_n=-0.5,
                  margin=0.5,
+                 extra_loss=None,
                  gpu=True,
                  **kwargs):
         """ Initialize the model
@@ -262,6 +264,8 @@ class VQ_VAE_z32(nn.Module):
             channel_var (list of float, optional): each channel's SD, used for 
                 balancing loss across channels
             alpha (float, optional): balance of matching loss
+            extra_loss (None or dict): extra loss to add to the VQVAE loss
+            with format {loss name: loss}.
             gpu (bool, optional): if the model is run on gpu
             **kwargs: other keyword arguments
 
@@ -293,8 +297,9 @@ class VQ_VAE_z32(nn.Module):
             nn.BatchNorm2d(self.num_hiddens // 2),
             nn.ReLU(),
             nn.ConvTranspose2d(self.num_hiddens // 2, self.num_inputs, 4, stride=2, padding=1))
+        self.extra_loss = extra_loss
       
-    def forward(self, inputs, time_matching_mat=None, batch_mask=None):
+    def forward(self, inputs, labels=None, time_matching_mat=None, batch_mask=None):
         """ Forward pass
 
         Args:
@@ -318,12 +323,13 @@ class VQ_VAE_z32(nn.Module):
             batch_mask = t.ones_like(inputs)
         recon_loss = t.mean(F.mse_loss(decoded * batch_mask, inputs * batch_mask, reduction='none')/self.channel_var)
         total_loss = recon_loss + c_loss
+        #TODO: refactor to make time matching loss a class and pass it as extra loss argument
         time_matching_loss = 0
         if not time_matching_mat is None:
-            z_before_ = z_before.reshape((z_before.shape[0], -1))
-            len_latent = z_before_.shape[1]
-            sim_mat = t.pow(z_before_.reshape((1, -1, len_latent)) - \
-                            z_before_.reshape((-1, 1, len_latent)), 2).mean(2)
+            z_after_ = z_after.reshape((z_after.shape[0], -1))
+            len_latent = z_after_.shape[1]
+            sim_mat = t.pow(z_after_.reshape((1, -1, len_latent)) - \
+                            z_after_.reshape((-1, 1, len_latent)), 2).mean(2)
             time_matching_weights = time_matching_mat.clone()
             # time_matching_weights.requires_grad = True
             time_matching_weights[time_matching_mat == 2] = self.w_a
@@ -337,12 +343,21 @@ class VQ_VAE_z32(nn.Module):
             time_matching_loss_np = time_matching_loss.cpu().detach().numpy()
             time_matching_loss = time_matching_loss.mean()
             total_loss += time_matching_loss * self.alpha
-        return decoded, \
-               {'recon_loss': recon_loss,
-                'commitment_loss': c_loss,
-                'time_matching_loss': time_matching_loss,
-                'perplexity': perplexity,
-                'total_loss': total_loss,}
+        loss_dict = {'recon_loss': recon_loss,
+                 'commitment_loss': c_loss,
+                 'time_matching_loss': time_matching_loss,
+                 'perplexity': perplexity,
+                 'total_loss': total_loss, }
+        if self.extra_loss is not None:
+            z_after_ = z_after.reshape((z_after.shape[0], -1))
+            for loss_name, loss_fn in self.extra_loss.items():
+                extra_loss, frac_pos = loss_fn(labels, z_after_)
+                total_loss += extra_loss * self.alpha
+                loss_dict['total_loss'] = total_loss
+                loss_dict[loss_name] = extra_loss
+                # print('frac_pos:', frac_pos)
+        del z_before, z_after, z_after_
+        return decoded, loss_dict
 
     def predict(self, inputs):
         """ Prediction fn, same as forward pass """
@@ -836,7 +851,7 @@ def get_mask(mask, sample_ids, gpu=True):
         batch_mask = batch_mask.cuda()
     return batch_mask
 
-def run_one_batch(model, batch, train_loss, optimizer=None, batch_relation_mat=None,
+def run_one_batch(model, batch, train_loss, labels=None, optimizer=None, batch_relation_mat=None,
                     batch_mask=None, gpu=True, transform=None, training=True):
     """ Train on a single batch of data
     Args:
@@ -866,23 +881,44 @@ def run_one_batch(model, batch, train_loss, optimizer=None, batch_relation_mat=N
             batch[idx_in_batch] = t.rot90(img, k=rot_idx, dims=[1, 2])
     if gpu:
         batch = batch.cuda()
-    _, train_loss_dict = model(batch, time_matching_mat=batch_relation_mat, batch_mask=batch_mask)
+        labels = labels.cuda()
+    _, train_loss_dict = model(batch, labels=labels, time_matching_mat=batch_relation_mat, batch_mask=batch_mask)
     if training:
         train_loss_dict['total_loss'].backward()
         optimizer.step()
         model.zero_grad()
     for key, loss in train_loss_dict.items():
-        if key in train_loss:
-            train_loss[key].append(loss.item())
-        else:
+        if key not in train_loss:
             train_loss[key] = []
-    del batch, train_loss_dict
-    t.cuda.empty_cache()
+        # if isinstance(loss, t.Tensor):
+        loss = float(loss) # float here magically removes the history attached to tensors
+        train_loss[key].append(loss)
+    print(train_loss_dict)
+    del batch, train_loss_dict, labels
     return model, train_loss
 
-def train(model, dataset, output_dir, relation_mat=None, mask=None,
-          n_epochs=10, lr=0.001, batch_size=16, gpu=True, shuffle_data=False,
-          transform=None, val_split_ratio=0.15, patience=20,
+def train_val_split(dataset, labels, val_split_ratio=0.15, seed=0):
+    assert val_split_ratio is None or 0 < val_split_ratio < 1
+    n_samples = len(dataset)
+    # Declare sample indices and do an initial shuffle
+    sample_ids = list(range(n_samples))
+    np.random.seed(seed)
+    np.random.shuffle(sample_ids)
+    split = int(np.floor(val_split_ratio * n_samples))
+    # randomly choose the split start
+    np.random.seed(seed)
+    split_start = np.random.randint(0, n_samples - split)
+    val_ids = sample_ids[split_start: split_start + split]
+    train_ids = sample_ids[:split_start] + sample_ids[split_start + split:]
+    train_set = dataset[train_ids]
+    train_labels = labels[train_ids]
+    val_set = dataset[val_ids]
+    val_labels = labels[val_ids]
+    return train_set, train_labels, val_set, val_labels
+
+def train(model, train_loader, val_loader, output_dir, relation_mat=None, mask=None,
+          n_epochs=10, lr=0.001, gpu=True,
+          transform=None,  patience=20,
           retrain=False, log_step_offset=0):
     """ Train function for VQ-VAE, VAE, IWAE, etc.
 
@@ -912,61 +948,53 @@ def train(model, dataset, output_dir, relation_mat=None, mask=None,
     if os.path.exists(model_path) and not retrain:
         print('Found previously saved model state {}. Continue training...'.format(model_path))
         model.load_state_dict(t.load(model_path))
-    assert val_split_ratio is None or 0 < val_split_ratio < 1
+
     # early stopping requires validation set
     if patience is not None:
         assert val_split_ratio is not None
     optimizer = t.optim.Adam(model.parameters(), lr=lr, betas=(.9, .999))
     model.zero_grad()
-    n_samples = len(dataset)
-    # Declare sample indices and do an initial shuffle
-    sample_ids = list(range(n_samples))
-    split = int(np.floor(val_split_ratio * n_samples))
-    # randomly choose the split start
-    split_start = np.random.randint(0, n_samples - split)
-    if shuffle_data:
-        np.random.shuffle(sample_ids)
-    val_ids = sample_ids[split_start: split_start + split]
-    train_ids = sample_ids[:split_start] + sample_ids[split_start + split:]
-    n_train = len(train_ids)
-    n_val = len(val_ids)
-    n_batches = int(np.ceil(n_train / batch_size))
-    n_val_batches = int(np.ceil(n_val / batch_size))
     writer = SummaryWriter(output_dir)
     model_path = os.path.join(output_dir, 'model.pt')
     early_stopping = EarlyStopping(patience=patience, verbose=True, path=model_path)
-    for epoch in range(log_step_offset, n_epochs):
+    for epoch in tqdm(range(log_step_offset, n_epochs), desc='Epoch'):
         train_loss = {}
         val_loss = {}
-        print('start epoch %d' % epoch)
         # loop through training batches
-        for i in range(n_batches):
-            # deal with last batch might < batch size
-            train_ids_batch = train_ids[i * batch_size:min((i + 1) * batch_size, n_train)]
-            batch = dataset[train_ids_batch][0]
-            # Relation (adjacent frame, same trajectory)
-            batch_relation_mat = get_relation_tensor(relation_mat, train_ids_batch, gpu=gpu)
-            # Reconstruction mask
-            batch_mask = get_mask(mask, train_ids_batch, gpu)
-            model, train_loss = \
-                run_one_batch(model, batch, train_loss, optimizer=optimizer,
-                                batch_relation_mat=batch_relation_mat,
-                                batch_mask=batch_mask, gpu=gpu, transform=transform, training=True)
+        with tqdm(train_loader, desc='train batch') as batch_pbar:
+            for b_idx, batch in enumerate(batch_pbar):
+                labels, data = batch
+                labels = t.cat([label for label in labels], axis=0)
+                data = t.cat([datum for datum in data], axis=0)
+                # batch = dataset[train_ids_batch][0]
+                # TODO: move relation matrix to dataset or generate on the fly using labels in contrastive loss class
+                # Relation (adjacent frame, same trajectory)
+                # batch_relation_mat = get_relation_tensor(relation_mat, train_ids_batch, gpu=gpu)
+                # Reconstruction mask
+                # batch_mask = get_mask(mask, train_ids_batch, gpu)
+                batch_relation_mat = None
+                batch_mask = None
+                model, train_loss = \
+                    run_one_batch(model, data, train_loss, labels=labels, optimizer=optimizer,
+                                    batch_relation_mat=batch_relation_mat,
+                                    batch_mask=batch_mask, gpu=gpu, transform=transform, training=True)
         # loop through validation batches
-        for i in range(n_val_batches):
-            val_ids_batch = val_ids[i * batch_size:min((i + 1) * batch_size, n_val)]
-            batch = dataset[val_ids_batch][0]
-            # Relation (adjacent frame, same trajectory)
-            batch_relation_mat = get_relation_tensor(relation_mat, val_ids_batch, gpu=gpu)
-            # Reconstruction mask
-            batch_mask = get_mask(mask, val_ids_batch, gpu)
-            model, val_loss = \
-                run_one_batch(model, batch, val_loss, optimizer=optimizer,
-                              batch_relation_mat=batch_relation_mat,
-                              batch_mask=batch_mask, gpu=gpu, transform=transform, training=False)
-        # shuffle train ids at the end of the epoch
-        if shuffle_data:
-            np.random.shuffle(train_ids)
+        with t.no_grad():
+            with tqdm(val_loader, desc='val batch') as batch_pbar:
+                for b_idx, batch in enumerate(batch_pbar):
+                    labels, data = batch
+                    labels = t.cat([label for label in labels], axis=0)
+                    data = t.cat([datum for datum in data], axis=0)
+                    # # Relation (adjacent frame, same trajectory)
+                    # batch_relation_mat = get_relation_tensor(relation_mat, val_ids_batch, gpu=gpu)
+                    # # Reconstruction mask
+                    # batch_mask = get_mask(mask, val_ids_batch, gpu)
+                    batch_relation_mat = None
+                    batch_mask = None
+                    model, val_loss = \
+                        run_one_batch(model, data, val_loss, labels=labels, optimizer=optimizer,
+                                      batch_relation_mat=batch_relation_mat,
+                                      batch_mask=batch_mask, gpu=gpu, transform=transform, training=False)
         for key, loss in train_loss.items():
             train_loss[key] = sum(loss) / len(loss)
             writer.add_scalar('Loss/' + key, train_loss[key], epoch)
@@ -980,7 +1008,7 @@ def train(model, dataset, output_dir, relation_mat=None, mask=None,
         writer.flush()
         print('epoch %d' % epoch)
         print('train: ', ''.join(['{}:{:0.4f}  '.format(key, loss) for key, loss in train_loss.items()]))
-        print('validation: ', ''.join(['{}:{:0.4f}  '.format(key, loss) for key, loss in val_loss.items()]))
+        print('val:   ', ''.join(['{}:{:0.4f}  '.format(key, loss) for key, loss in val_loss.items()]))
     writer.close()
     return model
 
@@ -1292,26 +1320,38 @@ def resscale_backward(tensor):
     new_tensor = t.stack(channel_slices, 1)
     return new_tensor
 
-def concat_relations(relations, offsets):
+def concat_relations(relations, labels, offsets):
     """combine relation dictionaries from multiple datasets
 
     Args:
         relations (list): list of relation dict to combine
+        labels (list): list of label array to combine
         offsets (list): offset to add to the indices
 
     Returns: new_relations (dict): dictionary of combined relations
 
     """
     new_relations = {}
-    for relation, offset in zip(relations, offsets):
+    new_labels = []
+    for relation, label, offset in zip(relations, labels, offsets):
         old_keys = relation.keys()
         new_keys = [(id1 + offset, id2 + offset) for id1, id2 in old_keys]
+        new_label = label + offset
         # make a new dict with updated keys
         relation = dict(zip(new_keys, relation.values()))
         new_relations.update(relation)
+        new_labels.append(new_label)
+    new_labels = np.concatenate(new_labels, axis=0)
+    return new_relations, new_labels
 
-    return new_relations
 
+def augment_img(img):
+    flip_idx = np.random.choice([0, 1, 2])
+    if flip_idx != 0:
+        img = np.flip(img, axis=flip_idx)
+    rot_idx = int(np.random.choice([0, 1, 2, 3]))
+    img = np.rot90(img, k=rot_idx, axes=(1, 2))
+    return img
 
 
 if __name__ == '__main__':
@@ -1324,9 +1364,13 @@ if __name__ == '__main__':
     w_a = 1
     w_t = 0.5
     w_n = -0.5
-    margin = 1
+    margin = 0.5
     val_split_ratio = 0.2
-    patience = 20
+    patience = 50
+    n_pos_samples = 4
+    batch_size = 112
+    # adjusted batch size for dataloaders
+    batch_size_adj = int(np.floor(batch_size/n_pos_samples))
     #### cardiomyocyte data###
     # channel_mean = [0.49998672, 0.007081]
     # channel_std = [0.00074311, 0.00906428]
@@ -1350,6 +1394,7 @@ if __name__ == '__main__':
     ts_keys = []
     datasets = []
     relations = []
+    labels = []
     id_offsets = [0]
     ### Load Data ###
     for supp_dir, train_dir, raw_dir in dir_sets:
@@ -1359,6 +1404,8 @@ if __name__ == '__main__':
         print(f"\tloading static patches {os.path.join(raw_dir, 'im_static_patches.pkl')}")
         dataset = pickle.load(open(os.path.join(raw_dir, 'im_static_patches.pkl'), 'rb'))
         print('dataset.shape:', dataset.shape)
+        dataset = pickle.load(open(os.path.join(raw_dir, 'im_static_patches.pkl'), 'rb'))
+        label = pickle.load(open(os.path.join(raw_dir, "im_static_patches_labels.pkl"), 'rb'))
         # Note that `relations` is depending on the order of fs (should not sort)
         # `relations` is generated by script "generate_trajectory_relations.py"
         relation = pickle.load(open(os.path.join(raw_dir, 'im_static_patches_relations.pkl'), 'rb'))
@@ -1369,24 +1416,40 @@ if __name__ == '__main__':
         relations.append(relation)
         ts_keys += ts_key
         datasets.append(dataset)
+        labels.append(label)
         id_offsets.append(len(dataset))
     id_offsets = id_offsets[:-1]
     dataset = np.concatenate(datasets, axis=0)
-    dataset = zscore(dataset, channel_mean=channel_mean, channel_std=channel_std)
-    dataset = TensorDataset(t.from_numpy(dataset).float())
-    relations = concat_relations(relations, offsets=id_offsets)
-    patch_ids = [idx for ids in relations.keys() for idx in ids]
-    patch_id_last = max(patch_ids)
-    print('patch_id_last:', patch_id_last)
-    print('len(ts_keys):', len(ts_keys))
-    dataset, relation_mat, inds_in_order = reorder_with_trajectories(dataset, relations, seed=123)
-
+    dataset = zscore(dataset, channel_mean=channel_mean, channel_std=channel_std).astype(np.float32)
+    # dataset = TensorDataset(t.from_numpy(dataset).float())
+    relations, labels = concat_relations(relations, labels, offsets=id_offsets)
+    # dataset, relation_mat, inds_in_order = reorder_with_trajectories(dataset, relations, seed=123)
+    # labels = labels[inds_in_order]
+    train_set, train_labels, val_set, val_labels = \
+        train_val_split(dataset, labels, val_split_ratio=0.15, seed=0)
+    tri_train_set = TripletDataset(train_labels, lambda index: augment_img(train_set[index]), n_pos_samples)
+    tri_val_set = TripletDataset(val_labels, lambda index: augment_img(val_set[index]), n_pos_samples)
+    # Data Loader
+    train_loader = DataLoader(tri_train_set,
+                                batch_size=batch_size_adj,
+                                shuffle=True,
+                                num_workers=2,
+                                pin_memory=True,
+                                )
+    val_loader = DataLoader(tri_val_set,
+                              batch_size=batch_size_adj,
+                              shuffle=False,
+                              num_workers=2,
+                              pin_memory=True
+                              )
+    tri_loss = AllTripletMiner(margin=margin).cuda()
+    # tri_loss = HardNegativeTripletMiner(margin=margin).cuda()
     ## Initialize Model ###
     num_hiddens = 64
     num_residual_hiddens = num_hiddens
     num_embeddings = 512
     commitment_cost = 0.25
-    alpha = 0.05
+    alpha = 0
     model = VQ_VAE_z32(num_inputs=2,
                        num_hiddens=num_hiddens,
                        num_residual_hiddens=num_residual_hiddens,
@@ -1397,7 +1460,8 @@ if __name__ == '__main__':
                        w_a=w_a,
                        w_t=w_t,
                        w_n=w_n,
-                       margin=margin)
+                       margin=margin,
+                       extra_loss={'Triple loss': tri_loss})
     #TODO: Torchvision data augmentation does not work for Pytorch tensordataset. Rewrite with dataloader
     #
     # transform = transforms.Compose([
@@ -1407,7 +1471,7 @@ if __name__ == '__main__':
     #     transforms.RandomRotation(180, resample=PIL.Image.BILINEAR),
     #     transforms.ToTensor(),
     # ])
-    model_dir = os.path.join(train_dir, 'mock+low_moi_z32_nh{}_nrh{}_ne{}_alpha{}_wa{}_wt{}_wn{}_mrg{}_aug_shuff_test'.format(
+    model_dir = os.path.join(train_dir, 'mock+low_moi_z32_nh{}_nrh{}_ne{}_alpha{}_mrg{}_aug_alltriloss'.format(
         num_hiddens, num_residual_hiddens, num_embeddings, alpha, w_a, w_t, w_n, margin))
     if gpu:
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -1417,19 +1481,16 @@ if __name__ == '__main__':
         print('cuda.current_device:', t.cuda.current_device())
         model = model.cuda()
     model = train(model,
-                  dataset,
+                  train_loader=train_loader,
+                  val_loader=val_loader,
                   output_dir=model_dir,
-                  relation_mat=relation_mat,
+                  relation_mat=None,
                   mask=None,
-                  n_epochs=20,
+                  n_epochs=5000,
                   lr=0.0001,
-                  batch_size=24,
                   gpu=gpu,
-                  transform=True,
-                  val_split_ratio=val_split_ratio,
                   patience=patience,
-                  shuffle_data=False,
-                  )
+                  retrain=True)
 
     ### Check coverage of embedding vectors ###
     used_indices = []

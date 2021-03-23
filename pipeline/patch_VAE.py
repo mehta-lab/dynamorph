@@ -180,9 +180,11 @@ def assemble_VAE(summary_folder: str,
             pickle.dump(dataset_mask, f, protocol=4)
 
     well_supp_files_folder = os.path.join(supp_folder, '%s-supps' % well)
-    relations = process_well_generate_trajectory_relations(fs, sites, well_supp_files_folder)
+    relations, labels = process_well_generate_trajectory_relations(fs, sites, well_supp_files_folder)
     with open(os.path.join(summary_folder, "%s_static_patches_relations.pkl" % well), 'wb') as f:
         pickle.dump(relations, f)
+    with open(os.path.join(summary_folder, "%s_static_patches_labels.pkl" % well), 'wb') as f:
+        pickle.dump(labels, f)
 
     return
 

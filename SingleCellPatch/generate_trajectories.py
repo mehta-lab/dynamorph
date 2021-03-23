@@ -462,8 +462,11 @@ def process_well_generate_trajectory_relations(fs,
         cell_id = int(f[-1].split('_')[1].split('.')[0])
         return (site_name, t_point, cell_id)
     patch_id_mapping = {patch_name_to_tuple(f): i for i, f in enumerate(fs)}
+    # initialize label vector for patches
+    labels = -1 * np.ones(len(fs), dtype=np.int32)
     # set diagonal relation
     relations = {(patch_id, patch_id): 2 for patch_id in range(len(fs))}
+    label_count = 0
     for site in sites:
         print('site:', site)
         trajectories = pickle.load(open(os.path.join(well_supp_files_folder,
@@ -477,10 +480,7 @@ def process_well_generate_trajectory_relations(fs,
                 assert (site, t_idx, trajectory[t_idx]) in patch_id_mapping, "Cannot find /%s/%d_%d" % (site, t_idx, trajectory[t_idx])
                 ref_patch_id = patch_id_mapping[(site, t_idx, trajectory[t_idx])]
                 patch_ids.append(ref_patch_id)
-                # Adjacent frames
-                # if t_idx - 1 in t_ids:
-                #     adj_patch_id = patch_id_mapping[(site, t_idx - 1, trajectory[t_idx - 1])]
-                #     relations[(ref_patch_id, adj_patch_id)] = 2
+                labels[ref_patch_id] = label_count
                 if t_idx + 1 in t_ids:
                     adj_patch_id = patch_id_mapping[(site, t_idx + 1, trajectory[t_idx + 1])]
                     relations[(ref_patch_id, adj_patch_id)] = 2
@@ -490,5 +490,7 @@ def process_well_generate_trajectory_relations(fs,
                 for j in patch_ids:
                     if not (i, j) in relations:
                         relations[(i, j)] = 1
-
-    return relations
+            label_count += 1
+    # assign labels to orphan patches
+    labels[labels == -1] = np.arange(label_count, label_count + len(labels[labels == -1]))
+    return relations, labels
