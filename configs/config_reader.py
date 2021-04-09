@@ -2,6 +2,13 @@ import yaml
 import logging
 
 
+# def log_warning(msg, *args, **kwargs):
+#     """Log message with level WARNING."""
+#     # import logging
+#
+#     logging.getLogger(__name__).warning(msg, *args, **kwargs)
+
+
 # replicate from aicsimageio logging mechanism
 ###############################################################################
 
@@ -34,6 +41,7 @@ PREPROCESS = {
     'target_dirs',
     'channels',
     'fov',
+    'pos_dir',
     'multipage',
     'z_slice',
     'pos_dir'
@@ -54,7 +62,6 @@ PATCH = {
 INFERENCE = {
     'raw_dirs',
     'supp_dirs',
-    'val_dirs',
     'model',
     'weights',
     'save_output',
@@ -116,7 +123,6 @@ class YamlReader(Object):
     def read_config(self, yml_config):
         with open(yml_config, 'r') as f:
             self.config = yaml.load(f)
-            print(f"successfully loaded yaml")
 
             # self._parse_files()
             self._parse_preprocessing()

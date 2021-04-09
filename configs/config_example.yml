@@ -40,13 +40,12 @@ patch:
 
 
 inference:
-  raw_dirs: []
-  supp_dirs: []
-  val_dirs: []
+  raw_dirs:
+  supp_dirs:
   weights: ['/gpfs/CompMicro/projects/dynamorph/CellVAE/save_0005_bkp4.pt']
   # pytorch weight files
 
-  model: 'UNet'
+  model: 'VQ_VAE_z16'
   # VQ_VAE_z16 or UNet
 
   save_output: True
