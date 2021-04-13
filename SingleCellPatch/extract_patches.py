@@ -56,7 +56,16 @@ def select_window(mat, window, padding=0., skip_boundary=False):
         np.array: submatrix-of-interest
     
     """
-    n_channels, n_z, x_full_size, y_full_size = mat.shape
+    if len(mat.shape) == 4:
+        n_channels, n_z, x_full_size, y_full_size = mat.shape
+    elif len(mat.shape) == 3:
+        n_channels, x_full_size, y_full_size = mat.shape
+        # add a z axis
+        mat = np.expand_dims(mat, 1)
+    else:
+        raise NotImplementedError("window must be extracted from raw data of 3 or 4 dims")
+    # print(f"\nwindow selection, mat.shape = {mat.shape}\twindow.shape = {window}")
+
     if skip_boundary and ((window[0][0] < 0) or
                           (window[1][0] < 0) or
                           (window[0][1] > x_full_size) or
@@ -185,6 +194,7 @@ def process_site_extract_patches(site_path,
 
     n_frames, n_channels, n_z, x_full_size, y_full_size = image_stack.shape
     for t_point in range(n_frames):
+        print(f"processing timepoint {t_point}")
         stack_dat_path = os.path.join(site_supp_files_folder, 'stacks_%d.pkl' % t_point)
         if reload and os.path.exists(stack_dat_path):
             try:
@@ -204,13 +214,16 @@ def process_site_extract_patches(site_path,
 
         # Define fillings for the masked pixels in this slice
         cells_to_keep = []
-        background_positions = np.where(cell_segmentation[0] > 0.9)
+        print(f"t{t_point} cell segmentation shape = {cell_segmentation.shape}")
+        print(f"t{t_point} raw_image shape = {raw_image.shape}")
+        background_positions = np.where(cell_segmentation[0][0] > 0.9)
         background_pool = np.array([np.median(raw_image[i][0][background_positions]) for i in range(n_channels)])
         background_filling = np.ones((n_channels, n_z, window_size, window_size)) * background_pool.reshape((n_channels, 1, 1, 1))
 
         # Save all cells in this step, filtering will be performed during analysis
         cells_to_keep = []
         for cell_id, cell_position in all_cells:
+            # print(f"cell_id : {cell_id}")
             cell_name = os.path.join(site_supp_files_folder, '%d_%d.h5' % (t_point, cell_id))
             if cell_name in site_data:
                 continue
@@ -250,6 +263,7 @@ def process_site_extract_patches(site_path,
                 save_single_cell_im(output_mat, masked_output_mat, tm, tm2, im_path)
 
         with open(stack_dat_path, 'wb') as f:
+            print(f"WRITING STACKS TO {stack_dat_path}")
             pickle.dump(site_data, f)
             
         # remove cells that don't have patches, update cell_positions

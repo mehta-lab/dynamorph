@@ -1,14 +1,6 @@
 import yaml
 import logging
 
-
-# def log_warning(msg, *args, **kwargs):
-#     """Log message with level WARNING."""
-#     # import logging
-#
-#     logging.getLogger(__name__).warning(msg, *args, **kwargs)
-
-
 # replicate from aicsimageio logging mechanism
 ###############################################################################
 
@@ -27,21 +19,11 @@ log = logging.getLogger(__name__)
 
 ###############################################################################
 
-# to add a new configuration parameter, simply add the string to the appropriate set here
-# FILES = {
-#     'raw_dirs',
-#     'supp_dirs',
-#     'train_dirs',
-#     'val_dirs',
-#     'weights_dir'
-# }
-
 PREPROCESS = {
     'image_dirs',
     'target_dirs',
     'channels',
     'fov',
-    'pos_dir',
     'multipage',
     'z_slice',
     'pos_dir'
@@ -62,6 +44,7 @@ PATCH = {
 INFERENCE = {
     'raw_dirs',
     'supp_dirs',
+    'val_dirs',
     'model',
     'weights',
     'save_output',
@@ -69,11 +52,22 @@ INFERENCE = {
     'gpu_id',
     'fov',
     'channels',
+    'channel_mean',
+    'channel_std',
     'num_classes',
     'window_size',
     'batch_size',
     'num_pred_rnd',
     'seg_val_cat'
+}
+
+DIM_REDUCTION = {
+    'input_dirs',
+    'output_dirs',
+    'file_name_prefixes',
+    'weights_dirs',
+    'fit_model',
+    'conditions'
 }
 
 TRAINING = {
@@ -118,6 +112,7 @@ class YamlReader(Object):
         self.preprocess = Object()
         self.patch = Object()
         self.inference = Object()
+        self.dim_reduction = Object()
         self.training = Object()
 
     def read_config(self, yml_config):
@@ -128,14 +123,8 @@ class YamlReader(Object):
             self._parse_preprocessing()
             self._parse_patch()
             self._parse_inference()
+            self._parse_dim_reduction()
             self._parse_training()
-
-    # def _parse_files(self):
-    #     for key, value in self.config['files'].items():
-    #         if key in FILES:
-    #             setattr(self.files, key, value)
-    #         else:
-    #             log_warning(f"yaml FILE config field {key} is not recognized")
 
     def _parse_preprocessing(self):
         for key, value in self.config['preprocess'].items():
@@ -157,6 +146,13 @@ class YamlReader(Object):
                 setattr(self.inference, key, value)
             else:
                 log.warning(f"yaml INFERENCE config field {key} is not recognized")
+
+    def _parse_dim_reduction(self):
+        for key, value in self.config['dim_reduction'].items():
+            if key in DIM_REDUCTION:
+                setattr(self.dim_reduction, key, value)
+            else:
+                log.warning(f"yaml DIM REDUCTION config field {key} is not recognized")
 
     def _parse_training(self):
         for key, value in self.config['training'].items():
