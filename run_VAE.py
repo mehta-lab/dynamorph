@@ -1,4 +1,5 @@
 from pipeline.patch_VAE import assemble_VAE, process_VAE, trajectory_matching
+from SingleCellPatch.extract_patches import get_im_sites
 from torch.multiprocessing import Pool, Queue, Process
 import torch.multiprocessing as mp
 import os
@@ -60,9 +61,7 @@ def main(arguments_):
         sites = arguments_.fov
     else:
         # get all "XX-SITE_#" identifiers in raw data directory
-        img_names = [file for file in os.listdir(inputs) if (file.endswith(".npy")) & ('_NN' not in file)]
-        sites = [os.path.splitext(img_name)[0] for img_name in img_names]
-        sites = list(set(sites))
+        sites = get_im_sites(inputs)
 
     wells = set(s[:2] for s in sites)
     mp.set_start_method('spawn', force=True)

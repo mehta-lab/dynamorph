@@ -10,12 +10,13 @@ import matplotlib.pyplot as plt
 import importlib
 import inspect
 from torch.utils.data import TensorDataset
-
+# from torchsummary import summary
 from SingleCellPatch.extract_patches import process_site_extract_patches, im_adjust
 from SingleCellPatch.generate_trajectories import process_site_build_trajectory, process_well_generate_trajectory_relations
 
-from run_training import VQ_VAE_z32, zscore
-from HiddenStateExtractor.vq_vae import VQ_VAE
+from run_training import zscore
+import HiddenStateExtractor.vae as vae
+import HiddenStateExtractor.resnet as resnet
 from HiddenStateExtractor.vq_vae_supp import prepare_dataset_v2, vae_preprocess
 
 NETWORK_MODULE = 'run_training'
@@ -415,89 +416,111 @@ def process_VAE(summary_folder: str,
 
     print(f"\tloading file paths {os.path.join(summary_folder, '%s_file_paths.pkl' % well)}")
     fs = pickle.load(open(os.path.join(summary_folder, '%s_file_paths.pkl' % well), 'rb'))
-
-    # dataset = torch.load(os.path.join(summary_folder, '%s_static_patches.pt' % well))
-    # dataset = vae_preprocess(dataset,
-    #                          use_channels=channels,
-    #                          preprocess_setting=preprocess_setting,
-    #                          clamp=input_clamp)
-    #
     print(f"\tloading static patches {os.path.join(summary_folder, '%s_static_patches.pkl' % well)}")
     dataset = pickle.load(open(os.path.join(summary_folder, '%s_static_patches.pkl' % well), 'rb'))
     dataset = zscore(dataset, channel_mean=channel_mean, channel_std=channel_std)
     dataset = TensorDataset(torch.from_numpy(dataset).float())
-    search_obj = re.search(r'nh(\d+)_nrh(\d+)_ne(\d+).*', model_name)
-    num_hiddens = int(search_obj.group(1))
-    num_residual_hiddens = int(search_obj.group(2))
-    num_embeddings = int(search_obj.group(3))
-    # commitment_cost = float(search_obj.group(4))
-    network_cls = import_object(NETWORK_MODULE, network)
-    model = network_cls(num_inputs=2,
-                       num_hiddens=num_hiddens,
-                       num_residual_hiddens=num_residual_hiddens,
-                       num_residual_layers=2,
-                       num_embeddings=num_embeddings,
-                       gpu=True)
-    model = model.cuda()
-    try:
-        if not model_path is None:
-            model.load_state_dict(torch.load(model_path))
-        else:
-            model.load_state_dict(torch.load('HiddenStateExtractor/save_0005_bkp4.pt'))
-    except Exception as ex:
-        print(ex)
-        raise ValueError("Error in loading model weights for VQ-VAE")
     if len(dataset.tensors[0].shape) == 4:  # old 4D format
         _, n_channels, x_size, y_size = dataset.tensors[0].shape
     elif len(dataset.tensors[0].shape) == 5:  # 5D format
         _, n_channels, n_z, x_size, y_size = dataset.tensors[0].shape
+
     else:
-        raise ValueError("dataset tensor dimension can only be 4 or 5, not {}".format(len(dataset.tensors[0].shape)))
-    z_bs = {}
-    z_as = {}
-    for i in range(len(dataset)):
-        sample = dataset[i:(i+1)][0]
-        sample = sample.reshape([-1, n_channels, x_size, y_size]).cuda()
-        z_b = model.enc(sample)
-        z_a, _, _ = model.vq(z_b)
-        f_n = fs[i]
-        z_bs[f_n] = z_b.cpu().data.numpy()
-        z_as[f_n] = z_a.cpu().data.numpy()
+        raise ValueError(
+            "dataset tensor dimension can only be 4 or 5, not {}".format(len(dataset.tensors[0].shape)))
+    if 'VAE' in network:
+        network_cls = getattr(vae, network)
+        search_obj = re.search(r'nh(\d+)_nrh(\d+)_ne(\d+).*', model_name)
+        num_hiddens = int(search_obj.group(1))
+        num_residual_hiddens = int(search_obj.group(2))
+        num_embeddings = int(search_obj.group(3))
+        model = network_cls(num_inputs=2,
+                            num_hiddens=num_hiddens,
+                            num_residual_hiddens=num_residual_hiddens,
+                            num_residual_layers=2,
+                            num_embeddings=num_embeddings,
+                            gpu=True)
 
-    dats = np.stack([z_bs[f] for f in fs], 0).reshape((len(dataset), -1))
-    print(f"\tsaving {os.path.join(output_dir, '%s_latent_space.pkl' % well)}")
-    with open(os.path.join(output_dir, '%s_latent_space.pkl' % well), 'wb') as f:
-        pickle.dump(dats, f, protocol=4)
-    
-    dats = np.stack([z_as[f] for f in fs], 0).reshape((len(dataset), -1))
-    print(f"\tsaving {os.path.join(output_dir, '%s_latent_space_after.pkl' % well)}")
-    with open(os.path.join(output_dir, '%s_latent_space_after.pkl' % well), 'wb') as f:
-        pickle.dump(dats, f, protocol=4)
+        model = model.cuda()
+        print(model)
+        # summary(model, (n_channels, x_size, y_size))
+        try:
+            if not model_path is None:
+                model.load_state_dict(torch.load(model_path))
+            else:
+                model.load_state_dict(torch.load('HiddenStateExtractor/save_0005_bkp4.pt'))
+        except Exception as ex:
+            print(ex)
+            raise ValueError("Error in loading model weights for VQ-VAE")
 
-    if save_output:
-        np.random.seed(0)
-        random_inds = np.random.randint(0, len(dataset), (20,))
-        for i in random_inds:
-            sample = dataset[i:(i + 1)][0].cuda()
+        z_bs = {}
+        z_as = {}
+        for i in range(len(dataset)):
+            sample = dataset[i:(i + 1)][0]
             sample = sample.reshape([-1, n_channels, x_size, y_size]).cuda()
-            output = model(sample)[0]
-            im_phase = im_adjust(sample[0, 0].cpu().data.numpy())
-            im_phase_recon = im_adjust(output[0, 0].cpu().data.numpy())
-            im_retard = im_adjust(sample[0, 1].cpu().data.numpy())
-            im_retard_recon = im_adjust(output[0, 1].cpu().data.numpy())
-            n_rows = 2
-            n_cols = 2
-            fig, ax = plt.subplots(n_rows, n_cols, squeeze=False)
-            ax = ax.flatten()
-            fig.set_size_inches((15, 5 * n_rows))
-            axis_count = 0
-            for im, name in zip([im_phase, im_phase_recon, im_retard, im_retard_recon],
-                                ['phase', 'phase_recon', 'im_retard', 'retard_recon']):
-                ax[axis_count].imshow(np.squeeze(im), cmap='gray')
-                ax[axis_count].axis('off')
-                ax[axis_count].set_title(name, fontsize=12)
-                axis_count += 1
-            fig.savefig(os.path.join(output_dir, 'recon_%d.jpg' % i),
-                        dpi=300, bbox_inches='tight')
-            plt.close(fig)
+            z_b = model.enc(sample)
+            z_a, _, _ = model.vq(z_b)
+            f_n = fs[i]
+            z_bs[f_n] = z_b.cpu().data.numpy()
+            z_as[f_n] = z_a.cpu().data.numpy()
+
+        dats = np.stack([z_bs[f] for f in fs], 0).reshape((len(dataset), -1))
+        print(f"\tsaving {os.path.join(output_dir, '%s_latent_space.pkl' % well)}")
+        with open(os.path.join(output_dir, '%s_latent_space.pkl' % well), 'wb') as f:
+            pickle.dump(dats, f, protocol=4)
+
+        dats = np.stack([z_as[f] for f in fs], 0).reshape((len(dataset), -1))
+        print(f"\tsaving {os.path.join(output_dir, '%s_latent_space_after.pkl' % well)}")
+        with open(os.path.join(output_dir, '%s_latent_space_after.pkl' % well), 'wb') as f:
+            pickle.dump(dats, f, protocol=4)
+
+        if save_output:
+            np.random.seed(0)
+            random_inds = np.random.randint(0, len(dataset), (20,))
+            for i in random_inds:
+                sample = dataset[i:(i + 1)][0].cuda()
+                sample = sample.reshape([-1, n_channels, x_size, y_size]).cuda()
+                output = model(sample)[0]
+                im_phase = im_adjust(sample[0, 0].cpu().data.numpy())
+                im_phase_recon = im_adjust(output[0, 0].cpu().data.numpy())
+                im_retard = im_adjust(sample[0, 1].cpu().data.numpy())
+                im_retard_recon = im_adjust(output[0, 1].cpu().data.numpy())
+                n_rows = 2
+                n_cols = 2
+                fig, ax = plt.subplots(n_rows, n_cols, squeeze=False)
+                ax = ax.flatten()
+                fig.set_size_inches((15, 5 * n_rows))
+                axis_count = 0
+                for im, name in zip([im_phase, im_phase_recon, im_retard, im_retard_recon],
+                                    ['phase', 'phase_recon', 'im_retard', 'retard_recon']):
+                    ax[axis_count].imshow(np.squeeze(im), cmap='gray')
+                    ax[axis_count].axis('off')
+                    ax[axis_count].set_title(name, fontsize=12)
+                    axis_count += 1
+                fig.savefig(os.path.join(output_dir, 'recon_%d.jpg' % i),
+                            dpi=300, bbox_inches='tight')
+                plt.close(fig)
+    elif 'ResNet' in network:
+        network_cls = getattr(resnet, 'EncodeProject')
+        model = network_cls(arch=network)
+        model = model.cuda()
+        print(model)
+        # summary(model, input_size=[(n_channels, x_size, y_size), (1,)], batch_size=1)
+        model.load_state_dict(torch.load(model_path))
+        model.eval()
+        h_s = []
+        for i in range(len(dataset)):
+            sample = dataset[i:(i + 1)][0]
+            sample = sample.reshape([-1, n_channels, x_size, y_size]).cuda()
+            h_s.append(model.encode(sample, out='z').cpu().data.numpy().squeeze())
+        dats = np.stack(h_s)
+        print(f"\tsaving {os.path.join(output_dir, '%s_latent_space.pkl' % well)}")
+        with open(os.path.join(output_dir, '%s_latent_space.pkl' % well), 'wb') as f:
+            pickle.dump(dats, f, protocol=4)
+    else:
+        raise ValueError('Network {} is not available'.format(network))
+
+    # network_cls = import_object(NETWORK_MODULE, network)
+
+
 

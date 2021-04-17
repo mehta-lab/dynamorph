@@ -315,6 +315,22 @@ def im_adjust(img, tol=1, bit=8):
     return im_adjusted
 
 
+def get_im_sites(input_dir):
+    """
+    Get sites (FOV names) from numpy files in the input directory
+    Args:
+        input_dir (str): input directory
+
+    Returns:
+        sites (list): sites (FOV names)
+
+    """
+    img_names = [file for file in os.listdir(input_dir) if (file.endswith(".npy")) & ('_NN' not in file)]
+    sites = [os.path.splitext(img_name)[0] for img_name in img_names]
+    sites = list(set(sites))
+    return sites
+
+
 def get_cell_rect_angle(tm):
     """ Calculate the rotation angle for long axis alignment
 

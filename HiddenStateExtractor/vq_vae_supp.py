@@ -136,6 +136,7 @@ def prepare_dataset_v2(dat_fs,
         file_dats = pickle.load(open(dat_f, 'rb'))
         for k in file_dats:
             dat = file_dats[k][key]
+            # dat = file_dats[k][key].transpose((2, 0, 1))
             if cs is None:
                 cs = np.arange(dat.shape[0])
             dat = np.array(dat)[np.array(cs)].astype(float)

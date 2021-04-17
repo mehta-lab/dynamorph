@@ -4,3 +4,5 @@ tifffile>=0.15.1
 imageio>=2.6.0
 keras==2.2.5
 segmentation_models==0.2.1
+umap-learn
+torchsummary

@@ -139,15 +139,12 @@ class AllTripletMiner( TripletMiner ):
                    should decrease with training.
         """
         pairwise_dist = self._pairwise_dist( embeddings )
-        pairwise_dist_np = pairwise_dist.cpu().detach().numpy()
         pos_dist      = pairwise_dist.unsqueeze( 2 )
         neg_dist      = pairwise_dist.unsqueeze( 1 )
 
         mask          = self._triplet_mask( ids ).float( )
         loss          = pos_dist - neg_dist + self.margin
-        loss_np = loss.cpu().detach().numpy()
         loss         *= mask
-        val_loss_np = loss.cpu().detach().numpy()
         loss          = torch.clamp( loss, min = 0. )
 
         n_pos_tri     = torch.sum( ( loss > 1e-16 ).float( ) )

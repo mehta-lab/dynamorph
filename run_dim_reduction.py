@@ -194,6 +194,7 @@ def dim_reduction(input_dirs,
                   method,
                   fit_model,
                   prefix=None,
+                  postfix=None,
                   conditions=None):
     """
     Wrapper fucntion for dimensionality reduction, save the reduced vectors (embeddings),
@@ -215,8 +216,12 @@ def dim_reduction(input_dirs,
     if not output_dirs:
         output_dirs = input_dirs
     assert len(output_dirs) == len(input_dirs), 'Numbers of input and output directories must have match.'
+    fname = 'latent_space'
     if prefix is not None:
-        fname = '_'.join([prefix, 'latent_space_after.pkl'])
+        fname = '_'.join([prefix, fname])
+    if postfix is not None:
+        fname = '_'.join([fname, postfix])
+    fname += '.pkl'
     if method == 'pca':
         fit_func = fit_PCA
         transform_func = process_PCA
