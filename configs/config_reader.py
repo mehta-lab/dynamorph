@@ -171,7 +171,6 @@ class YamlReader(Object):
                 setattr(self.inference, key, value)
             else:
                 log.warning(f"yaml INFERENCE config field {key} is not recognized")
-                log.warning(f"yaml INFERENCE config field {key} is not recognized")
 
     def _parse_dim_reduction(self):
         for key, value in self.config['dim_reduction'].items():
