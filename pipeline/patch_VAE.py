@@ -127,6 +127,8 @@ def assemble_VAE(raw_folder: str,
                  sites: list,
                  config: YamlReader,
                  # network: str = None,
+                 # save_mask: bool=False,
+                 # mask_channels: list=[-2, -1],
                  **kwargs):
     """ Wrapper method for prepare dataset for VAE encoding
 
