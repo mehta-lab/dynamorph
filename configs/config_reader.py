@@ -44,7 +44,6 @@ PREPROCESS = {
     'pos_dir',
     'multipage',
     'z_slice',
-    'pos_dir'
 }
 
 PATCH = {
@@ -52,7 +51,7 @@ PATCH = {
     'supp_dirs',
     'channels',
     'fov',
-    'gpus',
+    'num_cpus',
     'window_size',
     'save_fig',
     'reload',

@@ -9,15 +9,15 @@ from configs.config_reader import YamlReader
 
 
 class Worker(Process):
-    def __init__(self, inputs, gpuid=0, method='extract_patches'):
+    def __init__(self, inputs, cpu_id=0, method='extract_patches'):
         super().__init__()
-        self.gpuid = gpuid
+        self.cpu_id = cpu_id
         self.inputs = inputs
         self.method = method
 
     def run(self):
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(self.gpuid)
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(self.cpu_id)
 
         if self.method == 'extract_patches':
             extract_patches(*self.inputs)
@@ -36,7 +36,7 @@ def main(method_, raw_dir_, supp_dir_, config_):
     channels = config.patch.channels
     assert len(channels) > 0, "At least one channel must be specified"
 
-    n_gpu = config.patch.gpus
+    n_cpus = config.patch.num_cpus
 
     # extract patches needs raw (NN probs, stack), supp (cell_positions, cell_pixel_assignments)
     if method == 'extract_patches':
@@ -64,14 +64,14 @@ def main(method_, raw_dir_, supp_dir_, config_):
         raise AttributeError("no sites found in raw directory with preprocessed data and matching NNProbabilities")
 
     # process each site on a different GPU if using multi-gpu
-    sep = np.linspace(0, len(segment_sites), n_gpu + 1).astype(int)
+    sep = np.linspace(0, len(segment_sites), n_cpus + 1).astype(int)
 
     # TARGET is never used in either extract_patches or build_trajectory
     processes = []
-    for i in range(n_gpu):
+    for i in range(n_cpus):
         _sites = segment_sites[sep[i]:sep[i + 1]]
         args = (raw, supp, _sites, config_)
-        p = Worker(args, gpuid=i, method=method)
+        p = Worker(args, cpu_id=i, method=method)
         p.start()
         processes.append(p)
     for p in processes:
