@@ -1,9 +1,8 @@
 from pipeline.patch_VAE import assemble_VAE, process_VAE, trajectory_matching
-# from torch.multiprocessing import Pool, Queue, Process
+from torch.multiprocessing import Pool, Queue, Process
 import torch.multiprocessing as mp
 import os, sys
 import argparse
-from multiprocessing import Process
 
 from configs.config_reader import YamlReader
 
