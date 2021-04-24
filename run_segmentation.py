@@ -10,9 +10,6 @@ log = logging.getLogger(__name__)
 
 import argparse
 from configs.config_reader import YamlReader
-# todo: change all prints to log statements
-# todo: check that segmentation calls to new config are correct
-# todo: adjust raw/supp to be input/output
 
 
 class Worker(Process):
@@ -30,7 +27,7 @@ class Worker(Process):
             log.info(f"running segmentation worker on {self.gpuid}")
             segmentation(*self.inputs)
         elif self.method == 'instance_segmentation':
-            log.info(f"running instance segmentation worker on {self.gpuid}")
+            log.info(f"running instance segmentation")
             instance_segmentation(*self.inputs)
         elif self.method == 'segmentation_validation':
             segmentation_validation_michael(*self.inputs)
