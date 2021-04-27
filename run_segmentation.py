@@ -38,7 +38,8 @@ def main(method_, raw_dir_, supp_dir_, val_dir_, config_):
 
     inputs = raw_dir_
     outputs = supp_dir_
-    gpus = config.inference.gpus
+    gpus = config.inference.gpu_ids
+    gpus = [int(g) for g in gpus]
 
     assert len(config_.inference.channels) > 0, "At least one channel must be specified"
 
@@ -73,10 +74,10 @@ def main(method_, raw_dir_, supp_dir_, val_dir_, config_):
     sep = np.linspace(0, len(segment_sites), gpus + 1).astype(int)
 
     processes = []
-    for i in range(gpus):
+    for i, gpu in enumerate(gpus):
         _sites = segment_sites[sep[i]:sep[i + 1]]
         args = (inputs, outputs, val_dir_, _sites, config_)
-        process = Worker(args, gpuid=i, method=method)
+        process = Worker(args, gpuid=gpu, method=method)
         process.start()
         processes.append(process)
     for p in processes:
