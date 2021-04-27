@@ -36,20 +36,11 @@ def extract_patches(raw_folder: str,
         "stacks_*.pkl": single cell patches for each time slice
 
     Args:
-        summary_folder (str): folder for raw data, segmentation and
+        raw_folder (str): folder for raw data, segmentation and
             summarized results
         supp_folder (str): folder for supplementary data
-        channels (list of int): indices of channels used for segmentation
-            (not used, by default all channels should be saved)
-        model_path (str, optional): path to model weight (not used)
         sites (list of str): list of site names
-        window_size (int, optional): default=256, x, y size of the patch
-        save_fig (bool, optional): if to save extracted patches (with
-            segmentation mask)
-        reload (bool, optional): if to load existing stack dat files
-        skip_boundary (bool, optional): if to skip patches whose edges exceed
-            the image size (do not pad)
-
+        config (YamlReader): config file supplied at CLI
     """
     channels = config.inference.channels
 
@@ -142,13 +133,11 @@ def assemble_VAE(raw_folder: str,
             after adjusting phase/retardance intensities (avoid batch effect)
 
     Args:
-        summary_folder (str): folder for raw data, segmentation and
+        raw_folder (str): folder for raw data, segmentation and
             summarized results
         supp_folder (str): folder for supplementary data
-        channels (list of int): indices of channels used for segmentation
-            (not used)
-        model_path (str, optional): path to model weight (not used)
         sites (list of str): list of site names
+        config (YamlReader): config file supplied at CLI
 
     """
 
@@ -378,15 +367,11 @@ def process_VAE(raw_folder: str,
         "*_latent_space_after.pkl": array of latent vectors (after quantization)
 
     Args:
-        summary_folder (str): folder for raw data, segmentation and
+        raw_folder (str): folder for raw data, segmentation and
             summarized results
         supp_folder (str): folder for supplementary data
-        channels (list of int): indices of channels used for VAE encoding
+        sites (list): list of FOVs to process
         config_ (YamlReader): Reads fields from the "INFERENCE" category
-        model_dir (str): directory for model weight
-        sites (list of str): list of site names
-        input_clamp (list of float or None): if given, the lower/upper limit
-            of input patches
 
     """
     #TODO: add pooling datasets features and remove hardcoded normalization constants
@@ -501,7 +486,8 @@ def process_VAE(raw_folder: str,
             sample = dataset[i:(i + 1)][0].cuda()
             # output = model(sample)[0]
             # model still uses channels last?
-            output = model(torch.transpose(sample[0], 0, 1))[0]
+            # output = model(torch.transpose(sample[0], 0, 1))[0]
+            output = model(sample.reshape([-1, n_channels, x_size, y_size]))[0]
             im_phase = im_adjust(sample[0, 0].cpu().data.numpy())
             im_phase_recon = im_adjust(output[0, 0].cpu().data.numpy())
             im_retard = im_adjust(sample[0, 1].cpu().data.numpy())
