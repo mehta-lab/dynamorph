@@ -51,8 +51,9 @@ inference:
   save_output: True
   # write .jpg results from run_vae.process
 
-  gpus: 1
-  gpu_id: 3
+  gpu_ids: [3]
+  # list of GPUs to run inference on.
+
   fov: ['C5-Site_0','C5-Site_1']
   channels: [0,1,2]
   num_classes: 3
