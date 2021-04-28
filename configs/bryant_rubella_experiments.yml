@@ -27,7 +27,8 @@ patch:
   channels: [0,1]
   fov: ['C4-Site_0']
 #  fov: ['C4-Site_1', 'C4-Site_2', 'C4-Site_3', 'C4-Site_4', 'C4-Site_5', 'C4-Site_6', 'C4-Site_7', 'C4-Site_8']
-  gpus: 1
+
+  num_cpus: 4
   window_size: 256
   save_fig: False
   reload: False

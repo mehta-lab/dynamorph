@@ -44,7 +44,6 @@ PREPROCESS = {
     'pos_dir',
     'multipage',
     'z_slice',
-    'pos_dir'
 }
 
 PATCH = {
@@ -52,7 +51,7 @@ PATCH = {
     'supp_dirs',
     'channels',
     'fov',
-    'gpus',
+    'num_cpus',
     'window_size',
     'save_fig',
     'reload',
@@ -62,17 +61,29 @@ PATCH = {
 INFERENCE = {
     'raw_dirs',
     'supp_dirs',
+    'val_dirs',
     'model',
     'weights',
     'save_output',
     'gpu_ids',
     'fov',
     'channels',
+    'channel_mean',
+    'channel_std',
     'num_classes',
     'window_size',
     'batch_size',
     'num_pred_rnd',
     'seg_val_cat'
+}
+
+DIM_REDUCTION = {
+    'input_dirs',
+    'output_dirs',
+    'file_name_prefixes',
+    'weights_dirs',
+    'fit_model',
+    'conditions'
 }
 
 TRAINING = {
@@ -117,6 +128,7 @@ class YamlReader(Object):
         self.preprocess = Object()
         self.patch = Object()
         self.inference = Object()
+        self.dim_reduction = Object()
         self.training = Object()
 
     def read_config(self, yml_config):
@@ -127,6 +139,7 @@ class YamlReader(Object):
             self._parse_preprocessing()
             self._parse_patch()
             self._parse_inference()
+            self._parse_dim_reduction()
             self._parse_training()
 
     # def _parse_files(self):
@@ -156,6 +169,13 @@ class YamlReader(Object):
                 setattr(self.inference, key, value)
             else:
                 log.warning(f"yaml INFERENCE config field {key} is not recognized")
+
+    def _parse_dim_reduction(self):
+        for key, value in self.config['dim_reduction'].items():
+            if key in DIM_REDUCTION:
+                setattr(self.dim_reduction, key, value)
+            else:
+                log.warning(f"yaml DIM REDUCTION config field {key} is not recognized")
 
     def _parse_training(self):
         for key, value in self.config['training'].items():

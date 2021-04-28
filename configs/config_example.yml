@@ -32,7 +32,7 @@ patch:
 
   channels: [0,1,2]
   fov: ['C5-Site_0','C5-Site_1']
-  gpus: 1
+  num_cpus: 1
   window_size: 256
   save_fig: False
   reload: True
@@ -42,6 +42,8 @@ patch:
 inference:
   raw_dirs:
   supp_dirs:
+  val_dirs:
+
   weights: ['/gpfs/CompMicro/projects/dynamorph/CellVAE/save_0005_bkp4.pt']
   # pytorch weight files
 
@@ -56,11 +58,22 @@ inference:
 
   fov: ['C5-Site_0','C5-Site_1']
   channels: [0,1,2]
+  channel_mean:
+  channel_std:
   num_classes: 3
   window_size: 256
   batch_size: 8
   num_pred_rnd: 5
   seg_val_cat: 'mg'
+
+
+dim_reduction:
+  input_dirs:
+  output_dirs:
+  file_name_prefixes:
+  weights_dirs:
+  fit_model:
+  conditions:
 
 
 training:
