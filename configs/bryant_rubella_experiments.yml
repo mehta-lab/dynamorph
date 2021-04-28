@@ -51,8 +51,7 @@ inference:
   save_output: True
   # for vae-process, True if you want to write .jpg of reconstructions.
 
-  gpus: 1
-  gpu_id: 3
+  gpu_ids: 3
 #  fov: ['C4-Site_0']
   fov: ['C4-Site_0', 'C4-Site_1', 'C4-Site_2', 'C4-Site_3', 'C4-Site_4', 'C4-Site_5', 'C4-Site_6', 'C4-Site_7', 'C4-Site_8']
   channels: [0,1]

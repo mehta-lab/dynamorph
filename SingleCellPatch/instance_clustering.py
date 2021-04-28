@@ -142,19 +142,20 @@ def process_site_instance_segmentation(raw_data,
                                        raw_data_segmented,
                                        site_supp_files_folder,
                                        **kwargs):
-    """ Wrapper method for instance segmentation
+    """
+    Wrapper method for instance segmentation
 
     Results will be saved to the supplementary data folder as:
         "cell_positions.pkl": list of cells in each frame (IDs and positions);
         "cell_pixel_assignments.pkl": pixel compositions of cells;
         "segmentation_*.png": image of instance segmentation results.
-    
-    Args:
-        site_path (str): path to image stack (.npy)
-        site_segmentation_path (str): path to semantic segmentation stack (.npy)
-        site_supp_files_folder (str): path to the folder where supplementary 
-            files will be saved
 
+
+    :param raw_data: (str) path to image stack (.npy)
+    :param raw_data_segmented: (str) path to semantic segmentation stack (.npy)
+    :param site_supp_files_folder: (str) path to the folder where supplementary files will be saved
+    :param kwargs:
+    :return:
     """
 
     # TODO: Size is hardcoded here

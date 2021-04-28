@@ -4,6 +4,7 @@ import os
 from PIL import Image, ImageFilter
 import matplotlib.pyplot as plt
 import skimage.io as io
+from configs.config_reader import YamlReader
 
 
 def find_rim(cell_positions):
@@ -63,7 +64,12 @@ def load_and_plot(img_rgb, img_grey, output):
     Image.fromarray(phaseN).save(output)
 
 
-def segmentation_validation_michael(paths, gpu_id, category):
+def segmentation_validation_michael(raw_folder_ : str,
+                                    supp_folder_: str,
+                                    val_folder_ : str,
+                                    sites : list,
+                                    config_: YamlReader,
+                                    **kwargs):
     """
 
     :param paths:
@@ -73,7 +79,10 @@ def segmentation_validation_michael(paths, gpu_id, category):
     :return:
     """
 
-    temp_folder, supp_folder, target, sites = paths[0], paths[1], paths[2], paths[3]
+    temp_folder = raw_folder_
+    supp_folder = supp_folder_
+    category = config_.inference.seg_val_cat
+    gpu_id = config_.inference.gpu_id
 
     if "NOVEMBER" in temp_folder:
         date = "NOVEMBER"
@@ -153,6 +162,7 @@ def segmentation_validation_michael(paths, gpu_id, category):
 
         # using skimage.io to access tifffile on IBM machines
         # ForkedPdb().set_trace()
+        target = os.path.join(supp_folder, "validation_images")
         io.imsave(target+'/'+f'{date}_{site}_{gpu_id}_predictions.tif',
                   np.stack(stack, 0).astype("uint16"),
                   plugin='tifffile')
