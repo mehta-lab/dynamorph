@@ -110,7 +110,7 @@ def parse_args():
     parser.add_argument(
         '-n', '--network',
         type=str,
-        required=True,
+        required=False,
         default='VQ_VAE_z16',
         help="Network to run inference",
     )

@@ -3,12 +3,6 @@ import h5py
 import cv2
 import numpy as np
 import queue
-gpu = True
-gpuid = 0
-if gpu:
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(gpuid)
-    print("CUDA_VISIBLE_DEVICES", os.environ["CUDA_VISIBLE_DEVICES"])
 import torch as t
 import torch.nn as nn
 import pickle
@@ -19,14 +13,14 @@ from torch.utils.tensorboard import SummaryWriter
 # from torchvision import transforms
 from scipy.sparse import csr_matrix
 
-from HiddenStateExtractor.vae import CHANNEL_RANGE, CHANNEL_MAX, VQ_VAE_z32
+from HiddenStateExtractor.vae import CHANNEL_RANGE, CHANNEL_MAX
 from SingleCellPatch.extract_patches import im_adjust
-from pipeline.train_utils import EarlyStopping, TripletDataset
-from HiddenStateExtractor.losses import AllTripletMiner, HardNegativeTripletMiner
+from pipeline.train_utils import EarlyStopping, TripletDataset, zscore
+from HiddenStateExtractor.losses import AllTripletMiner
 from HiddenStateExtractor.resnet import EncodeProject
 
 
-def get_relation_tensor(relation_mat, sample_ids, gpu=True):
+def get_relation_tensor(relation_mat, sample_ids, device=None):
     """
     Slice relation matrix according to sample_ids; convert to torch tensor
     Args:
@@ -44,11 +38,11 @@ def get_relation_tensor(relation_mat, sample_ids, gpu=True):
     batch_relation_mat = batch_relation_mat[:, sample_ids]
     batch_relation_mat = batch_relation_mat.todense()
     batch_relation_mat = t.from_numpy(batch_relation_mat).float()
-    if gpu:
-        batch_relation_mat = batch_relation_mat.cuda()
+    if device:
+        batch_relation_mat = batch_relation_mat.to(device)
     return batch_relation_mat
 
-def get_mask(mask, sample_ids, gpu=True):
+def get_mask(mask, sample_ids, device=True):
     """
     Slice cell masks according to sample_ids; convert to torch tensor
     Args:
@@ -63,12 +57,12 @@ def get_mask(mask, sample_ids, gpu=True):
         return None
     batch_mask = mask[sample_ids][0][:, 1:2, :, :]  # Hardcoded second slice (large mask)
     batch_mask = (batch_mask + 1.) / 2.
-    if gpu:
-        batch_mask = batch_mask.cuda()
+    if device:
+        batch_mask = batch_mask.to(device)
     return batch_mask
 
 def run_one_batch(model, batch, train_loss, labels=None, optimizer=None, batch_relation_mat=None,
-                    batch_mask=None, gpu=True, transform=None, training=True):
+                    batch_mask=None, device=None, transform=None, training=True):
     """ Train on a single batch of data
     Args:
         model (nn.Module): pytorch model object
@@ -95,9 +89,9 @@ def run_one_batch(model, batch, train_loss, labels=None, optimizer=None, batch_r
                 img = t.flip(img, dims=(flip_idx,))
             rot_idx = int(np.random.choice([0, 1, 2, 3]))
             batch[idx_in_batch] = t.rot90(img, k=rot_idx, dims=[1, 2])
-    if gpu:
-        batch = batch.cuda()
-        labels = labels.cuda()
+    if device:
+        batch = batch.to(device)
+        labels = labels.to(device)
     _, train_loss_dict = model(batch, labels=labels, time_matching_mat=batch_relation_mat, batch_mask=batch_mask)
     if training:
         train_loss_dict['total_loss'].backward()
@@ -133,7 +127,7 @@ def train_val_split(dataset, labels, val_split_ratio=0.15, seed=0):
     return train_set, train_labels, val_set, val_labels
 
 def train(model, train_loader, val_loader, output_dir, relation_mat=None, mask=None,
-          n_epochs=10, lr=0.001, gpu=True,
+          n_epochs=10, lr=0.001, device=None,
           transform=None,  patience=20, earlystop_metric='total_loss',
           retrain=False, log_step_offset=0):
     """ Train function for VQ-VAE, VAE, IWAE, etc.
@@ -187,7 +181,7 @@ def train(model, train_loader, val_loader, output_dir, relation_mat=None, mask=N
                 # batch = dataset[train_ids_batch][0]
                 # TODO: move relation matrix to dataset or generate on the fly using labels in contrastive loss class
                 # Relation (adjacent frame, same trajectory)
-                # batch_relation_mat = get_relation_tensor(relation_mat, train_ids_batch, gpu=gpu)
+                # batch_relation_mat = get_relation_tensor(relation_mat, train_ids_batch, device=device)
                 # Reconstruction mask
                 # batch_mask = get_mask(mask, train_ids_batch, gpu)
                 batch_relation_mat = None
@@ -195,7 +189,7 @@ def train(model, train_loader, val_loader, output_dir, relation_mat=None, mask=N
                 model, train_loss = \
                     run_one_batch(model, data, train_loss, labels=labels, optimizer=optimizer,
                                     batch_relation_mat=batch_relation_mat,
-                                    batch_mask=batch_mask, gpu=gpu, transform=transform, training=True)
+                                    batch_mask=batch_mask, device=device, transform=transform, training=True)
         # loop through validation batches
         model.eval()
         with t.no_grad():
@@ -205,7 +199,7 @@ def train(model, train_loader, val_loader, output_dir, relation_mat=None, mask=N
                     labels = t.cat([label for label in labels], axis=0)
                     data = t.cat([datum for datum in data], axis=0)
                     # # Relation (adjacent frame, same trajectory)
-                    # batch_relation_mat = get_relation_tensor(relation_mat, val_ids_batch, gpu=gpu)
+                    # batch_relation_mat = get_relation_tensor(relation_mat, val_ids_batch, device=device)
                     # # Reconstruction mask
                     # batch_mask = get_mask(mask, val_ids_batch, gpu)
                     batch_relation_mat = None
@@ -213,7 +207,7 @@ def train(model, train_loader, val_loader, output_dir, relation_mat=None, mask=N
                     model, val_loss = \
                         run_one_batch(model, data, val_loss, labels=labels, optimizer=optimizer,
                                       batch_relation_mat=batch_relation_mat,
-                                      batch_mask=batch_mask, gpu=gpu, transform=transform, training=False)
+                                      batch_mask=batch_mask, device=device, transform=transform, training=False)
         for key, loss in train_loss.items():
             train_loss[key] = sum(loss) / len(loss)
             writer.add_scalar('Loss/' + key, train_loss[key], epoch)
@@ -241,7 +235,7 @@ def train_adversarial(model,
                       lr_dis=0.001, 
                       lr_gen=0.001, 
                       batch_size=16, 
-                      gpu=True):
+                      device=None):
     """ Train function for AAE.
 
     Args:
@@ -277,16 +271,16 @@ def train_adversarial(model,
         for i in range(n_batches):
             # Input data
             batch = dataset[i*batch_size:(i+1)*batch_size][0]
-            if gpu:
-                batch = batch.cuda()
+            if device:
+                batch = batch.to(device)
               
             # Relation (trajectory, adjacent)
             if not relation_mat is None:
                 batch_relation_mat = relation_mat[i*batch_size:(i+1)*batch_size, i*batch_size:(i+1)*batch_size]
                 batch_relation_mat = batch_relation_mat.todense()
                 batch_relation_mat = t.from_numpy(batch_relation_mat).float()
-                if gpu:
-                    batch_relation_mat = batch_relation_mat.cuda()
+                if device:
+                    batch_relation_mat = batch_relation_mat.to(device)
             else:
                 batch_relation_mat = None
             
@@ -294,8 +288,8 @@ def train_adversarial(model,
             if not mask is None:
                 batch_mask = mask[i*batch_size:(i+1)*batch_size][0][:, 1:2, :, :] # Hardcoded second slice (large mask)
                 batch_mask = (batch_mask + 1.)/2.
-                if gpu:
-                    batch_mask = batch_mask.cuda()
+                if device:
+                    batch_mask = batch_mask.to(device)
             else:
                 batch_mask = None
               
@@ -454,31 +448,6 @@ def reorder_with_trajectories(dataset, relations, seed=None):
     relation_mat = relation_mat[np.array(inds_in_order)][:, np.array(inds_in_order)]
     return TensorDataset(new_tensor), relation_mat, inds_in_order
 
-def zscore(input_image, channel_mean=None, channel_std=None):
-    """
-    Performs z-score normalization. Adds epsilon in denominator for robustness
-
-    :param input_image: input image for intensity normalization
-    :return: z score normalized image
-    """
-    if not channel_mean:
-        channel_mean = np.mean(input_image, axis=(0, 2, 3))
-    if not channel_std:
-        channel_std = np.std(input_image, axis=(0, 2, 3))
-    channel_slices = []
-    for c in range(len(channel_mean)):
-        mean = channel_mean[c]
-        std = channel_std[c]
-        channel_slice = (input_image[:, c, ...] - mean) / \
-                        (std + np.finfo(float).eps)
-        # channel_slice = t.clamp(channel_slice, -1, 1)
-        channel_slices.append(channel_slice)
-    norm_img = np.stack(channel_slices, 1)
-    # norm_img = (input_image - mean.astype(np.float64)) /\
-    #            (std + np.finfo(float).eps)
-    return norm_img
-
-
 def unzscore(im_norm, mean, std):
     """
     Revert z-score normalization applied during preprocessing. Necessary
@@ -546,7 +515,7 @@ def save_recon_images(val_dataloader, model, model_dir):
     labels, data = batch
     labels = t.cat([label for label in labels], axis=0)
     data = t.cat([datum for datum in data], axis=0)
-    output = model(data.cuda(), labels.cuda())[0]
+    output = model(data.to(device), labels.to(device))[0]
     for i in range(10):
         im_phase = im_adjust(data[i, 0].data.numpy())
         im_phase_recon = im_adjust(output[i, 0].cpu().data.numpy())
@@ -604,6 +573,32 @@ def augment_img(img):
 
 if __name__ == '__main__':
     ### Settings ###
+
+    num_hiddens = 64
+    num_residual_hiddens = num_hiddens
+    num_embeddings = 512
+    commitment_cost = 0.25
+    alpha = 100
+    model_arch = 'ResNet50'
+
+    margin = 1
+    val_split_ratio = 0.15
+    patience = 100
+    n_pos_samples = 4
+    batch_size = 768
+    # adjusted batch size for dataloaders
+    batch_size_adj = int(np.floor(batch_size/n_pos_samples))
+    gpu = 1
+    # earlystop_metric = 'total_loss'
+    retrain = False
+    earlystop_metric = 'positive_triplet'
+    # model_name = 'A549_{}_mrg{}_npos{}_bh{}_alltriloss_tr'.format(
+    model_name = 'CM+kidney+A549_{}_mrg{}_npos{}_bh{}_noeasytriloss_datasetnorm'.format(
+        model_arch, margin, n_pos_samples, batch_size)
+    # start_model_path = '/CompMicro/projects/virtualstaining/kidneyslice/2019_02_15_kidney_slice/dnm_train/CM+kidney_ResNet101_mrg1_npos4_bh512_alltriloss/model.pt'
+    start_model_path = None
+    log_step_offset = 0
+
     cs = [0, 1]
     cs_mask = [2, 3]
     input_shape = (128, 128)
@@ -611,13 +606,9 @@ if __name__ == '__main__':
     w_a = 1
     w_t = 0.5
     w_n = -0.5
-    margin = 1
-    val_split_ratio = 0.15
-    patience = np.inf
-    n_pos_samples = 8
-    batch_size = 768
-    # adjusted batch size for dataloaders
-    batch_size_adj = int(np.floor(batch_size/n_pos_samples))
+
+    device = t.device('cuda:%d' % gpu)
+
     #### cardiomyocyte data###
     # channel_mean = [0.49998672, 0.007081]
     # channel_std = [0.00074311, 0.00906428]
@@ -630,15 +621,33 @@ if __name__ == '__main__':
     channel_mean = None
     channel_std = None
 
-    supp_dirs = ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_supp_tstack',
+    supp_dirs = [
+                '/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_supp_tstack',
                  '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_supp_tstack',
-                 '/CompMicro/projects/virtualstaining/kidneyslice/2019_02_15_kidney_slice/dnm_supp']
-    train_dirs = ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_train_tstack',
+                 '/CompMicro/projects/virtualstaining/kidneyslice/2019_02_15_kidney_slice/dnm_supp',
+                 '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/Mock_24h_right/dnm_supp',
+                 '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/Mock_48h_right/dnm_supp',
+                 '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/RSV_24h_right/dnm_supp',
+                 '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/RSV_48h_right/dnm_supp',
+                 ]
+    train_dirs = [
+                '/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_train_tstack',
                   '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_train_tstack',
-                  '/CompMicro/projects/virtualstaining/kidneyslice/2019_02_15_kidney_slice/dnm_train']
-    raw_dirs = ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_input_tstack',
+                  '/CompMicro/projects/virtualstaining/kidneyslice/2019_02_15_kidney_slice/dnm_train',
+                  '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/Mock_24h_right/dnm_train',
+                  '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/Mock_48h_right/dnm_train',
+                  '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/RSV_24h_right/dnm_train',
+                  '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/RSV_48h_right/dnm_train',
+                  ]
+    raw_dirs = [
+                '/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_input_tstack',
                 '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_input_tstack',
-                '/CompMicro/projects/virtualstaining/kidneyslice/2019_02_15_kidney_slice/dnm_input']
+                '/CompMicro/projects/virtualstaining/kidneyslice/2019_02_15_kidney_slice/dnm_input',
+                '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/Mock_24h_right/dnm_input',
+                '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/Mock_48h_right/dnm_input',
+                '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/RSV_24h_right/dnm_input',
+                '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/RSV_48h_right/dnm_input',
+                ]
     dir_sets = list(zip(supp_dirs, train_dirs, raw_dirs))
     # dir_sets = dir_sets[0:1]
     ts_keys = []
@@ -666,12 +675,13 @@ if __name__ == '__main__':
         relations.append(relation)
         ts_keys += ts_key
         # TODO: handle non-singular z-dimension case earlier in the pipeline
-        datasets.append(np.squeeze(dataset))
+        dataset = zscore(np.squeeze(dataset), channel_mean=channel_mean, channel_std=channel_std).astype(np.float32)
+        datasets.append(dataset)
         labels.append(label)
         id_offsets.append(len(dataset))
     id_offsets = id_offsets[:-1]
     dataset = np.concatenate(datasets, axis=0)
-    dataset = zscore(dataset, channel_mean=channel_mean, channel_std=channel_std).astype(np.float32)
+    # dataset = zscore(dataset, channel_mean=channel_mean, channel_std=channel_std).astype(np.float32)
     # dataset = TensorDataset(t.from_numpy(dataset).float())
     relations, labels = concat_relations(relations, labels, offsets=id_offsets)
     # dataset, relation_mat, inds_in_order = reorder_with_trajectories(dataset, relations, seed=123)
@@ -693,15 +703,10 @@ if __name__ == '__main__':
                               num_workers=2,
                               pin_memory=False,
                               )
-    tri_loss = AllTripletMiner(margin=margin).cuda()
-    # tri_loss = HardNegativeTripletMiner(margin=margin).cuda()
+    tri_loss = AllTripletMiner(margin=margin).to(device)
+    # tri_loss = HardNegativeTripletMiner(margin=margin).to(device)
     ## Initialize Model ###
-    num_hiddens = 64
-    num_residual_hiddens = num_hiddens
-    num_embeddings = 512
-    commitment_cost = 0.25
-    alpha = 100
-    model_arch = 'ResNet50'
+
     # model = VQ_VAE_z32(num_inputs=2,
     #                    num_hiddens=num_hiddens,
     #                    num_residual_hiddens=num_residual_hiddens,
@@ -726,11 +731,12 @@ if __name__ == '__main__':
     # ])
     # model_dir = os.path.join(train_dir, 'CM+kidney_z32_nh{}_nrh{}_ne{}_alpha{}_mrg{}_npos{}_aug_alltriloss'.format(
     #     num_hiddens, num_residual_hiddens, num_embeddings, alpha, margin, n_pos_samples))
-    model_dir = os.path.join(train_dir, 'CM+kidney_{}_mrg{}_npos{}_bh{}_alltriloss_nostop'.format(
-        model_arch, margin, n_pos_samples, batch_size))
-    if gpu:
-
-        model = model.cuda()
+    if start_model_path:
+        print('Initialize the model with state {} ...'.format(start_model_path))
+        model.load_state_dict(t.load(start_model_path))
+    model_dir = os.path.join(train_dir, model_name)
+    if device:
+        model = model.to(device)
     # save_recon_images(val_loader, model, model_dir)
     model = train(model,
                   train_loader=train_loader,
@@ -738,18 +744,18 @@ if __name__ == '__main__':
                   output_dir=model_dir,
                   relation_mat=None,
                   mask=None,
-                  n_epochs=600,
+                  n_epochs=1000,
                   lr=0.0001,
-                  gpu=gpu,
+                  device=device,
                   patience=patience,
-                  earlystop_metric='positive_triplet',
-                  retrain=False,
-                  log_step_offset=0)
+                  earlystop_metric=earlystop_metric,
+                  retrain=retrain,
+                  log_step_offset=log_step_offset)
 
     # ### Check coverage of embedding vectors ###
     # used_indices = []
     # for i in range(500):
-    #     sample = dataset[i:(i+1)][0].cuda()
+    #     sample = dataset[i:(i+1)][0].to(device)
     #     z_before = model.enc(sample)
     #     indices = model.vq.encode_inputs(z_before)
     #     used_indices.append(np.unique(indices.cpu().data.numpy()))
@@ -759,7 +765,7 @@ if __name__ == '__main__':
     # z_bs = {}
     # z_as = {}
     # for i in range(len(dataset)):
-    #     sample = dataset[i:(i+1)][0].cuda()
+    #     sample = dataset[i:(i+1)][0].to(device)
     #     z_b = model.enc(sample)
     #     z_a, _, _ = model.vq(z_b)
     #

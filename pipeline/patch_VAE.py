@@ -14,7 +14,7 @@ from torch.utils.data import TensorDataset
 from SingleCellPatch.extract_patches import process_site_extract_patches, im_adjust
 from SingleCellPatch.generate_trajectories import process_site_build_trajectory, process_well_generate_trajectory_relations
 
-from run_training import zscore
+from pipeline.train_utils import zscore
 import HiddenStateExtractor.vae as vae
 import HiddenStateExtractor.resnet as resnet
 from HiddenStateExtractor.vq_vae_supp import prepare_dataset_v2, vae_preprocess
@@ -60,10 +60,12 @@ def extract_patches(summary_folder: str,
         site_path = os.path.join(summary_folder + '/' + site + '.npy')
         site_segmentation_path = os.path.join(summary_folder, '%s_NNProbabilities.npy' % site)
         site_supp_files_folder = os.path.join(supp_folder, '%s-supps' % site[:2], '%s' % site)
-        if not os.path.exists(site_path) or \
-            not os.path.exists(site_segmentation_path) or \
-            not os.path.exists(site_supp_files_folder):
-                print("Site data not found %s" % site_path, flush=True)
+        if not os.path.exists(site_path):
+            print("Site data not found %s" % site_path, flush=True)
+        if not os.path.exists(site_segmentation_path):
+            print("Site data not found %s" % site_segmentation_path, flush=True)
+        if not os.path.exists(site_supp_files_folder):
+            print("Site supp folder not found %s" % site_supp_files_folder, flush=True)
         else:
             print("Building patches %s" % site_path, flush=True)
 
@@ -362,6 +364,7 @@ def process_VAE(summary_folder: str,
                 network: str= 'VQ_VAE_z16',
                 input_clamp: list = [0., 1.],
                 save_output: bool = True,
+                gpu: int=0,
                 **kwargs):
     """ Wrapper method for VAE encoding
 
@@ -395,6 +398,7 @@ def process_VAE(summary_folder: str,
     # these sites should be from a single condition (C5, C4, B-wells, etc..)
     model_path = os.path.join(model_dir, 'model.pt')
     model_name = os.path.basename(model_dir)
+    # output_dir = os.path.join(summary_folder, model_name + '_pool_norm')
     output_dir = os.path.join(summary_folder, model_name)
     os.makedirs(output_dir, exist_ok=True)
 
@@ -409,6 +413,10 @@ def process_VAE(summary_folder: str,
     ### microglia data####
     # channel_mean = [0.4, 0, 0.5]
     # channel_std = [0.05, 0.05, 0.05]
+
+    ###
+    # channel_mean = [32778.97446252,   681.61666079]
+    # channel_std = [1314.90374187,  688.80291129]
 
     ### estimate mean and std from the data ###
     channel_mean = None
@@ -428,6 +436,7 @@ def process_VAE(summary_folder: str,
     else:
         raise ValueError(
             "dataset tensor dimension can only be 4 or 5, not {}".format(len(dataset.tensors[0].shape)))
+    device = torch.device('cuda:%d' % gpu)
     if 'VAE' in network:
         network_cls = getattr(vae, network)
         search_obj = re.search(r'nh(\d+)_nrh(\d+)_ne(\d+).*', model_name)
@@ -441,8 +450,7 @@ def process_VAE(summary_folder: str,
                             num_embeddings=num_embeddings,
                             gpu=True)
 
-        model = model.cuda()
-        print(model)
+        model = model.to(device)
         # summary(model, (n_channels, x_size, y_size))
         try:
             if not model_path is None:
@@ -457,7 +465,7 @@ def process_VAE(summary_folder: str,
         z_as = {}
         for i in range(len(dataset)):
             sample = dataset[i:(i + 1)][0]
-            sample = sample.reshape([-1, n_channels, x_size, y_size]).cuda()
+            sample = sample.reshape([-1, n_channels, x_size, y_size]).to(device)
             z_b = model.enc(sample)
             z_a, _, _ = model.vq(z_b)
             f_n = fs[i]
@@ -478,8 +486,8 @@ def process_VAE(summary_folder: str,
             np.random.seed(0)
             random_inds = np.random.randint(0, len(dataset), (20,))
             for i in random_inds:
-                sample = dataset[i:(i + 1)][0].cuda()
-                sample = sample.reshape([-1, n_channels, x_size, y_size]).cuda()
+                sample = dataset[i:(i + 1)][0].to(device)
+                sample = sample.reshape([-1, n_channels, x_size, y_size]).to(device)
                 output = model(sample)[0]
                 im_phase = im_adjust(sample[0, 0].cpu().data.numpy())
                 im_phase_recon = im_adjust(output[0, 0].cpu().data.numpy())
@@ -503,15 +511,16 @@ def process_VAE(summary_folder: str,
     elif 'ResNet' in network:
         network_cls = getattr(resnet, 'EncodeProject')
         model = network_cls(arch=network)
-        model = model.cuda()
-        print(model)
+        model = model.to(device)
+        # print(model)
         # summary(model, input_size=[(n_channels, x_size, y_size), (1,)], batch_size=1)
         model.load_state_dict(torch.load(model_path))
         model.eval()
+        # tri_val_set = TripletDataset(val_labels, lambda index: val_set[index], n_pos_samples)
         h_s = []
         for i in range(len(dataset)):
             sample = dataset[i:(i + 1)][0]
-            sample = sample.reshape([-1, n_channels, x_size, y_size]).cuda()
+            sample = sample.reshape([-1, n_channels, x_size, y_size]).to(device)
             h_s.append(model.encode(sample, out='z').cpu().data.numpy().squeeze())
         dats = np.stack(h_s)
         print(f"\tsaving {os.path.join(output_dir, '%s_latent_space.pkl' % well)}")
