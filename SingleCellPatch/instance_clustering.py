@@ -14,6 +14,7 @@ matplotlib.use('AGG')
 import matplotlib.pyplot as plt
 import pickle
 from sklearn.cluster import DBSCAN
+from copy import copy
 
 """ Functions for clustering single cells from semantic segmentation """
 
@@ -37,17 +38,17 @@ def within_range(r, pos):
 
 
 def check_segmentation_dim(segmentation):
-    """ Check segmentation mask dimension. 
+    """ Check segmentation mask dimension.
     Add a background channel if n(channels)==1
-    
+
     Args:
         segmentation: (np.array): segmentation mask for the frame
-        
+
     """
-    
+
     assert len(segmentation.shape) == 4, "Semantic segmentation should be formatted with dimension (c, z, x, y)"
     n_channels, _, _, _ = segmentation.shape
-    
+
     # binary segmentation has only foreground channel, add background channel
     if n_channels == 1:
         segmentation = np.concatenate([1 - segmentation, segmentation], axis=0)
@@ -125,7 +126,8 @@ def instance_clustering(cell_segmentation,
             for p in points:
                 segmented[p[0], p[1]] = cell_id%10
         plt.clf()
-        cmap = matplotlib.cm.get_cmap('tab10')
+        # cmap = matplotlib.cm.get_cmap('tab10')
+        cmap = copy(matplotlib.cm.get_cmap("tab10"))
         cmap.set_under(color='k')
         plt.imshow(segmented, cmap=cmap, vmin=-0.001, vmax=10.001)
         font = {'color': 'white', 'size': 4}
@@ -136,30 +138,33 @@ def instance_clustering(cell_segmentation,
     return cell_positions, positions, positions_labels
 
 
-def process_site_instance_segmentation(site_path, 
-                                       site_segmentation_path, 
+def process_site_instance_segmentation(raw_data,
+                                       raw_data_segmented,
                                        site_supp_files_folder,
                                        **kwargs):
-    """ Wrapper method for instance segmentation
+    """
+    Wrapper method for instance segmentation
 
     Results will be saved to the supplementary data folder as:
         "cell_positions.pkl": list of cells in each frame (IDs and positions);
         "cell_pixel_assignments.pkl": pixel compositions of cells;
         "segmentation_*.png": image of instance segmentation results.
-    
-    Args:
-        site_path (str): path to image stack (.npy)
-        site_segmentation_path (str): path to semantic segmentation stack (.npy)
-        site_supp_files_folder (str): path to the folder where supplementary 
-            files will be saved
 
+
+    :param raw_data: (str) path to image stack (.npy)
+    :param raw_data_segmented: (str) path to semantic segmentation stack (.npy)
+    :param site_supp_files_folder: (str) path to the folder where supplementary files will be saved
+    :param kwargs:
+    :return:
     """
 
     # TODO: Size is hardcoded here
     # Should be of size (n_frame, n_channels, z(1), x(2048), y(2048)), uint16
-    image_stack = np.load(site_path)
+    print(f"\tLoading {raw_data}")
+    image_stack = np.load(raw_data)
     # Should be of size (n_frame, n_classes, z(1), x(2048), y(2048)), float
-    segmentation_stack = np.load(site_segmentation_path)
+    print(f"\tLoading {raw_data_segmented}")
+    segmentation_stack = np.load(raw_data_segmented)
 
     cell_positions = {}
     cell_pixel_assignments = {}
@@ -167,6 +172,8 @@ def process_site_instance_segmentation(site_path,
         print("\tClustering time %d" % t_point)
         cell_segmentation = segmentation_stack[t_point]
         instance_map_path = os.path.join(site_supp_files_folder, 'segmentation_%d.png' % t_point)
+        res = instance_clustering(cell_segmentation, instance_map=True, map_path=instance_map_path)
+        #TODO: expose instance clustering parameters in config
         res = instance_clustering(cell_segmentation, instance_map=True, map_path=instance_map_path)
         cell_positions[t_point] = res[0] # List of cell: (cell_id, mean_pos)
         cell_pixel_assignments[t_point] = res[1:]

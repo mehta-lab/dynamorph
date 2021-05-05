@@ -2,8 +2,9 @@ from pipeline.patch_VAE import assemble_VAE, process_VAE, trajectory_matching
 from SingleCellPatch.extract_patches import get_im_sites
 from torch.multiprocessing import Pool, Queue, Process
 import torch.multiprocessing as mp
-import os
+import os, sys
 import argparse
+from configs.config_reader import YamlReader
 
 
 class Worker(Process):
@@ -14,51 +15,53 @@ class Worker(Process):
         self.method = method
 
     def run(self):
-        # TODO: get different keyword args for each module from the config file
         if self.method == 'assemble':
-            assemble_VAE(*self.inputs, patch_type='mat')
+            assemble_VAE(*self.inputs)
+            # assemble_VAE(*self.inputs, patch_type='mat')
         elif self.method == 'process':
-            process_VAE(*self.inputs, save_ouput=True)
+            process_VAE(*self.inputs)
         elif self.method == 'trajectory_matching':
             trajectory_matching(*self.inputs)
 
 
-def main(arguments_):
+def main(method_, raw_dir_, supp_dir_, config_):
+    method = method_
 
-    inputs = arguments_.raw
-    outputs = arguments_.supplementary
-    weights = arguments_.weights
-    method = arguments_.method
-    channels = arguments_.channels
-    network = arguments_.network
-    assert len(channels) > 0, "At least one channel must be specified"
-    gpu = arguments_.gpu
+    inputs = raw_dir_
+    outputs = supp_dir_
+    weights = config_.inference.weights
+    # channels = config_.inference.channels
+    # network = config_.inference.model
+    gpu_id = config_.inference.gpu_id
 
+    # assert len(channels) > 0, "At least one channel must be specified"
+
+    # todo file path checks can be done earlier
     # assemble needs raw (write file_paths/static_patches/adjusted_patches), and supp (read site-supps)
-    if arguments_.method == 'assemble':
-        if not arguments_.raw:
+    if method == 'assemble':
+        if not inputs:
             raise AttributeError("raw directory must be specified when method = assemble")
-        if not arguments_.supplementary:
+        if not outputs:
             raise AttributeError("supplementary directory must be specified when method = assemble")
 
     # process needs raw (load _file_paths), and target (torch weights)
-    elif arguments_.method == 'process':
-        if not arguments_.raw:
+    elif method == 'process':
+        if not inputs:
             raise AttributeError("raw directory must be specified when method = process")
-        if type(weights) is not list:
-            weights = [weights]
+        # if type(weights) is not list:
+        #     weights = [weights]
         if not weights:
             raise AttributeError("pytorch VQ-VAE weights path must be specified when method = process")
 
     # trajectory matching needs raw (load file_paths, write trajectories), supp (load cell_traj)
-    elif arguments_.method == 'trajectory_matching':
-        if not arguments_.raw:
+    elif method == 'trajectory_matching':
+        if not inputs:
             raise AttributeError("raw directory must be specified when method = trajectory_matching")
-        if not arguments_.supplementary:
+        if not outputs:
             raise AttributeError("supplementary directory must be specified when method = trajectory_matching")
 
-    if arguments_.fov:
-        sites = arguments_.fov
+    if config_.inference.fov:
+        sites = config_.inference.fov
     else:
         # get all "XX-SITE_#" identifiers in raw data directory
         sites = get_im_sites(inputs)
@@ -66,16 +69,22 @@ def main(arguments_):
     wells = set(s[:2] for s in sites)
     mp.set_start_method('spawn', force=True)
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu)
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
     print("CUDA_VISIBLE_DEVICES=" + os.environ["CUDA_VISIBLE_DEVICES"])
     for i, well in enumerate(wells):
-        for weight in weights:
-            print('Encoding using model {}'.format(weight))
-            well_sites = [s for s in sites if s[:2] == well]
-            args = (inputs, outputs, channels, weight, well_sites, network)
-            p = Worker(args, gpuid=gpu, method=method)
-            p.start()
-            p.join()
+        well_sites = [s for s in sites if s[:2] == well]
+        args = (inputs, outputs, well_sites, config_)
+        p = Worker(args, gpuid=gpu_id, method=method)
+        p.start()
+        p.join()
+
+        # for weight in weights:
+        #     print('Encoding using model {}'.format(weight))
+        #     well_sites = [s for s in sites if s[:2] == well]
+        #     args = (inputs, outputs, channels, weight, well_sites, network)
+        #     p = Worker(args, gpuid=gpu, method=method)
+        #     p.start()
+        #     p.join()
 
 
 def parse_args():
@@ -106,46 +115,20 @@ def parse_args():
         default='assemble',
         help="Method: one of 'assemble', 'process' or 'trajectory_matching'",
     )
-    #TODO: get this info from train config
     parser.add_argument(
-        '-n', '--network',
+        '-c', '--config',
         type=str,
-        required=False,
-        default='VQ_VAE_z16',
-        help="Network to run inference",
-    )
-
-    parser.add_argument(
-        '-f', '--fov',
-        type=lambda s: [str(item.strip(' ').strip("'")) for item in s.split(',')],
-        required=False,
-        help="list of field-of-views to process (subfolders in raw data directory)",
-    )
-    parser.add_argument(
-        '-c', '--channels',
-        type=lambda s: [int(item.strip(' ').strip("'")) for item in s.split(',')],
-        required=False,
-        default=[0, 1], # Assuming two channels by default
-        help="comma-delimited list of channel indices (e.g. 1,2,3)",
-    )
-    parser.add_argument(
-        '-w', '--weights',
-        nargs='+',
-        default=[None],
-        type=str,
-        required=False,
-        help="Path to directories containing VQ-VAE model weights",
-    )
-    parser.add_argument(
-        '-g', '--gpu',
-        type=int,
-        required=False,
-        default=0,
-        help="ID of the GPU to use",
+        required=True,
+        help='path to yaml configuration file'
     )
     return parser.parse_args()
 
 
 if __name__ == '__main__':
     arguments = parse_args()
-    main(arguments)
+    config = YamlReader()
+    config.read_config(arguments.config)
+
+    # batch run
+    for (raw_dir, supp_dir) in list(zip(config.inference.raw_dirs, config.inference.supp_dirs)):
+        main(arguments.method, raw_dir, supp_dir, config)

@@ -5,50 +5,50 @@ from multiprocessing import Pool, Queue, Process
 import os
 import numpy as np
 import argparse
+from configs.config_reader import YamlReader
 
 
 class Worker(Process):
-    def __init__(self, inputs, gpuid=0, method='extract_patches'):
+    def __init__(self, inputs, cpu_id=0, method='extract_patches'):
         super().__init__()
-        self.gpuid = gpuid
+        self.cpu_id = cpu_id
         self.inputs = inputs
         self.method = method
 
     def run(self):
-        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(self.gpuid)
-
         if self.method == 'extract_patches':
-            extract_patches(*self.inputs, save_fig=False, skip_boundary=True, window_size=128, reload=True)
+            extract_patches(*self.inputs)
         elif self.method == 'build_trajectories':
             build_trajectories(*self.inputs)
 
 
-def main(arguments_):
+def main(method_, raw_dir_, supp_dir_, config_):
 
     print("CLI arguments provided")
-    raw = arguments_.raw
-    supp = arguments_.supplementary
-    channels = arguments_.channels
+    raw = raw_dir_
+    supp = supp_dir_
+    method = method_
+    fov = config.patch.fov
+
+    channels = config.patch.channels
     assert len(channels) > 0, "At least one channel must be specified"
 
-    workers = arguments_.workers
-    method = arguments_.method
+    n_cpus = config.patch.num_cpus
 
     # extract patches needs raw (NN probs, stack), supp (cell_positions, cell_pixel_assignments)
-    if arguments_.method == 'extract_patches':
-        if not arguments_.raw:
+    if method == 'extract_patches':
+        if not raw:
             raise AttributeError("raw directory must be specified when method = extract_patches")
-        if not arguments_.supplementary:
+        if not supp:
             raise AttributeError("supplementary directory must be specified when method = extract_patches")
 
     # extract patches needs supp (cell_positions, cell_pixel_assignments)
-    elif arguments_.method == 'build_trajectories':
-        if not arguments_.supplementary:
+    elif method == 'build_trajectories':
+        if not supp:
             raise AttributeError("supplementary directory must be specified when method = extract_patches")
 
-    if arguments_.fov:
-        sites = arguments_.fov
+    if fov:
+        sites = fov
     else:
         # get all "XX-SITE_#" identifiers in raw data directory
         img_names = [file for file in os.listdir(raw) if (file.endswith(".npy")) & ('_NN' not in file)]
@@ -61,14 +61,14 @@ def main(arguments_):
         raise AttributeError("no sites found in raw directory with preprocessed data and matching NNProbabilities")
 
     # process each site on a different GPU if using multi-gpu
-    sep = np.linspace(0, len(segment_sites), workers + 1).astype(int)
+    sep = np.linspace(0, len(segment_sites), n_cpus + 1).astype(int)
 
     # TARGET is never used in either extract_patches or build_trajectory
     processes = []
-    for i in range(workers):
+    for i in range(n_cpus):
         _sites = segment_sites[sep[i]:sep[i + 1]]
-        args = (raw, supp, channels, None, _sites)
-        p = Worker(args, gpuid=i, method=method)
+        args = (raw, supp, _sites, config_)
+        p = Worker(args, cpu_id=i, method=method)
         p.start()
         processes.append(p)
     for p in processes:
@@ -84,18 +84,6 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        '-r', '--raw',
-        type=str,
-        required=False,
-        help="Path to the folder for raw inputs (multipage-tiff file of format [t, x, y]) and summary results",
-    )
-    parser.add_argument(
-        '-s', '--supplementary',
-        type=str,
-        required=False,
-        help="Path to the folder for supplementary results",
-    )
-    parser.add_argument(
         '-m', '--method',
         type=str,
         required=False,
@@ -104,28 +92,20 @@ def parse_args():
         help="Method: one of 'extract_patches', 'build_trajectories'",
     )
     parser.add_argument(
-        '-w', '--workers',
-        type=int,
-        required=False,
-        default=1,
-        help="Number of workers to use",
+        '-c', '--config',
+        type=str,
+        required=True,
+        help='path to yaml configuration file'
     )
-    parser.add_argument(
-        '-f', '--fov',
-        type=lambda s: [str(item.strip(' ').strip("'")) for item in s.split(',')],
-        required=False,
-        help="list of field-of-views to process (subfolders in raw data directory)",
-    )
-    parser.add_argument(
-        '-c', '--channels',
-        type=lambda s: [int(item.strip(' ').strip("'")) for item in s.split(',')],
-        required=False,
-        default=[0, 1], # Assuming two channels by default
-        help="comma-delimited list of channel indices (e.g. 1,2,3)",
-    )
+
     return parser.parse_args()
 
 
 if __name__ == '__main__':
     arguments = parse_args()
-    main(arguments)
+    config = YamlReader()
+    config.read_config(arguments.config)
+
+    # batch run
+    for (raw_dir, supp_dir) in list(zip(config.patch.raw_dirs, config.patch.supp_dirs)):
+        main(arguments.method, raw_dir, supp_dir, config)
