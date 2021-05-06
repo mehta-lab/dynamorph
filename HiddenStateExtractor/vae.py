@@ -3,9 +3,9 @@ import torch as t
 from torch import nn as nn
 from torch.nn import functional as F
 
-CHANNEL_RANGE = [(0.3, 0.8), (0., 0.6)]
-CHANNEL_VAR = np.array([0.0475, 0.0394]) # After normalized to CHANNEL_RANGE
-CHANNEL_MAX = np.array([65535., 65535.])
+
+CHANNEL_VAR = np.array([1., 1.])
+CHANNEL_MAX = 65535.
 eps = 1e-9
 
 
@@ -19,21 +19,21 @@ class VectorQuantizer(nn.Module):
     input)
 
     """
-    def __init__(self, embedding_dim=128, num_embeddings=128, commitment_cost=0.25, gpu=True):
+    def __init__(self, embedding_dim=128, num_embeddings=128, commitment_cost=0.25, device='cuda:0'):
         """ Initialize the module
 
         Args:
             embedding_dim (int, optional): size of embedding vector
             num_embeddings (int, optional): number of embedding vectors
             commitment_cost (float, optional): balance between latent losses
-            gpu (bool, optional): if weights are saved on gpu
+            device (str, optional): device the model will be running on
 
         """
         super(VectorQuantizer, self).__init__()
         self.embedding_dim = embedding_dim
         self.num_embeddings = num_embeddings
         self.commitment_cost = commitment_cost
-        self.gpu = gpu
+        self.device = device
         self.w = nn.Embedding(num_embeddings, embedding_dim)
 
     def forward(self, inputs):
@@ -63,13 +63,11 @@ class VectorQuantizer(nn.Module):
         loss = q_latent_loss + self.commitment_cost * e_latent_loss
 
         # Perplexity (used to monitor)
-        # TODO: better deal with the gpu case here
-        encoding_onehot = t.zeros(encoding_indices.flatten().shape[0], self.num_embeddings)
-        if self.gpu:
-            encoding_onehot = encoding_onehot.cuda()
+        encoding_onehot = t.zeros(encoding_indices.flatten().shape[0], self.num_embeddings).to(self.device)
         encoding_onehot.scatter_(1, encoding_indices.flatten().unsqueeze(1), 1)
         avg_probs = t.mean(encoding_onehot, 0)
         perplexity = t.exp(-t.sum(avg_probs*t.log(avg_probs + 1e-10)))
+
         return output_quantized, loss, perplexity
 
     @property
@@ -214,6 +212,140 @@ class ResidualBlock(nn.Module):
         return output
 
 
+
+class VQ_VAE_z16(nn.Module):
+    """ Reduced Vector-Quantized VAE with 16 X 16 X num_hiddens latent tensor
+    """
+
+    def __init__(self,
+                 num_inputs=2,
+                 num_hiddens=16,
+                 num_residual_hiddens=32,
+                 num_residual_layers=2,
+                 num_embeddings=64,
+                 commitment_cost=0.25,
+                 channel_var=CHANNEL_VAR,
+                 weight_recon=1.,
+                 weight_commitment=1.,
+                 weight_matching=0.005,
+                 device="cuda:0",
+                 w_a=1.1,
+                 w_t=0.1,
+                 w_n=-0.5,
+                 margin=0.5,
+                 gpu=True,
+                 **kwargs):
+        """ Initialize the model
+
+        Args:
+            num_inputs (int, optional): number of channels in input
+            num_hiddens (int, optional): number of hidden units (size of latent
+                encodings per position)
+            num_residual_hiddens (int, optional): number of hidden units in the
+                residual layer
+            num_residual_layers (int, optional): number of residual layers
+            num_embeddings (int, optional): number of VQ embedding vectors
+            commitment_cost (float, optional): balance between latent losses
+            channel_var (list of float, optional): each channel's SD, used for
+                balancing loss across channels
+            weight_recon (float, optional): balance of reconstruction loss
+            weight_commitment (float, optional): balance of commitment loss
+            weight_matching (float, optional): balance of matching loss
+            device (str, optional): device the model will be running on
+            **kwargs: other keyword arguments
+
+        """
+        super(VQ_VAE_z16, self).__init__(**kwargs)
+        self.num_inputs = num_inputs
+        self.num_hiddens = num_hiddens
+        self.num_residual_layers = num_residual_layers
+        self.num_residual_hiddens = num_residual_hiddens
+        self.num_embeddings = num_embeddings
+        self.commitment_cost = commitment_cost
+        self.channel_var = nn.Parameter(t.from_numpy(channel_var).float().reshape((1, num_inputs, 1, 1)),
+                                        requires_grad=False)
+        self.weight_recon = weight_recon
+        self.weight_commitment = weight_commitment
+        self.weight_matching = weight_matching
+        self.w_a = w_a
+        self.w_t = w_t
+        self.w_n = w_n
+        self.margin = margin
+        self.enc = nn.Sequential(
+            nn.Conv2d(self.num_inputs, self.num_hiddens//2, 1),
+            nn.Conv2d(self.num_hiddens//2, self.num_hiddens//2, 4, stride=2, padding=1),
+            nn.BatchNorm2d(self.num_hiddens//2),
+            nn.ReLU(),
+            nn.Conv2d(self.num_hiddens//2, self.num_hiddens, 4, stride=2, padding=1),
+            nn.BatchNorm2d(self.num_hiddens),
+            nn.ReLU(),
+            nn.Conv2d(self.num_hiddens, self.num_hiddens, 4, stride=2, padding=1),
+            nn.BatchNorm2d(self.num_hiddens),
+            nn.ReLU(),
+            nn.Conv2d(self.num_hiddens, self.num_hiddens, 3, padding=1),
+            nn.BatchNorm2d(self.num_hiddens),
+            ResidualBlock(self.num_hiddens, self.num_residual_hiddens, self.num_residual_layers))
+        self.vq = VectorQuantizer(self.num_hiddens, self.num_embeddings, commitment_cost=self.commitment_cost, device=device)
+        self.dec = nn.Sequential(
+            nn.ConvTranspose2d(self.num_hiddens, self.num_hiddens//2, 4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(self.num_hiddens//2, self.num_hiddens//4, 4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(self.num_hiddens//4, self.num_hiddens//4, 4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(self.num_hiddens//4, self.num_inputs, 1))
+
+    def forward(self, inputs, time_matching_mat=None, batch_mask=None):
+        """ Forward pass
+
+        Args:
+            inputs (torch tensor): input cell image patches
+            time_matching_mat (torch tensor or None, optional): if given,
+                pairwise relationship between samples in the minibatch, used
+                to calculate time matching loss
+            batch_mask (torch tensor or None, optional): if given, weight mask
+                of training samples, used to concentrate loss on cell bodies
+
+        Returns:
+            torch tensor: decoded/reconstructed cell image patches
+            dict: losses and perplexity of the minibatch
+
+        """
+        # inputs: Batch * num_inputs(channel) * H * W, each channel from 0 to 1
+        z_before = self.enc(inputs)
+        z_after, c_loss, perplexity = self.vq(z_before)
+        decoded = self.dec(z_after)
+        if batch_mask is None:
+            batch_mask = t.ones_like(inputs)
+        recon_loss = t.mean(F.mse_loss(decoded * batch_mask, inputs * batch_mask, reduction='none') / self.channel_var)
+        total_loss = self.weight_recon * recon_loss + self.weight_commitment * c_loss
+        time_matching_loss = 0.
+        if not time_matching_mat is None:
+            z_before_ = z_before.reshape((z_before.shape[0], -1))
+            len_latent = z_before_.shape[1]
+            sim_mat = t.pow(z_before_.reshape((1, -1, len_latent)) - \
+                            z_before_.reshape((-1, 1, len_latent)), 2).mean(2)
+            time_matching_weights = time_matching_mat.clone()
+            time_matching_weights[time_matching_mat == 2] = self.w_a
+            time_matching_weights[time_matching_mat == 1] = self.w_t
+            time_matching_weights[time_matching_mat == 0] = self.w_n
+            assert sim_mat.shape == time_matching_mat.shape
+            time_matching_loss = sim_mat * time_matching_weights.clone()
+            time_matching_loss[time_matching_mat == 0] = \
+                t.clamp(time_matching_loss.clone()[time_matching_mat == 0] + self.margin, min=0)
+            time_matching_loss = time_matching_loss.mean()
+            total_loss += self.weight_matching * time_matching_loss
+        return decoded, \
+               {'recon_loss': recon_loss,
+                'commitment_loss': c_loss,
+                'time_matching_loss': time_matching_loss,
+                'perplexity': perplexity,
+                'total_loss': total_loss, }
+
+    def predict(self, inputs):
+        """ Prediction fn, same as forward pass """
+        return self.forward(inputs)
+
 class VQ_VAE_z32(nn.Module):
     """ Vector-Quantized VAE with 32 X 32 X num_hiddens latent tensor
      as introduced in  "Neural Discrete Representation Learning"
@@ -315,16 +447,13 @@ class VQ_VAE_z32(nn.Module):
             sim_mat = t.pow(z_after_.reshape((1, -1, len_latent)) - \
                             z_after_.reshape((-1, 1, len_latent)), 2).mean(2)
             time_matching_weights = time_matching_mat.clone()
-            # time_matching_weights.requires_grad = True
             time_matching_weights[time_matching_mat == 2] = self.w_a
             time_matching_weights[time_matching_mat == 1] = self.w_t
             time_matching_weights[time_matching_mat == 0] = self.w_n
             assert sim_mat.shape == time_matching_mat.shape
             time_matching_loss = sim_mat * time_matching_weights.clone()
-            time_matching_loss_np = time_matching_loss.cpu().detach().numpy()
             time_matching_loss[time_matching_mat == 0] = \
                 t.clamp(time_matching_loss.clone()[time_matching_mat == 0] + self.margin, min=0)
-            time_matching_loss_np = time_matching_loss.cpu().detach().numpy()
             time_matching_loss = time_matching_loss.mean()
             total_loss += time_matching_loss * self.alpha
         loss_dict = {'recon_loss': recon_loss,
@@ -347,118 +476,6 @@ class VQ_VAE_z32(nn.Module):
         return self.forward(inputs)
 
 
-class VQ_VAE_z16(nn.Module):
-    """ Reduced Vector-Quantized VAE with 16 X 16 X num_hiddens latent tensor
-    """
-
-    def __init__(self,
-                 num_inputs=2,
-                 num_hiddens=16,
-                 num_residual_hiddens=32,
-                 num_residual_layers=2,
-                 num_embeddings=64,
-                 commitment_cost=0.25,
-                 channel_var=np.ones(2),
-                 alpha=0.005,
-                 gpu=True,
-                 **kwargs):
-        """ Initialize the model
-
-        Args:
-            num_inputs (int, optional): number of channels in input
-            num_hiddens (int, optional): number of hidden units (size of latent
-                encodings per position)
-            num_residual_hiddens (int, optional): number of hidden units in the
-                residual layer
-            num_residual_layers (int, optional): number of residual layers
-            num_embeddings (int, optional): number of VQ embedding vectors
-            commitment_cost (float, optional): balance between latent losses
-            channel_var (list of float, optional): each channel's SD, used for
-                balancing loss across channels
-            alpha (float, optional): balance of matching loss
-            gpu (bool, optional): if the model is run on gpu
-            **kwargs: other keyword arguments
-
-        """
-        super(VQ_VAE_z16, self).__init__(**kwargs)
-        self.num_inputs = num_inputs
-        self.num_hiddens = num_hiddens
-        self.num_residual_layers = num_residual_layers
-        self.num_residual_hiddens = num_residual_hiddens
-        self.num_embeddings = num_embeddings
-        self.commitment_cost = commitment_cost
-        self.channel_var = nn.Parameter(t.from_numpy(channel_var).float().reshape((1, num_inputs, 1, 1)),
-                                        requires_grad=False)
-        self.alpha = alpha
-        self.enc = nn.Sequential(
-            nn.Conv2d(self.num_inputs, self.num_hiddens//2, 1),
-            nn.Conv2d(self.num_hiddens//2, self.num_hiddens//2, 4, stride=2, padding=1),
-            nn.BatchNorm2d(self.num_hiddens//2),
-            nn.ReLU(),
-            nn.Conv2d(self.num_hiddens//2, self.num_hiddens, 4, stride=2, padding=1),
-            nn.BatchNorm2d(self.num_hiddens),
-            nn.ReLU(),
-            nn.Conv2d(self.num_hiddens, self.num_hiddens, 4, stride=2, padding=1),
-            nn.BatchNorm2d(self.num_hiddens),
-            nn.ReLU(),
-            nn.Conv2d(self.num_hiddens, self.num_hiddens, 3, padding=1),
-            nn.BatchNorm2d(self.num_hiddens),
-            ResidualBlock(self.num_hiddens, self.num_residual_hiddens, self.num_residual_layers))
-        self.vq = VectorQuantizer(self.num_hiddens, self.num_embeddings, commitment_cost=self.commitment_cost, gpu=gpu)
-        self.dec = nn.Sequential(
-            nn.ConvTranspose2d(self.num_hiddens, self.num_hiddens//2, 4, stride=2, padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose2d(self.num_hiddens//2, self.num_hiddens//4, 4, stride=2, padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose2d(self.num_hiddens//4, self.num_hiddens//4, 4, stride=2, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(self.num_hiddens//4, self.num_inputs, 1))
-
-    def forward(self, inputs, time_matching_mat=None, batch_mask=None):
-        """ Forward pass
-
-        Args:
-            inputs (torch tensor): input cell image patches
-            time_matching_mat (torch tensor or None, optional): if given,
-                pairwise relationship between samples in the minibatch, used
-                to calculate time matching loss
-            batch_mask (torch tensor or None, optional): if given, weight mask
-                of training samples, used to concentrate loss on cell bodies
-
-        Returns:
-            torch tensor: decoded/reconstructed cell image patches
-            dict: losses and perplexity of the minibatch
-
-        """
-        # inputs: Batch * num_inputs(channel) * H * W, each channel from 0 to 1
-        z_before = self.enc(inputs)
-        z_after, c_loss, perplexity = self.vq(z_before)
-        decoded = self.dec(z_after)
-        if batch_mask is None:
-            batch_mask = t.ones_like(inputs)
-        recon_loss = t.mean(F.mse_loss(decoded * batch_mask, inputs * batch_mask, reduction='none') / self.channel_var)
-        total_loss = recon_loss + c_loss
-        time_matching_loss = 0
-        if not time_matching_mat is None:
-            z_before_ = z_before.reshape((z_before.shape[0], -1))
-            len_latent = z_before_.shape[1]
-            sim_mat = t.pow(z_before_.reshape((1, -1, len_latent)) - \
-                            z_before_.reshape((-1, 1, len_latent)), 2).mean(2)
-            assert sim_mat.shape == time_matching_mat.shape
-            time_matching_loss = (sim_mat * time_matching_mat).sum()
-            total_loss += time_matching_loss * self.alpha
-        return decoded, \
-               {'recon_loss': recon_loss,
-                'commitment_loss': c_loss,
-                'time_matching_loss': time_matching_loss,
-                'perplexity': perplexity,
-                'total_loss': total_loss, }
-
-    def predict(self, inputs):
-        """ Prediction fn, same as forward pass """
-        return self.forward(inputs)
-
-
 class VAE(nn.Module):
     """ Regular VAE """
     def __init__(self,
@@ -467,7 +484,13 @@ class VAE(nn.Module):
                  num_residual_hiddens=32,
                  num_residual_layers=2,
                  channel_var=CHANNEL_VAR,
-                 alpha=0.005,
+                 weight_recon=1.,
+                 weight_kld=1.,
+                 weight_matching=0.005,
+                 w_a=1.1,
+                 w_t=0.1,
+                 w_n=-0.5,
+                 margin=0.5,
                  **kwargs):
         """ Initialize the model
 
@@ -480,7 +503,9 @@ class VAE(nn.Module):
             num_residual_layers (int, optional): number of residual layers
             channel_var (list of float, optional): each channel's SD, used for
                 balancing loss across channels
-            alpha (float, optional): balance of matching loss
+            weight_recon (float, optional): balance of reconstruction loss
+            weight_kld (float, optional): balance of KL divergence
+            weight_matching (float, optional): balance of matching loss
             **kwargs: other keyword arguments
 
         """
@@ -490,7 +515,9 @@ class VAE(nn.Module):
         self.num_residual_layers = num_residual_layers
         self.num_residual_hiddens = num_residual_hiddens
         self.channel_var = nn.Parameter(t.from_numpy(channel_var).float().reshape((1, num_inputs, 1, 1)), requires_grad=False)
-        self.alpha = alpha
+        self.weight_recon = weight_recon
+        self.weight_kld = weight_kld
+        self.weight_matching = weight_matching
         self.enc = nn.Sequential(
             nn.Conv2d(self.num_inputs, self.num_hiddens//2, 1),
             nn.Conv2d(self.num_hiddens//2, self.num_hiddens//2, 4, stride=2, padding=1),
@@ -544,16 +571,23 @@ class VAE(nn.Module):
         if batch_mask is None:
             batch_mask = t.ones_like(inputs)
         recon_loss = t.sum(F.mse_loss(decoded * batch_mask, inputs * batch_mask, reduction='none')/self.channel_var)
-        total_loss = recon_loss + KLD
-        time_matching_loss = None
+        total_loss = self.weight_recon * recon_loss + self.weight_kld * KLD
+        time_matching_loss = 0.
         if not time_matching_mat is None:
             z_before_ = z_mean.reshape((z_mean.shape[0], -1))
             len_latent = z_before_.shape[1]
             sim_mat = t.pow(z_before_.reshape((1, -1, len_latent)) - \
                             z_before_.reshape((-1, 1, len_latent)), 2).mean(2)
+            time_matching_weights = time_matching_mat.clone()
+            time_matching_weights[time_matching_mat == 2] = self.w_a
+            time_matching_weights[time_matching_mat == 1] = self.w_t
+            time_matching_weights[time_matching_mat == 0] = self.w_n
             assert sim_mat.shape == time_matching_mat.shape
-            time_matching_loss = (sim_mat * time_matching_mat).sum()
-            total_loss += time_matching_loss * self.alpha
+            time_matching_loss = sim_mat * time_matching_weights.clone()
+            time_matching_loss[time_matching_mat == 0] = \
+                t.clamp(time_matching_loss.clone()[time_matching_mat == 0] + self.margin, min=0)
+            time_matching_loss = time_matching_loss.mean()
+            total_loss += self.weight_matching * time_matching_loss
         return decoded, \
                {'recon_loss': recon_loss/(inputs.shape[0] * 32768),
                 'KLD': KLD,
@@ -625,8 +659,15 @@ class IWAE(VAE):
             len_latent = z_before_.shape[1]
             sim_mat = t.pow(z_before_.reshape((1, -1, len_latent)) - \
                             z_before_.reshape((-1, 1, len_latent)), 2).mean(2)
+            time_matching_weights = time_matching_mat.clone()
+            time_matching_weights[time_matching_mat == 2] = self.w_a
+            time_matching_weights[time_matching_mat == 1] = self.w_t
+            time_matching_weights[time_matching_mat == 0] = self.w_n
             assert sim_mat.shape == time_matching_mat.shape
-            time_matching_loss = (sim_mat * time_matching_mat).sum()
+            time_matching_loss = sim_mat * time_matching_weights.clone()
+            time_matching_loss[time_matching_mat == 0] = \
+                t.clamp(time_matching_loss.clone()[time_matching_mat == 0] + self.margin, min=0)
+            time_matching_loss = time_matching_loss.mean()
 
         log_ws = []
         recon_losses = []
@@ -643,7 +684,7 @@ class IWAE(VAE):
         ws = t.exp(log_ws_minus_max)
         normalized_ws = ws / t.sum(ws, dim=1, keepdim=True)
         loss = -(normalized_ws.detach() * log_ws).sum()
-        total_loss = loss + time_matching_loss
+        total_loss = loss + self.weight_matching * time_matching_loss
 
         recon_losses = t.stack(recon_losses, 1)
         recon_loss = (normalized_ws.detach() * recon_losses).sum()
@@ -664,7 +705,12 @@ class AAE(nn.Module):
                  num_residual_hiddens=32,
                  num_residual_layers=2,
                  channel_var=CHANNEL_VAR,
-                 alpha=0.005,
+                 weight_recon=1.,
+                 weight_matching=0.005,
+                 w_a=1.1,
+                 w_t=0.1,
+                 w_n=-0.5,
+                 margin=0.5,
                  **kwargs):
         """ Initialize the model
 
@@ -677,7 +723,8 @@ class AAE(nn.Module):
             num_residual_layers (int, optional): number of residual layers
             channel_var (list of float, optional): each channel's SD, used for
                 balancing loss across channels
-            alpha (float, optional): balance of matching loss
+            weight_recon (float, optional): balance of reconstruction loss
+            weight_matching (float, optional): balance of matching loss
             **kwargs: other keyword arguments
 
         """
@@ -687,7 +734,8 @@ class AAE(nn.Module):
         self.num_residual_layers = num_residual_layers
         self.num_residual_hiddens = num_residual_hiddens
         self.channel_var = nn.Parameter(t.from_numpy(channel_var).float().reshape((1, num_inputs, 1, 1)), requires_grad=False)
-        self.alpha = alpha
+        self.weight_recon = weight_recon
+        self.weight_matching = weight_matching
         self.enc = nn.Sequential(
             nn.Conv2d(self.num_inputs, self.num_hiddens//2, 1),
             nn.Conv2d(self.num_hiddens//2, self.num_hiddens//2, 4, stride=2, padding=1),
@@ -753,16 +801,24 @@ class AAE(nn.Module):
         if batch_mask is None:
             batch_mask = t.ones_like(inputs)
         recon_loss = t.mean(F.mse_loss(decoded * batch_mask, inputs * batch_mask, reduction='none')/self.channel_var)
-        total_loss = recon_loss
-        time_matching_loss = None
+        total_loss = self.weight_recon * recon_loss
+        time_matching_loss = 0.
         if not time_matching_mat is None:
             z_ = z.reshape((z.shape[0], -1))
             len_latent = z_.shape[1]
             sim_mat = t.pow(z_.reshape((1, -1, len_latent)) - \
                             z_.reshape((-1, 1, len_latent)), 2).mean(2)
             assert sim_mat.shape == time_matching_mat.shape
-            time_matching_loss = (sim_mat * time_matching_mat).sum()
-            total_loss += time_matching_loss * self.alpha
+            time_matching_weights = time_matching_mat.clone()
+            time_matching_weights[time_matching_mat == 2] = self.w_a
+            time_matching_weights[time_matching_mat == 1] = self.w_t
+            time_matching_weights[time_matching_mat == 0] = self.w_n
+            assert sim_mat.shape == time_matching_mat.shape
+            time_matching_loss = sim_mat * time_matching_weights.clone()
+            time_matching_loss[time_matching_mat == 0] = \
+                t.clamp(time_matching_loss.clone()[time_matching_mat == 0] + self.margin, min=0)
+            time_matching_loss = time_matching_loss.mean()
+            total_loss += self.weight_matching * time_matching_loss
         return decoded, \
                {'recon_loss': recon_loss,
                 'time_matching_loss': time_matching_loss,

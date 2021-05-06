@@ -172,7 +172,6 @@ def process_site_instance_segmentation(raw_data,
         print("\tClustering time %d" % t_point)
         cell_segmentation = segmentation_stack[t_point]
         instance_map_path = os.path.join(site_supp_files_folder, 'segmentation_%d.png' % t_point)
-        res = instance_clustering(cell_segmentation, instance_map=True, map_path=instance_map_path)
         #TODO: expose instance clustering parameters in config
         res = instance_clustering(cell_segmentation, instance_map=True, map_path=instance_map_path)
         cell_positions[t_point] = res[0] # List of cell: (cell_id, mean_pos)
