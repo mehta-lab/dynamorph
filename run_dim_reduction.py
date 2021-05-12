@@ -158,7 +158,6 @@ def fit_umap(train_data, weights_dir, labels, conditions, n_nbrs=(15, 50, 200), 
     # n_cols = int(np.ceil(np.sqrt(n_plots)))
     n_cols = 3
     n_rows = int(n_plots // n_cols)
-    print(n_rows)
     fig, ax = plt.subplots(n_rows, n_cols, squeeze=False)
     ax = ax.flatten()
     fig.set_size_inches((6.5 * n_cols, 5 * n_rows))

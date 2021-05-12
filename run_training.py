@@ -597,7 +597,7 @@ def train_with_loader(model, train_loader, val_loader, output_dir,
                 batch = t.cat([datum for datum in data], axis=0).to(device)
                 model, train_loss = \
                     run_one_batch(model, batch, train_loss, model_kwargs={'labels': labels}, optimizer=optimizer,
-                                 device=device, transform=False, training=True)
+                                  transform=False, training=True)
         # loop through validation batches
         model.eval()
         with t.no_grad():
@@ -608,7 +608,7 @@ def train_with_loader(model, train_loader, val_loader, output_dir,
                     data = t.cat([datum for datum in data], axis=0).to(device)
                     model, val_loss = \
                         run_one_batch(model, data, val_loss, model_kwargs={'labels': labels}, optimizer=optimizer,
-                                    device=device, transform=transform, training=False)
+                                     transform=False, training=False)
         for key, loss in train_loss.items():
             train_loss[key] = sum(loss) / len(loss)
             writer.add_scalar('Loss/' + key, train_loss[key], epoch)

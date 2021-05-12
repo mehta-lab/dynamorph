@@ -96,18 +96,6 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        '-r', '--raw',
-        type=str,
-        required=False,
-        help="Path to the folder for raw inputs (multipage-tiff file of format [t, x, y]) and summary results",
-    )
-    parser.add_argument(
-        '-s', '--supplementary',
-        type=str,
-        required=False,
-        help="Path to the folder for supplementary results",
-    )
-    parser.add_argument(
         '-m', '--method',
         type=str,
         required=True,
