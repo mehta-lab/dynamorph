@@ -2,7 +2,7 @@ import os
 import h5py
 import cv2
 import numpy as np
-import queue
+import argparse
 import torch as t
 import torch.nn as nn
 import pickle
@@ -13,12 +13,16 @@ from torch.utils.tensorboard import SummaryWriter
 # from torchvision import transforms
 from scipy.sparse import csr_matrix
 
-from HiddenStateExtractor.vae import CHANNEL_RANGE, CHANNEL_MAX
+from HiddenStateExtractor.vae import CHANNEL_MAX
 from SingleCellPatch.extract_patches import im_adjust, cv2_fn_wrapper
 from pipeline.train_utils import EarlyStopping, TripletDataset, zscore
 from HiddenStateExtractor.losses import AllTripletMiner
 from HiddenStateExtractor.resnet import EncodeProject
 import HiddenStateExtractor.vae as vae
+
+from configs.config_reader import YamlReader
+import queue
+import distutils
 
 
 # Dataset preparation functions
@@ -318,6 +322,8 @@ def concat_relations(relations, labels, offsets):
 
 
 def augment_img(img):
+    """Data augmentation with flipping and rotation"""
+    # TODO: Rewrite with torchvision transform
     flip_idx = np.random.choice([0, 1, 2])
     if flip_idx != 0:
         img = np.flip(img, axis=flip_idx)
@@ -326,13 +332,13 @@ def augment_img(img):
     return img
 
 
-def get_relation_tensor(relation_mat, sample_ids, device=None):
+def get_relation_tensor(relation_mat, sample_ids, device='cuda:0'):
     """
     Slice relation matrix according to sample_ids; convert to torch tensor
     Args:
         relation_mat (scipy sparse array): symmetric matrix describing the relation between samples
         sample_ids (list): row & column ids to select
-        gpu (bool): send the tensor to gpu if True
+        device (str): device to run the model on
 
     Returns:
         batch_relation_mat (torch tensor or None): sliced relation matrix
@@ -349,13 +355,13 @@ def get_relation_tensor(relation_mat, sample_ids, device=None):
     return batch_relation_mat
 
 
-def get_mask(mask, sample_ids, device=True):
+def get_mask(mask, sample_ids, device='cuda:0'):
     """
     Slice cell masks according to sample_ids; convert to torch tensor
     Args:
         mask (numpy array): cell masks for dataset
         sample_ids (list): mask ids to select
-        gpu (bool): send the tensor to gpu if True
+        device (str): device to run the model on
 
     Returns:
         batch_mask (torch tensor or None): sliced relation matrix
@@ -364,13 +370,12 @@ def get_mask(mask, sample_ids, device=True):
         return None
     batch_mask = mask[sample_ids][0][:, 1:2, :, :]  # Hardcoded second slice (large mask)
     batch_mask = (batch_mask + 1.) / 2.
-    if device:
-        batch_mask = batch_mask.to(device)
+    batch_mask = batch_mask.to(device)
     return batch_mask
 
 
-def run_one_batch(model, batch, train_loss, labels=None, optimizer=None, batch_relation_mat=None,
-                  batch_mask=None, device=None, transform=None, training=True):
+def run_one_batch(model, batch, train_loss, model_kwargs = None, optimizer=None,
+                transform=None, training=True):
     """ Train on a single batch of data
     Args:
         model (nn.Module): pytorch model object
@@ -380,7 +385,6 @@ def run_one_batch(model, batch, train_loss, labels=None, optimizer=None, batch_r
         batch_relation_mat (np array or None): matrix of pairwise relations
         batch_mask (TensorDataset or None): if given, dataset of training
             sample weight masks
-        gpu (bool, optional): Ture if the model is run on gpu
         transform (bool): data augmentation if true
         training (bool): Set True for training and False for validation (no weights update)
 
@@ -397,10 +401,7 @@ def run_one_batch(model, batch, train_loss, labels=None, optimizer=None, batch_r
                 img = t.flip(img, dims=(flip_idx,))
             rot_idx = int(np.random.choice([0, 1, 2, 3]))
             batch[idx_in_batch] = t.rot90(img, k=rot_idx, dims=[1, 2])
-    if device:
-        batch = batch.to(device)
-        labels = labels.to(device)
-    _, train_loss_dict = model(batch, labels=labels, time_matching_mat=batch_relation_mat, batch_mask=batch_mask)
+    _, train_loss_dict = model(batch, **model_kwargs)
     if training:
         train_loss_dict['total_loss'].backward()
         optimizer.step()
@@ -412,11 +413,26 @@ def run_one_batch(model, batch, train_loss, labels=None, optimizer=None, batch_r
         loss = float(loss)  # float here magically removes the history attached to tensors
         train_loss[key].append(loss)
     # print(train_loss_dict)
-    del batch, train_loss_dict, labels
+    del batch, train_loss_dict
     return model, train_loss
 
 
 def train_val_split(dataset, labels, val_split_ratio=0.15, seed=0):
+    """Split the dataset into train and validation sets
+
+    Args:
+        dataset (TensorDataset): dataset of training inputs
+        labels (list or np array): labels corresponding to inputs
+        val_split_ratio (float or None): fraction of the dataset used for validation
+        seed (int): seed controlling random split of the dataset
+
+    Returns:
+        train_set (TensorDataset): train set
+        train_labels (list or np array): train labels corresponding to inputs in train set
+        val_set (TensorDataset): validation set
+        val_labels (list or np array): validation labels corresponding to inputs in train set
+
+    """
     assert val_split_ratio is None or 0 < val_split_ratio < 1
     n_samples = len(dataset)
     # Declare sample indices and do an initial shuffle
@@ -437,9 +453,9 @@ def train_val_split(dataset, labels, val_split_ratio=0.15, seed=0):
 
 
 def train(model, dataset, output_dir, relation_mat=None, mask=None,
-          n_epochs=10, lr=0.001, batch_size=16, gpu=True, shuffle_data=False,
+          n_epochs=10, lr=0.001, batch_size=16, device='cuda:0', shuffle_data=False,
           transform=None, val_split_ratio=0.15, patience=20):
-    """ Train function for VQ-VAE, VAE, IWAE, etc.
+    """ Legacy train function for VAE models.
 
     Args:
         model (nn.Module): autoencoder model
@@ -451,7 +467,7 @@ def train(model, dataset, output_dir, relation_mat=None, mask=None,
         n_epochs (int, optional): number of epochs
         lr (float, optional): learning rate
         batch_size (int, optional): batch size
-        gpu (bool, optional): Ture if the model is run on gpu
+        device (str): device to run the model on
         shuffle_data (bool): shuffle data at the end of the epoch to add randomness to mini-batch.
             Set False when using matching loss
         transform (bool): data augmentation if true
@@ -493,27 +509,27 @@ def train(model, dataset, output_dir, relation_mat=None, mask=None,
         for i in range(n_batches):
             # deal with last batch might < batch size
             train_ids_batch = train_ids[i * batch_size:min((i + 1) * batch_size, n_train)]
-            batch = dataset[train_ids_batch][0]
+            batch = dataset[train_ids_batch][0].to(device)
             # Relation (adjacent frame, same trajectory)
-            batch_relation_mat = get_relation_tensor(relation_mat, train_ids_batch, gpu=gpu)
+            batch_relation_mat = get_relation_tensor(relation_mat, train_ids_batch, device=device)
             # Reconstruction mask
-            batch_mask = get_mask(mask, train_ids_batch, gpu)
+            batch_mask = get_mask(mask, train_ids_batch, device=device)
             model, train_loss = \
                 run_one_batch(model, batch, train_loss, optimizer=optimizer,
-                              batch_relation_mat=batch_relation_mat,
-                              batch_mask=batch_mask, gpu=gpu, transform=transform, training=True)
+                              model_kwargs={'time_matching_mat': batch_relation_mat,
+                              'batch_mask': batch_mask}, transform=transform, training=True)
         # loop through validation batches
         for i in range(n_val_batches):
             val_ids_batch = val_ids[i * batch_size:min((i + 1) * batch_size, n_val)]
-            batch = dataset[val_ids_batch][0]
+            batch = dataset[val_ids_batch][0].to(device)
             # Relation (adjacent frame, same trajectory)
-            batch_relation_mat = get_relation_tensor(relation_mat, val_ids_batch, gpu=gpu)
+            batch_relation_mat = get_relation_tensor(relation_mat, val_ids_batch, device=device)
             # Reconstruction mask
-            batch_mask = get_mask(mask, val_ids_batch, gpu)
+            batch_mask = get_mask(mask, val_ids_batch, device)
             model, val_loss = \
                 run_one_batch(model, batch, val_loss, optimizer=optimizer,
-                              batch_relation_mat=batch_relation_mat,
-                              batch_mask=batch_mask, gpu=gpu, transform=transform, training=False)
+                              model_kwargs={'time_matching_mat': batch_relation_mat,
+                                            'batch_mask': batch_mask}, transform=transform, training=False)
         # shuffle train ids at the end of the epoch
         if shuffle_data:
             np.random.shuffle(train_ids)
@@ -535,27 +551,19 @@ def train(model, dataset, output_dir, relation_mat=None, mask=None,
     return model
 
 
-def train_with_loader(model, train_loader, val_loader, output_dir, relation_mat=None, mask=None,
-          n_epochs=10, lr=0.001, device=None,
-          transform=None, patience=20, earlystop_metric='total_loss',
+def train_with_loader(model, train_loader, val_loader, output_dir,
+          n_epochs=10, lr=0.001, device='cuda:0',
+        patience=20, earlystop_metric='total_loss',
           retrain=False, log_step_offset=0):
-    """ Train function for VQ-VAE, VAE, IWAE, etc.
+    """ Train function using dataloders.
 
     Args:
-        model (nn.Module): autoencoder model
-        dataset (TensorDataset): dataset of training inputs
-        relation_mat (scipy csr matrix or None, optional): if given, sparse
-            matrix of pairwise relations
-        mask (TensorDataset or None, optional): if given, dataset of training
-            sample weight masks
+        model (nn.Module): model
+        train_loader (data loader): dataset of training inputs
         n_epochs (int, optional): number of epochs
         lr (float, optional): learning rate
-        batch_size (int, optional): batch size
-        gpu (bool, optional): Ture if the model is run on gpu
-        shuffle_data (bool): shuffle data at the end of the epoch to add randomness to mini-batch.
-            Set False when using matching loss
-        transform (bool): data augmentation if true
-        val_split_ratio (float or None): fraction of the dataset used for validation
+        device (str): device to run the model on
+        earlystop_metric (str): metric to monitor for early stopping
         patience (int or None): Number of epochs to wait before stopping training if validation loss does not improve.
         retrain (bool): Retrain the model from scratch if True. Load existing model and continue training otherwise
 
@@ -585,38 +593,22 @@ def train_with_loader(model, train_loader, val_loader, output_dir, relation_mat=
         with tqdm(train_loader, desc='train batch') as batch_pbar:
             for b_idx, batch in enumerate(batch_pbar):
                 labels, data = batch
-                labels = t.cat([label for label in labels], axis=0)
-                data = t.cat([datum for datum in data], axis=0)
-                # batch = dataset[train_ids_batch][0]
-                # TODO: move relation matrix to dataset or generate on the fly using labels in contrastive loss class
-                # Relation (adjacent frame, same trajectory)
-                # batch_relation_mat = get_relation_tensor(relation_mat, train_ids_batch, device=device)
-                # Reconstruction mask
-                # batch_mask = get_mask(mask, train_ids_batch, gpu)
-                batch_relation_mat = None
-                batch_mask = None
+                labels = t.cat([label for label in labels], axis=0).to(device)
+                batch = t.cat([datum for datum in data], axis=0).to(device)
                 model, train_loss = \
-                    run_one_batch(model, data, train_loss, labels=labels, optimizer=optimizer,
-                                  batch_relation_mat=batch_relation_mat,
-                                  batch_mask=batch_mask, device=device, transform=transform, training=True)
+                    run_one_batch(model, batch, train_loss, model_kwargs={'labels': labels}, optimizer=optimizer,
+                                 device=device, transform=False, training=True)
         # loop through validation batches
         model.eval()
         with t.no_grad():
             with tqdm(val_loader, desc='val batch') as batch_pbar:
                 for b_idx, batch in enumerate(batch_pbar):
                     labels, data = batch
-                    labels = t.cat([label for label in labels], axis=0)
-                    data = t.cat([datum for datum in data], axis=0)
-                    # # Relation (adjacent frame, same trajectory)
-                    # batch_relation_mat = get_relation_tensor(relation_mat, val_ids_batch, device=device)
-                    # # Reconstruction mask
-                    # batch_mask = get_mask(mask, val_ids_batch, gpu)
-                    batch_relation_mat = None
-                    batch_mask = None
+                    labels = t.cat([label for label in labels], axis=0).to(device)
+                    data = t.cat([datum for datum in data], axis=0).to(device)
                     model, val_loss = \
-                        run_one_batch(model, data, val_loss, labels=labels, optimizer=optimizer,
-                                      batch_relation_mat=batch_relation_mat,
-                                      batch_mask=batch_mask, device=device, transform=transform, training=False)
+                        run_one_batch(model, data, val_loss, model_kwargs={'labels': labels}, optimizer=optimizer,
+                                    device=device, transform=transform, training=False)
         for key, loss in train_loss.items():
             train_loss[key] = sum(loss) / len(loss)
             writer.add_scalar('Loss/' + key, train_loss[key], epoch)
@@ -776,85 +768,66 @@ def train_adversarial(model,
     writer.close()
     return model
 
+def main(config_):
+    """
+    Args:
+        config_ (object): config file object
 
-if __name__ == '__main__':
+    Returns:
+
+    """
+    config = YamlReader()
+    config.read_config(config_)
+
+    # Settings
+    # estimate mean and std from the data
+    channel_mean = config.training.channel_mean
+    channel_std = config.training.channel_std
+
+    raw_dirs = config.training.raw_dirs
+    train_dirs = config.training.weights_dirs
+    supp_dirs = config.training.supp_dirs
+    for train_dir in train_dirs:
+        os.makedirs(train_dir, exist_ok=True)
+
     ### Settings ###
-
-    num_hiddens = 64
-    num_residual_hiddens = num_hiddens
-    num_embeddings = 512
-    commitment_cost = 0.25
-    alpha = 100
-    network = 'ResNet50'
-
-    margin = 1
-    val_split_ratio = 0.15
-    patience = 100
-    n_pos_samples = 4
-    batch_size = 768
+    network = config.training.network
+    num_inputs = config.training.num_inputs
+    num_hiddens = config.training.num_hiddens
+    num_residual_hiddens = config.training.num_residual_hiddens
+    num_residual_layers = config.training.num_residual_layers
+    num_embeddings = config.training.num_embeddings
+    commitment_cost = config.training.commitment_cost
+    weight_matching = config.training.weight_matching
+    w_a = config.training.w_a
+    w_t = config.training.w_t
+    w_n = config.training.w_n
+    margin = config.training.margin
+    val_split_ratio = config.training.val_split_ratio
+    learn_rate = config.training.learn_rate
+    patience = config.training.patience
+    n_pos_samples = config.training.n_pos_samples
+    batch_size = config.training.batch_size
     # adjusted batch size for dataloaders
     batch_size_adj = int(np.floor(batch_size/n_pos_samples))
-    gpu = 1
+    n_epochs = config.training.n_epochs
+    gpu_id = config.training.gpu_id
     # earlystop_metric = 'total_loss'
-    retrain = False
+    retrain = config.training.retrain
     earlystop_metric = 'positive_triplet'
     # model_name = 'A549_{}_mrg{}_npos{}_bh{}_alltriloss_tr'.format(
-    model_name = 'CM+kidney+A549_{}_mrg{}_npos{}_bh{}_noeasytriloss_datasetnorm'.format(
-        network, margin, n_pos_samples, batch_size)
-    # start_model_path = '/CompMicro/projects/virtualstaining/kidneyslice/2019_02_15_kidney_slice/dnm_train/CM+kidney_ResNet101_mrg1_npos4_bh512_alltriloss/model.pt'
-    start_model_path = None
-    log_step_offset = 0
-    use_mask = False
+    model_name = config.training.model_name
+    start_model_path = config.training.start_model_path
+    start_epoch = config.training.start_epoch
+    use_mask = config.training.use_mask
 
     cs = [0, 1]
     cs_mask = [2, 3]
     input_shape = (128, 128)
 
-    w_a = 1
-    w_t = 0.5
-    w_n = -0.5
+    device = t.device('cuda:%d' % gpu_id)
 
-    device = t.device('cuda:%d' % gpu)
-
-    #### cardiomyocyte data###
-    # channel_mean = [0.49998672, 0.007081]
-    # channel_std = [0.00074311, 0.00906428]
-
-    ### microglia data####
-    # channel_mean = [0.4, 0, 0.5]
-    # channel_std = [0.05, 0.05, 0.05]
-
-    ### estimate mean and std from the data ###
-    channel_mean = None
-    channel_std = None
-
-    supp_dirs = [
-                '/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_supp_tstack',
-                 '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_supp_tstack',
-                 '/CompMicro/projects/virtualstaining/kidneyslice/2019_02_15_kidney_slice/dnm_supp',
-                 '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/Mock_24h_right/dnm_supp',
-                 '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/Mock_48h_right/dnm_supp',
-                 '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/RSV_24h_right/dnm_supp',
-                 '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/RSV_48h_right/dnm_supp',
-                 ]
-    train_dirs = [
-                '/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_train_tstack',
-                  '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_train_tstack',
-                  '/CompMicro/projects/virtualstaining/kidneyslice/2019_02_15_kidney_slice/dnm_train',
-                  '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/Mock_24h_right/dnm_train',
-                  '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/Mock_48h_right/dnm_train',
-                  '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/RSV_24h_right/dnm_train',
-                  '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/RSV_48h_right/dnm_train',
-                  ]
-    raw_dirs = [
-                '/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_input_tstack',
-                '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_input_tstack',
-                '/CompMicro/projects/virtualstaining/kidneyslice/2019_02_15_kidney_slice/dnm_input',
-                '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/Mock_24h_right/dnm_input',
-                '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/Mock_48h_right/dnm_input',
-                '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/RSV_24h_right/dnm_input',
-                '/CompMicro/projects/A549/20210209_Falcon_3D_uPTI_A549_RSV_registered/RSV_48h_right/dnm_input',
-                ]
+    # use data loader for training ResNet
     use_loader = False
     if 'ResNet' in network:
         use_loader = True
@@ -900,25 +873,40 @@ if __name__ == '__main__':
     else:
         masks = None
     # dataset = zscore(dataset, channel_mean=channel_mean, channel_std=channel_std).astype(np.float32)
-
     relations, labels = concat_relations(relations, labels, offsets=id_offsets)
+    # Save the model in the train directory of the last dataset
+    model_dir = os.path.join(train_dir, model_name)
+    #TODO: write dataset class for VAE models
     if not use_loader:
         dataset = TensorDataset(t.from_numpy(dataset).float())
         dataset, relation_mat, inds_in_order = reorder_with_trajectories(dataset, relations, seed=123)
         labels = labels[inds_in_order]
         network_cls = getattr(vae, network)
-        model = network_cls(num_inputs=2,
+        model = network_cls(num_inputs=num_inputs,
                            num_hiddens=num_hiddens,
                            num_residual_hiddens=num_residual_hiddens,
-                           num_residual_layers=2,
+                           num_residual_layers=num_residual_layers,
                            num_embeddings=num_embeddings,
                            commitment_cost=commitment_cost,
-                           alpha=alpha,
+                           weight_matching=weight_matching,
                            w_a=w_a,
                            w_t=w_t,
                            w_n=w_n,
                            margin=margin,
-                           extra_loss={'Triple loss': tri_loss})
+                           device=device).to(device)
+        model = train(model,
+                      dataset,
+                      output_dir=model_dir,
+                      relation_mat=relation_mat,
+                      mask=masks,
+                      n_epochs=n_epochs,
+                      lr=learn_rate,
+                      batch_size=batch_size,
+                      device=device,
+                      transform=True,
+                      val_split_ratio=val_split_ratio,
+                      patience=patience,
+                      )
     else:
         train_set, train_labels, val_set, val_labels = \
             train_val_split(dataset, labels, val_split_ratio=val_split_ratio, seed=0)
@@ -939,38 +927,40 @@ if __name__ == '__main__':
                                   )
         tri_loss = AllTripletMiner(margin=margin).to(device)
         # tri_loss = HardNegativeTripletMiner(margin=margin).to(device)
-    ## Initialize Model ###
+        ## Initialize Model ###
+
+        model = EncodeProject(arch=network, loss=tri_loss, num_inputs=num_inputs).to(device)
+
+        if start_model_path:
+            print('Initialize the model with state {} ...'.format(start_model_path))
+            model.load_state_dict(t.load(start_model_path))
+        model = train_with_loader(model,
+                              train_loader=train_loader,
+                              val_loader=val_loader,
+                              output_dir=model_dir,
+                              n_epochs=n_epochs,
+                              lr=learn_rate,
+                              device=device,
+                              patience=patience,
+                              earlystop_metric=earlystop_metric,
+                              retrain=retrain,
+                              log_step_offset=start_epoch)
+
+def parse_args():
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        '-c', '--config',
+        type=str,
+        required=True,
+        help='path to yaml configuration file'
+    )
+
+    return parser.parse_args()
 
 
-    model = EncodeProject(arch=network, loss=tri_loss)
-    #TODO: Torchvision data augmentation does not work for Pytorch tensordataset. Rewrite with dataloader
-    #
-    # transform = transforms.Compose([
-    #     transforms.ToPILImage(),
-    #     transforms.RandomHorizontalFlip(),
-    #     transforms.RandomVerticalFlip(),
-    #     transforms.RandomRotation(180, resample=PIL.Image.BILINEAR),
-    #     transforms.ToTensor(),
-    # ])
-    # model_dir = os.path.join(train_dir, 'CM+kidney_z32_nh{}_nrh{}_ne{}_alpha{}_mrg{}_npos{}_aug_alltriloss'.format(
-    #     num_hiddens, num_residual_hiddens, num_embeddings, alpha, margin, n_pos_samples))
-    if start_model_path:
-        print('Initialize the model with state {} ...'.format(start_model_path))
-        model.load_state_dict(t.load(start_model_path))
-    model_dir = os.path.join(train_dir, model_name)
-    if device:
-        model = model.to(device)
-    # save_recon_images(val_loader, model, model_dir)
-    model = train_with_loader(model,
-                          train_loader=train_loader,
-                          val_loader=val_loader,
-                          output_dir=model_dir,
-                          relation_mat=None,
-                          mask=None,
-                          n_epochs=1000,
-                          lr=0.0001,
-                          device=device,
-                          patience=patience,
-                          earlystop_metric=earlystop_metric,
-                          retrain=retrain,
-                          log_step_offset=log_step_offset)
+if __name__ == '__main__':
+    args = parse_args()
+    main(args.config)
+

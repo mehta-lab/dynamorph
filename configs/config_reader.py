@@ -71,27 +71,35 @@ TRAINING = {
     'raw_dirs',
     'supp_dirs',
     'weights_dirs',
-    'model',
+    'network',
     'num_inputs',
     'num_hiddens',
     'num_residual_hiddens',
     'num_residual_layers',
     'num_embeddings',
-
+    'weight_matching',
+    'margin',
     'w_a',
     'w_t',
+    'w_n',
     'channel_mean',
     'channel_std',
-
     'commitment_cost',
-    'alpha',
-    'epochs',
-    'learning_rate',
+    'n_epochs',
+    'learn_rate',
     'batch_size',
-    'gpus',
-    'gpu_id',
+    'val_split_ratio',
     'shuffle_data',
     'transform',
+    'patience',
+    'n_pos_samples',
+    'gpu_id',
+    'start_model_path',
+    'retrain',
+    'start_epoch',
+    'earlystop_metric',
+    'model_name',
+    'use_mask',
 }
 
 
@@ -116,7 +124,7 @@ class YamlReader(Object):
         with open(yml_config, 'r') as f:
             self.config = yaml.load(f)
 
-            self._parse_files()
+            # self._parse_files()
             self._parse_preprocessing()
             self._parse_patch()
             self._parse_inference()

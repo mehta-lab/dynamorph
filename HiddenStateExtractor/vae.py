@@ -233,7 +233,6 @@ class VQ_VAE_z16(nn.Module):
                  w_t=0.1,
                  w_n=-0.5,
                  margin=0.5,
-                 gpu=True,
                  **kwargs):
         """ Initialize the model
 
@@ -358,13 +357,13 @@ class VQ_VAE_z32(nn.Module):
                  num_embeddings=64,
                  commitment_cost=0.25,
                  channel_var=np.ones(2),
-                 alpha=0.005,
+                 weight_matching=0.005,
                  w_a=1.1,
                  w_t=0.1,
                  w_n=-0.5,
                  margin=0.5,
                  extra_loss=None,
-                 gpu=True,
+                 device="cuda:0",
                  **kwargs):
         """ Initialize the model
 
@@ -394,7 +393,7 @@ class VQ_VAE_z32(nn.Module):
         self.num_embeddings = num_embeddings
         self.commitment_cost = commitment_cost
         self.channel_var = nn.Parameter(t.from_numpy(channel_var).float().reshape((1, num_inputs, 1, 1)), requires_grad=False)
-        self.alpha = alpha
+        self.weight_matching = weight_matching
         self.w_a = w_a
         self.w_t = w_t
         self.w_n = w_n
@@ -406,7 +405,7 @@ class VQ_VAE_z32(nn.Module):
             nn.Conv2d(self.num_hiddens // 2, self.num_hiddens, 4, stride=2, padding=1),
             nn.BatchNorm2d(self.num_hiddens),
             ResidualBlock(self.num_hiddens, self.num_residual_hiddens, self.num_residual_layers))
-        self.vq = VectorQuantizer(self.num_hiddens, self.num_embeddings, commitment_cost=self.commitment_cost, gpu=gpu)
+        self.vq = VectorQuantizer(self.num_hiddens, self.num_embeddings, commitment_cost=self.commitment_cost, device=device)
         self.dec = nn.Sequential(
             ResidualBlock(self.num_hiddens, self.num_residual_hiddens, self.num_residual_layers),
             nn.ConvTranspose2d(self.num_hiddens, self.num_hiddens // 2, 4, stride=2, padding=1),
@@ -455,7 +454,7 @@ class VQ_VAE_z32(nn.Module):
             time_matching_loss[time_matching_mat == 0] = \
                 t.clamp(time_matching_loss.clone()[time_matching_mat == 0] + self.margin, min=0)
             time_matching_loss = time_matching_loss.mean()
-            total_loss += time_matching_loss * self.alpha
+            total_loss += time_matching_loss * self.weight_matching
         loss_dict = {'recon_loss': recon_loss,
                  'commitment_loss': c_loss,
                  'time_matching_loss': time_matching_loss,
@@ -468,7 +467,6 @@ class VQ_VAE_z32(nn.Module):
                 total_loss += extra_loss * self.alpha
                 loss_dict['total_loss'] = total_loss
                 loss_dict[loss_name] = extra_loss
-                # print('frac_pos:', frac_pos)
         return decoded, loss_dict
 
     def predict(self, inputs):
@@ -518,6 +516,10 @@ class VAE(nn.Module):
         self.weight_recon = weight_recon
         self.weight_kld = weight_kld
         self.weight_matching = weight_matching
+        self.w_a = w_a
+        self.w_t = w_t
+        self.w_n = w_n
+        self.margin = margin
         self.enc = nn.Sequential(
             nn.Conv2d(self.num_inputs, self.num_hiddens//2, 1),
             nn.Conv2d(self.num_hiddens//2, self.num_hiddens//2, 4, stride=2, padding=1),
@@ -736,6 +738,10 @@ class AAE(nn.Module):
         self.channel_var = nn.Parameter(t.from_numpy(channel_var).float().reshape((1, num_inputs, 1, 1)), requires_grad=False)
         self.weight_recon = weight_recon
         self.weight_matching = weight_matching
+        self.w_a = w_a
+        self.w_t = w_t
+        self.w_n = w_n
+        self.margin = margin
         self.enc = nn.Sequential(
             nn.Conv2d(self.num_inputs, self.num_hiddens//2, 1),
             nn.Conv2d(self.num_hiddens//2, self.num_hiddens//2, 4, stride=2, padding=1),

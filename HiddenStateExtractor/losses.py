@@ -6,6 +6,7 @@ from typing import Tuple
 
 class TripletMiner(nn.Module):
     """Triplet Miner
+    Adapted from https://github.com/TowardHumanizedInteraction/TripletTorch
     Tripelt Mining base class.
     Attributes
     ----------
@@ -29,7 +30,7 @@ class TripletMiner(nn.Module):
             self: 'TripletMiner',
             embeddings: torch.Tensor
     ) -> torch.Tensor:
-        """PairWiseDist
+        """compute pairwise euclidean distances
         Parameters
         ----------
         embeddings: torch.Tensor
