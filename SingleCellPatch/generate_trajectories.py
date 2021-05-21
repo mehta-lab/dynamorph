@@ -445,10 +445,20 @@ def process_well_generate_trajectory_relations(fs,
     """ Find pair relations (adjacent frame, same trajectory) in static patches
     Results will be saved under `raw_folder`
 
+    used by run_vae.py -m "assemble" to generate relations used by matching loss in vae training
+
+    "relations" is a dictionary of (key, value) = ((patch_id, patch_id), 2),
+        where 2 is the value for "adjacent frame, same trajectory"
+        where 1 is the value for "non-adjacent frame, same trajectory"
+        and where 0 is the value for "different trajectory"
+
     Args:
         fs (list of str): all individual cell patch names
         sites (list of str): sites (from the same well)
         well_supp_files_folder (str): path to save supplementary data
+
+    Returns:
+        relations, labels:
     """
 
     assert len(set(s[:2] for s in sites)) == 1 # Sites should all come from the same well
@@ -462,13 +472,18 @@ def process_well_generate_trajectory_relations(fs,
         cell_id = int(f[-1].split('_')[1].split('.')[0])
         return (site_name, t_point, cell_id)
     patch_id_mapping = {patch_name_to_tuple(f): i for i, f in enumerate(fs)}
+
     # initialize label vector for patches
     labels = -1 * np.ones(len(fs), dtype=np.int32)
+
     # set diagonal relation
     relations = {(patch_id, patch_id): 2 for patch_id in range(len(fs))}
+
     label_count = 0
     for site in sites:
         print('site:', site)
+
+        # trajectories is a list of dict, with each dict (key, value) = (timepoint, cell_id)
         trajectories = pickle.load(open(os.path.join(well_supp_files_folder,
                                                      site,
                                                      "cell_traj.pkl"), 'rb'))[0]
@@ -476,6 +491,7 @@ def process_well_generate_trajectory_relations(fs,
             t_ids = sorted(trajectory.keys())
             patch_ids = []
             for t_idx in t_ids:
+
                 # get reference patch ID
                 assert (site, t_idx, trajectory[t_idx]) in patch_id_mapping, "Cannot find /%s/%d_%d" % (site, t_idx, trajectory[t_idx])
                 ref_patch_id = patch_id_mapping[(site, t_idx, trajectory[t_idx])]
@@ -485,12 +501,15 @@ def process_well_generate_trajectory_relations(fs,
                     adj_patch_id = patch_id_mapping[(site, t_idx + 1, trajectory[t_idx + 1])]
                     relations[(ref_patch_id, adj_patch_id)] = 2
                     relations[(adj_patch_id, ref_patch_id)] = 2
+
             # Same trajectory
             for i in patch_ids:
                 for j in patch_ids:
                     if not (i, j) in relations:
                         relations[(i, j)] = 1
             label_count += 1
+
     # assign labels to orphan patches
     labels[labels == -1] = np.arange(label_count, label_count + len(labels[labels == -1]))
+
     return relations, labels
