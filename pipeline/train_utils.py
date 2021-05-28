@@ -248,3 +248,27 @@ def zscore(input_image, channel_mean=None, channel_std=None):
     print('channel_mean:', channel_mean)
     print('channel_std:', channel_std)
     return norm_img
+
+def zscore_patch(imgs):
+    """
+    Performs z-score normalization. Adds epsilon in denominator for robustness
+
+    :param input_image: input image for intensity normalization
+    :return: z score normalized image
+    """
+    means = np.mean(imgs, axis=(2, 3))
+    stds = np.std(imgs, axis=(2, 3))
+    imgs_norm = []
+    for img_chan, channel_mean, channel_std in zip(imgs, means, stds):
+        channel_slices = []
+        for img, mean, std in zip(img_chan, channel_mean, channel_std):
+            channel_slice = (img - mean) / \
+                            (std + np.finfo(float).eps)
+            # channel_slice = t.clamp(channel_slice, -1, 1)
+            channel_slices.append(channel_slice)
+        channel_slices = np.stack(channel_slices)
+        imgs_norm.append(channel_slices)
+    imgs_norm = np.stack(imgs_norm)
+    # print('channel_mean:', channel_mean)
+    # print('channel_std:', channel_std)
+    return imgs_norm

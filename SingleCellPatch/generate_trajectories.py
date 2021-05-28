@@ -318,6 +318,7 @@ def generate_trajectories(matchings, positions_dict, intensities_dict):
     # Second pass: connect gap, account for cell merging/splitting (TODO)
     trajectories = trajectory_connection(trajectories, trajectories_positions, intensities_dict, dist_cutoff=100., only_gap=True)
     # Only select long trajectories
+    # TODO: expose the minimal trajectory length in the config
     trajectories = [t for t in trajectories if len(t) > 10]
     trajectories_positions = [{t_point: positions_dict[t_point][t[t_point]] for t_point in t} for t in trajectories]
     return trajectories, trajectories_positions

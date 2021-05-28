@@ -16,10 +16,11 @@ class Worker(Process):
 
     def run(self):
         if self.method == 'assemble':
-            assemble_VAE(*self.inputs)
-            # assemble_VAE(*self.inputs, patch_type='mat')
+            # assemble_VAE(*self.inputs)
+            #TODO: make "patch_type" part of the config
+            assemble_VAE(*self.inputs, patch_type='mat')
         elif self.method == 'process':
-            process_VAE(*self.inputs)
+            process_VAE(*self.inputs, gpu=self.gpuid)
         elif self.method == 'trajectory_matching':
             trajectory_matching(*self.inputs)
 
@@ -32,7 +33,7 @@ def main(method_, raw_dir_, supp_dir_, config_):
     weights = config_.inference.weights
     # channels = config_.inference.channels
     # network = config_.inference.model
-    gpu_id = config_.inference.gpu_id
+    gpu_ids = config_.inference.gpu_ids
 
     # assert len(channels) > 0, "At least one channel must be specified"
 
@@ -68,13 +69,13 @@ def main(method_, raw_dir_, supp_dir_, config_):
 
     wells = set(s[:2] for s in sites)
     mp.set_start_method('spawn', force=True)
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
-    print("CUDA_VISIBLE_DEVICES=" + os.environ["CUDA_VISIBLE_DEVICES"])
+    # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    # os.environ['CUDA_VISIBLE_DEVICES'] = ','.join([str(i) for i in gpu_ids])
+    # print("CUDA_VISIBLE_DEVICES=" + os.environ["CUDA_VISIBLE_DEVICES"])
     for i, well in enumerate(wells):
         well_sites = [s for s in sites if s[:2] == well]
         args = (inputs, outputs, well_sites, config_)
-        p = Worker(args, gpuid=gpu_id, method=method)
+        p = Worker(args, gpuid=gpu_ids[0], method=method)
         p.start()
         p.join()
 

@@ -12,7 +12,7 @@ from torch.utils.data import TensorDataset
 from SingleCellPatch.extract_patches import process_site_extract_patches, im_adjust
 from SingleCellPatch.generate_trajectories import process_site_build_trajectory, process_well_generate_trajectory_relations
 
-from pipeline.train_utils import zscore
+from pipeline.train_utils import zscore, zscore_patch
 import HiddenStateExtractor.vae as vae
 import HiddenStateExtractor.resnet as resnet
 from HiddenStateExtractor.vq_vae_supp import prepare_dataset_v2, vae_preprocess
@@ -66,6 +66,7 @@ def extract_patches(raw_folder: str,
                                          site_segmentation_path, 
                                          site_supp_files_folder,
                                          window_size=window_size,
+                                         channels=channels,
                                          save_fig=save_fig,
                                          reload=reload,
                                          skip_boundary=skip_boundary,
@@ -153,7 +154,7 @@ def assemble_VAE(raw_folder: str,
         dat_fs.extend([os.path.join(supp_files_folder, f) \
             for f in os.listdir(supp_files_folder) if f.startswith('stacks')])
 
-    dataset, fs = prepare_dataset_v2(dat_fs, cs=channels, key=patch_type)
+    dataset, fs = prepare_dataset_v2(dat_fs, channels=channels, key=patch_type)
     assert fs == sorted(fs)
     
     print(f"\tsaving {os.path.join(raw_folder, '%s_file_paths.pkl' % well)}")
@@ -385,6 +386,7 @@ def process_VAE(raw_folder: str,
 
     # these sites should be from a single condition (C5, C4, B-wells, etc..)
     model_dir = os.path.dirname(model_path)
+    #TODO: add model_name to the config. Set the default to be the same as model folder name
     model_name = os.path.basename(model_dir)
     # output_dir = os.path.join(summary_folder, model_name + '_pool_norm')
     output_dir = os.path.join(raw_folder, model_name)
@@ -416,17 +418,13 @@ def process_VAE(raw_folder: str,
     fs = pickle.load(open(os.path.join(raw_folder, '%s_file_paths.pkl' % well), 'rb'))
     print(f"\tloading static patches {os.path.join(raw_folder, '%s_static_patches.pkl' % well)}")
     dataset = pickle.load(open(os.path.join(raw_folder, '%s_static_patches.pkl' % well), 'rb'))
-    dataset = zscore(dataset, channel_mean=channel_mean, channel_std=channel_std)
+    # dataset = zscore(np.squeeze(dataset), channel_mean=channel_mean, channel_std=channel_std)
+    dataset = zscore_patch(np.squeeze(dataset))
     dataset = TensorDataset(torch.from_numpy(dataset).float())
-    if len(dataset.tensors[0].shape) == 4:  # old 4D format
-        _, n_channels, x_size, y_size = dataset.tensors[0].shape
-    elif len(dataset.tensors[0].shape) == 5:  # 5D format
-        _, n_channels, n_z, x_size, y_size = dataset.tensors[0].shape
-
-    else:
-        raise ValueError(
-            "dataset tensor dimension can only be 4 or 5, not {}".format(len(dataset.tensors[0].shape)))
+    assert len(dataset.tensors[0].shape) == 4, "dataset tensor dimension can only be 4, not {}".format(len(dataset.tensors[0].shape))
+    _, n_channels, x_size, y_size = dataset.tensors[0].shape
     device = torch.device('cuda:%d' % gpu)
+    print('Encoding images using gpu {}...'.format(gpu))
     if 'VAE' in network:
         network_cls = getattr(vae, network)
         model = network_cls(num_inputs=2,
@@ -498,7 +496,7 @@ def process_VAE(raw_folder: str,
         model = network_cls(arch=network)
         model = model.to(device)
         # print(model)
-        model.load_state_dict(torch.load(model_path))
+        model.load_state_dict(torch.load(model_path, map_location=device))
         model.eval()
         # tri_val_set = TripletDataset(val_labels, lambda index: val_set[index], n_pos_samples)
         h_s = []

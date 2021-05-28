@@ -112,7 +112,7 @@ def prepare_dataset_from_collection(fs,
     return dataset
 
 def prepare_dataset_v2(dat_fs,
-                       cs=[0, 1],
+                       channels=None,
                        input_shape=(128, 128),
                        key='masked_mat'):
     """ Prepare input dataset for VAE
@@ -121,7 +121,7 @@ def prepare_dataset_v2(dat_fs,
 
     Args:
         dat_fs (list of str): list of pickle file paths
-        cs (list of int, optional): channels in the input
+        channels (list of int, optional): channels in the input
         input_shape (tuple, optional): input shape (height and width only)
         key (str): 'mat' or 'masked_mat'
 
@@ -136,9 +136,9 @@ def prepare_dataset_v2(dat_fs,
         file_dats = pickle.load(open(dat_f, 'rb'))
         for k in file_dats:
             dat = file_dats[k][key]
-            if cs is None:
-                cs = np.arange(dat.shape[0])
-            dat = np.array(dat)[np.array(cs)].astype(float)
+            if channels is None:
+                channels = np.arange(dat.shape[0])
+            dat = np.array(dat)[np.array(channels)].astype(float)
             resized_dat = cv2_fn_wrapper(cv2.resize, dat, input_shape)
             tensors[k] = resized_dat
     ts_keys = sorted(tensors.keys())

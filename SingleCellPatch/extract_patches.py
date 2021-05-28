@@ -37,34 +37,34 @@ def cv2_fn_wrapper(cv2_fn, mat, *args, **kwargs):
     return output
 
 
-def select_window(mat, window, padding=0., skip_boundary=False):
-    """ Extract submatrix
+def select_window(img, window, padding=0., skip_boundary=False):
+    """ Extract image patch
 
-    Submatrix of `window` will be extracted from `mat`,
+    Patch of `window` will be extracted from `img`,
     negative boundaries are allowed (padded)
     
     Args:
-        mat (np.array): target matrix, size should be (c, z(1), x(2048), y(2048))
+        img (np.array): target image, size should be (c, z(1), x(2048), y(2048))
             TODO: size is hardcoded now
-        window (tuple): area-of-interest for submatrix, ((int, int), (int, int))
+        window (tuple): area-of-interest for the patch, ((int, int), (int, int))
             in the form of ((x_low, x_up), (y_low, y_up))
         padding (float, optional): padding value for negative boundaries
         skip_boundary (bool, optional): if to skip patches whose edges exceed
             the image size (do not pad)
 
     Returns:
-        np.array: submatrix-of-interest
+        np.array: patch-of-interest
     
     """
-    if len(mat.shape) == 4:
-        n_channels, n_z, x_full_size, y_full_size = mat.shape
-    elif len(mat.shape) == 3:
-        n_channels, x_full_size, y_full_size = mat.shape
+    if len(img.shape) == 4:
+        n_channels, n_z, x_full_size, y_full_size = img.shape
+    elif len(img.shape) == 3:
+        n_channels, x_full_size, y_full_size = img.shape
         # add a z axis
-        mat = np.expand_dims(mat, 1)
+        img = np.expand_dims(img, 1)
     else:
         raise NotImplementedError("window must be extracted from raw data of 3 or 4 dims")
-    # print(f"\nwindow selection, mat.shape = {mat.shape}\twindow.shape = {window}")
+    # print(f"\nwindow selection, img.shape = {img.shape}\twindow.shape = {window}")
 
     if skip_boundary and ((window[0][0] < 0) or
                           (window[1][0] < 0) or
@@ -73,23 +73,23 @@ def select_window(mat, window, padding=0., skip_boundary=False):
         return None
 
     if window[0][0] < 0:
-        output_mat = np.concatenate([padding * np.ones_like(mat[:, :, window[0][0]:]),
-                                     mat[:, :, :window[0][1]]], 2)
+        output_img = np.concatenate([padding * np.ones_like(img[:, :, window[0][0]:]),
+                                     img[:, :, :window[0][1]]], 2)
     elif window[0][1] > x_full_size:
-        output_mat = np.concatenate([mat[:, :, window[0][0]:],
-                                     padding * np.ones_like(mat[:, :, :(window[0][1] - x_full_size)])], 2)
+        output_img = np.concatenate([img[:, :, window[0][0]:],
+                                     padding * np.ones_like(img[:, :, :(window[0][1] - x_full_size)])], 2)
     else:
-        output_mat = mat[:, :, window[0][0]:window[0][1]]
+        output_img = img[:, :, window[0][0]:window[0][1]]
 
     if window[1][0] < 0:
-        output_mat = np.concatenate([padding * np.ones_like(output_mat[..., window[1][0]:]),
-                                     output_mat[..., :window[1][1]]], 3)
+        output_img = np.concatenate([padding * np.ones_like(output_img[..., window[1][0]:]),
+                                     output_img[..., :window[1][1]]], 3)
     elif window[1][1] > y_full_size:
-        output_mat = np.concatenate([output_mat[..., window[1][0]:],
-                                     padding * np.ones_like(output_mat[..., :(window[1][1] - y_full_size)])], 3)
+        output_img = np.concatenate([output_img[..., window[1][0]:],
+                                     padding * np.ones_like(output_img[..., :(window[1][1] - y_full_size)])], 3)
     else:
-        output_mat = output_mat[..., window[1][0]:window[1][1]]
-    return output_mat
+        output_img = output_img[..., window[1][0]:window[1][1]]
+    return output_img
 
 
 # filter 1 is for the masking of surrounding cells
@@ -157,6 +157,7 @@ def process_site_extract_patches(site_path,
                                  site_segmentation_path, 
                                  site_supp_files_folder,
                                  window_size=256,
+                                 channels=None,
                                  save_fig=False,
                                  reload=True,
                                  skip_boundary=False,
@@ -176,6 +177,7 @@ def process_site_extract_patches(site_path,
         site_supp_files_folder (str): path to the folder where supplementary 
             files will be saved
         window_size (int, optional): default=256, x, y size of the patch
+        channels (list, optional): channels to extract patches. Default is all the channels
         save_fig (bool, optional): if to save extracted patches (with
             segmentation mask)
         reload (bool, optional): if to load existing stack dat files
@@ -186,6 +188,9 @@ def process_site_extract_patches(site_path,
 
     # Load data
     image_stack = np.load(site_path)
+    if channels is None:
+        channels = list(range(len(image_stack)))
+    image_stack = image_stack[channels]
     segmentation_stack = np.load(site_segmentation_path)
     with open(os.path.join(site_supp_files_folder, 'cell_positions.pkl'), 'rb') as f:
         cell_positions = pickle.load(f)

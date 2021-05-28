@@ -92,6 +92,7 @@ def segmentation(raw_folder_: str,
 
 def instance_segmentation(raw_folder: str,
                           supp_folder: str,
+                          val_dir: str,
                           sites: list,
                           config_: YamlReader,
                           rerun=False,

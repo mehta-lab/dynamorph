@@ -19,6 +19,7 @@ import logging
 # INFO
 # DEBUG
 # NOTSET
+#TODO: Save log file to train or supp folders
 logging.basicConfig(
     level=logging.INFO,
     format="[%(levelname)4s: %(module)s:%(lineno)4s %(asctime)s] %(message)s",
@@ -112,6 +113,7 @@ TRAINING = {
     'transform',
     'patience',
     'n_pos_samples',
+    'num_workers',
     'gpu_id',
     'start_model_path',
     'retrain',

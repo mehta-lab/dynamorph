@@ -15,7 +15,7 @@ from scipy.sparse import csr_matrix
 
 from HiddenStateExtractor.vae import CHANNEL_MAX
 from SingleCellPatch.extract_patches import im_adjust, cv2_fn_wrapper
-from pipeline.train_utils import EarlyStopping, TripletDataset, zscore
+from pipeline.train_utils import EarlyStopping, TripletDataset, zscore, zscore_patch
 from HiddenStateExtractor.losses import AllTripletMiner
 from HiddenStateExtractor.resnet import EncodeProject
 import HiddenStateExtractor.vae as vae
@@ -810,6 +810,7 @@ def main(config_):
     batch_size = config.training.batch_size
     # adjusted batch size for dataloaders
     batch_size_adj = int(np.floor(batch_size/n_pos_samples))
+    num_workers = config.training.num_workers
     n_epochs = config.training.n_epochs
     gpu_id = config.training.gpu_id
     # earlystop_metric = 'total_loss'
@@ -916,13 +917,13 @@ def main(config_):
         train_loader = DataLoader(tri_train_set,
                                     batch_size=batch_size_adj,
                                     shuffle=True,
-                                    num_workers=2,
+                                    num_workers=num_workers,
                                     pin_memory=False,
                                     )
         val_loader = DataLoader(tri_val_set,
                                   batch_size=batch_size_adj,
                                   shuffle=False,
-                                  num_workers=2,
+                                  num_workers=num_workers,
                                   pin_memory=False,
                                   )
         tri_loss = AllTripletMiner(margin=margin).to(device)

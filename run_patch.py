@@ -30,9 +30,6 @@ def main(method_, raw_dir_, supp_dir_, config_):
     method = method_
     fov = config.patch.fov
 
-    channels = config.patch.channels
-    assert len(channels) > 0, "At least one channel must be specified"
-
     n_cpus = config.patch.num_cpus
 
     # extract patches needs raw (NN probs, stack), supp (cell_positions, cell_pixel_assignments)
