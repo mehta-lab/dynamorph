@@ -40,7 +40,12 @@ SEGMENTATION = {
     'weights',
     'gpu_ids',
     'channels',
-    'fov'
+    'fov',
+
+    'num_classes',
+    'window_size',
+    'batch_size',
+    'num_pred_rnd'
 }
 
 PATCH = {

@@ -47,19 +47,19 @@ def segmentation(raw_folder_: str,
 
     """
 
-    weights = config_.inference.weights
-    n_classes = config_.inference.num_classes
-    channels = config_.inference.channels
-    window_size = config_.inference.window_size
-    batch_size = config_.inference.batch_size
-    n_supp = config_.inference.num_pred_rnd
+    weights = config_.segmentation.weights
+    n_classes = config_.segmentation.num_classes
+    channels = config_.segmentation.channels
+    window_size = config_.segmentation.window_size
+    batch_size = config_.segmentation.batch_size
+    n_supp = config_.segmentation.num_pred_rnd
 
-    if config_.inference.model == 'UNet':
+    if config_.segmentation.model == 'UNet':
         model = Segment(input_shape=(len(channels),
                                      window_size,
                                      window_size), n_classes=n_classes)
     else:
-        raise NotImplementedError(f"segmentation model {config_.inference.model} not implemented")
+        raise NotImplementedError(f"segmentation model {config_.segmentation.model} not implemented")
 
     try:
         if weights:
