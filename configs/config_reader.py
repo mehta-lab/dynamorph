@@ -2,13 +2,6 @@ import yaml
 import logging
 
 
-# def log_warning(msg, *args, **kwargs):
-#     """Log message with level WARNING."""
-#     # import logging
-#
-#     logging.getLogger(__name__).warning(msg, *args, **kwargs)
-
-
 # replicate from aicsimageio logging mechanism
 ###############################################################################
 
@@ -28,13 +21,6 @@ log = logging.getLogger(__name__)
 ###############################################################################
 
 # to add a new configuration parameter, simply add the string to the appropriate set here
-# FILES = {
-#     'raw_dirs',
-#     'supp_dirs',
-#     'train_dirs',
-#     'val_dirs',
-#     'weights_dir'
-# }
 
 PREPROCESS = {
     'image_dirs',
@@ -44,6 +30,17 @@ PREPROCESS = {
     'pos_dir',
     'multipage',
     'z_slice',
+}
+
+SEGMENTATION = {
+    'raw_dirs',
+    'supp_dirs',
+    'validation_dirs',
+    'model',
+    'weights',
+    'gpu_ids',
+    'channels',
+    'fov'
 }
 
 PATCH = {
@@ -126,6 +123,7 @@ class YamlReader(Object):
         # easy way to assign attributes to each category
         # self.files = Object()
         self.preprocess = Object()
+        self.segmentation = Object()
         self.patch = Object()
         self.inference = Object()
         self.dim_reduction = Object()
@@ -142,19 +140,19 @@ class YamlReader(Object):
             self._parse_dim_reduction()
             self._parse_training()
 
-    # def _parse_files(self):
-    #     for key, value in self.config['files'].items():
-    #         if key in FILES:
-    #             setattr(self.files, key, value)
-    #         else:
-    #             log_warning(f"yaml FILE config field {key} is not recognized")
-
     def _parse_preprocessing(self):
         for key, value in self.config['preprocess'].items():
             if key in PREPROCESS:
                 setattr(self.preprocess, key, value)
             else:
                 log.warning(f"yaml PREPROCESS config field {key} is not recognized")
+
+    def _parse_segmentation(self):
+        for key, value in self.config['segmentation'].items():
+            if key in SEGMENTATION:
+                setattr(self.segmentation, key, value)
+            else:
+                log.warning(f"yaml SEGMENTATION config field {key} is not recognized")
 
     def _parse_patch(self):
         for key, value in self.config['patch'].items():

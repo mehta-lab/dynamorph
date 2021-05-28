@@ -25,6 +25,14 @@ preprocess:
   pos_dir: True
   # whether each position is in a subdirectory (True), or in the same directory (False)
 
+segmentation:
+  raw_dirs:
+  supp_dirs:
+  validation_dirs:
+  weights:
+  gpu_ids:
+  channels: [0,1]
+  fov:
 
 patch:
   raw_dirs:

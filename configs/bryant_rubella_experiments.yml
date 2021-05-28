@@ -2,7 +2,6 @@
 
 preprocess:
   image_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/20191107_1209_1_GW23/blank_bg_stabilized']
-
   target_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/raw']
 
   channels: ["Phase2D", "Retardance"]
@@ -21,6 +20,16 @@ preprocess:
   # if singlepage tiffs with z-stacks, select the z-slice to stack
 
 
+segmentation:
+  raw_dirs:
+  supp_dirs:
+  validation_dirs:
+  model: 'UNet'
+  weights: '/Volumes/comp_micro/projects/dynamorph/model_save/final_reformat.pt'
+  gpu_ids: 0
+  fov: ['C4-Site_0']
+
+
 patch:
   raw_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/seg_test/raw']
   supp_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/seg_test/supp']
@@ -37,20 +46,11 @@ patch:
 
 inference:
   raw_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/raw']
-
   supp_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/supp']
-
   val_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/val']
-
   model: 'VQ_VAE_z16'
-#  model: "UNet"
-  # VQ_VAE_z16 or UNet
-
-#  weights: '/Volumes/comp_micro/projects/dynamorph/model_save/final_reformat.pt'
   weights: '/gpfs/CompMicro/projects/dynamorph/model_save/VQVAE_save.pt'
-
   save_output: True
-  # for vae-process, True if you want to write .jpg of reconstructions.
 
   gpu_ids: 3
 #  fov: ['C4-Site_0']
