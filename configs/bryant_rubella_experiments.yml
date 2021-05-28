@@ -29,6 +29,11 @@ segmentation:
   gpu_ids: 0
   fov: ['C4-Site_0']
 
+  num_classes:
+  window_size:
+  batch_size:
+  num_pred_rnd:
+
 
 patch:
   raw_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/seg_test/raw']

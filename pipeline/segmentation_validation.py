@@ -81,8 +81,8 @@ def segmentation_validation_michael(raw_folder_ : str,
 
     temp_folder = raw_folder_
     supp_folder = supp_folder_
-    category = config_.inference.seg_val_cat
-    gpu_id = config_.inference.gpu_id
+    category = config_.segmentation.seg_val_cat
+    gpu_id = config_.segmentation.gpu_id
 
     if "NOVEMBER" in temp_folder:
         date = "NOVEMBER"
