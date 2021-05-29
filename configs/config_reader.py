@@ -19,6 +19,7 @@ import logging
 # INFO
 # DEBUG
 # NOTSET
+#TODO: Save log file to train or supp folders
 logging.basicConfig(
     level=logging.INFO,
     format="[%(levelname)4s: %(module)s:%(lineno)4s %(asctime)s] %(message)s",
@@ -90,27 +91,36 @@ TRAINING = {
     'raw_dirs',
     'supp_dirs',
     'weights_dirs',
-    'model',
+    'network',
     'num_inputs',
     'num_hiddens',
     'num_residual_hiddens',
     'num_residual_layers',
     'num_embeddings',
-
+    'weight_matching',
+    'margin',
     'w_a',
     'w_t',
+    'w_n',
     'channel_mean',
     'channel_std',
-
     'commitment_cost',
-    'alpha',
-    'epochs',
-    'learning_rate',
+    'n_epochs',
+    'learn_rate',
     'batch_size',
-    'gpus',
-    'gpu_id',
+    'val_split_ratio',
     'shuffle_data',
     'transform',
+    'patience',
+    'n_pos_samples',
+    'num_workers',
+    'gpu_id',
+    'start_model_path',
+    'retrain',
+    'start_epoch',
+    'earlystop_metric',
+    'model_name',
+    'use_mask',
 }
 
 

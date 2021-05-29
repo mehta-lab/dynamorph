@@ -7,6 +7,7 @@ import matplotlib
 matplotlib.use('AGG')
 import matplotlib.pyplot as plt
 import umap
+from pipeline.train_utils import zscore
 
 def fit_PCA(train_data, weights_dir, labels, conditions):
     """ Fit a PCA model accounting for top 50% variance to the train_data,
@@ -129,7 +130,7 @@ def zoom_axis(x, y, ax, zoom_cutoff=1):
     ax.set_xlim(left=xlim[0], right=xlim[1])
     ax.set_ylim(bottom=ylim[0], top=ylim[1])
 
-def fit_umap(train_data, weights_dir, labels, conditions, n_nbrs=(15, 50, 200, 1000), a_s=(1.58,), b_s=(0.9,)):
+def fit_umap(train_data, weights_dir, labels, conditions, n_nbrs=(15, 50, 200), a_s=(1.58,), b_s=(0.9,)):
     """Fit UMAP model to latent vectors and save the reduced vectors (embeddings), output UMAP plot
     Args:
         train_data (np.array): 2D array of training data (samples, features),
@@ -154,11 +155,12 @@ def fit_umap(train_data, weights_dir, labels, conditions, n_nbrs=(15, 50, 200, 1
     """
     #TODO: Find a way to save umap models gernerated with version >= 0.5
     n_plots = len(n_nbrs) * len(a_s) * len(b_s)
-    n_rows = int(np.round(np.sqrt(n_plots)))
-    n_cols = int(np.ceil(np.sqrt(n_plots)))
+    # n_cols = int(np.ceil(np.sqrt(n_plots)))
+    n_cols = 3
+    n_rows = int(n_plots // n_cols)
     fig, ax = plt.subplots(n_rows, n_cols, squeeze=False)
     ax = ax.flatten()
-    fig.set_size_inches((5 * n_cols, 5 * n_rows))
+    fig.set_size_inches((6.5 * n_cols, 5 * n_rows))
     axis_count = 0
     # top and bottom % of data to cut off
     zoom_cutoff = 1
@@ -170,6 +172,7 @@ def fit_umap(train_data, weights_dir, labels, conditions, n_nbrs=(15, 50, 200, 1
             embedding = reducer.fit_transform(train_data)
             print('Saving UMAP model {}...'.format(weights_dir))
             with open(os.path.join(weights_dir, 'umap_nbr{}_a{}_b{}.pkl'.format(n_nbr, a, b)), 'wb') as f:
+            # with open(os.path.join(weights_dir, 'umap_nbr{}_a{}_b{}_pool_norm.pkl'.format(n_nbr, a, b)), 'wb') as f:
                 pickle.dump([embedding, labels], f, protocol=4)
             scatter = ax[axis_count].scatter(embedding[:, 0], embedding[:, 1], s=7, c=labels,
                                              facecolors='none', cmap='Paired', alpha=0.1)
@@ -177,14 +180,19 @@ def fit_umap(train_data, weights_dir, labels, conditions, n_nbrs=(15, 50, 200, 1
             ax[axis_count].set_title('n_neighbors={}'.format(n_nbr), fontsize=12)
             # ax[axis_count].set_title('a={}, b={}'.format(a, b), fontsize=12)
             zoom_axis(embedding[:, 0], embedding[:, 1], ax[axis_count], zoom_cutoff=zoom_cutoff)
-            if axis_count == 0:
-                legend1 = ax[axis_count].legend(handles=scatter.legend_elements()[0],
-                                                loc="upper right", title="condition", labels=conditions)
+            if axis_count == (len(ax)-1):
+                leg = ax[axis_count].legend(handles=scatter.legend_elements()[0],
+                                                title="condition", labels=conditions,
+                                                loc='center left', bbox_to_anchor=(1, 0.5),
+                                                fontsize='small')
+                for lh in leg.legendHandles:
+                    lh._legmarker.set_alpha(1)
             ax[axis_count].set_xlabel('UMAP 1')
             ax[axis_count].set_ylabel('UMAP 2')
 
             axis_count += 1
             fig.savefig(os.path.join(weights_dir, 'UMAP.png'),
+            # fig.savefig(os.path.join(weights_dir, 'UMAP_pool_norm.png'),
                         dpi=300, bbox_inches='tight')
     plt.close(fig)
 
@@ -194,6 +202,7 @@ def dim_reduction(input_dirs,
                   method,
                   fit_model,
                   prefix=None,
+                  postfix=None,
                   conditions=None):
     """
     Wrapper fucntion for dimensionality reduction, save the reduced vectors (embeddings),
@@ -215,8 +224,13 @@ def dim_reduction(input_dirs,
     if not output_dirs:
         output_dirs = input_dirs
     assert len(output_dirs) == len(input_dirs), 'Numbers of input and output directories must have match.'
+    fname = 'latent_space'
+    # fname = 'static_patches'
     if prefix is not None:
-        fname = '_'.join([prefix, 'latent_space_after.pkl'])
+        fname = '_'.join([prefix, fname])
+    if postfix is not None:
+        fname = '_'.join([fname, postfix])
+    fname += '.pkl'
     if method == 'pca':
         fit_func = fit_PCA
         transform_func = process_PCA
@@ -237,7 +251,8 @@ def dim_reduction(input_dirs,
         label = 0
         for input_dir in input_dirs:
             vec = pickle.load(open(os.path.join(input_dir, fname), 'rb'))
-            vector_list.append(vec)
+            # vec = zscore(np.squeeze(vec)).astype(np.float32)
+            vector_list.append(vec.reshape(vec.shape[0], -1))
             labels += [label] * vec.shape[0]
             label += 1
         vectors = np.concatenate(vector_list, axis=0)

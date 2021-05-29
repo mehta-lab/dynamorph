@@ -2,7 +2,6 @@ import os
 os.environ['KERAS_BACKEND'] = 'tensorflow'
 import pickle
 import torch
-import re
 import numpy as np
 import matplotlib.pyplot as plt
 import importlib
@@ -13,13 +12,12 @@ from torch.utils.data import TensorDataset
 from SingleCellPatch.extract_patches import process_site_extract_patches, im_adjust
 from SingleCellPatch.generate_trajectories import process_site_build_trajectory, process_well_generate_trajectory_relations
 
-from run_training import VQ_VAE_z32, zscore
-from HiddenStateExtractor.vq_vae import VQ_VAE
+from pipeline.train_utils import zscore, zscore_patch
+import HiddenStateExtractor.vae as vae
+import HiddenStateExtractor.resnet as resnet
 from HiddenStateExtractor.vq_vae_supp import prepare_dataset_v2, vae_preprocess
 
-# path to location of model definitions
 NETWORK_MODULE = 'run_training'
-
 
 def extract_patches(raw_folder: str,
                     supp_folder: str,
@@ -55,10 +53,12 @@ def extract_patches(raw_folder: str,
         site_path = os.path.join(raw_folder + '/' + site + '.npy')
         site_segmentation_path = os.path.join(raw_folder, '%s_NNProbabilities.npy' % site)
         site_supp_files_folder = os.path.join(supp_folder, '%s-supps' % site[:2], '%s' % site)
-        if not os.path.exists(site_path) or \
-            not os.path.exists(site_segmentation_path) or \
-            not os.path.exists(site_supp_files_folder):
-                print("Site data not found %s" % site_path, flush=True)
+        if not os.path.exists(site_path):
+            print("Site data not found %s" % site_path, flush=True)
+        if not os.path.exists(site_segmentation_path):
+            print("Site data not found %s" % site_segmentation_path, flush=True)
+        if not os.path.exists(site_supp_files_folder):
+            print("Site supp folder not found %s" % site_supp_files_folder, flush=True)
         else:
             print("Building patches %s" % site_path, flush=True)
 
@@ -66,6 +66,7 @@ def extract_patches(raw_folder: str,
                                          site_segmentation_path, 
                                          site_supp_files_folder,
                                          window_size=window_size,
+                                         channels=channels,
                                          save_fig=save_fig,
                                          reload=reload,
                                          skip_boundary=skip_boundary,
@@ -113,13 +114,9 @@ def build_trajectories(summary_folder: str,
 
 def assemble_VAE(raw_folder: str,
                  supp_folder: str,
-                 # channels: list,
-                 # model_path: str,
                  sites: list,
                  config: YamlReader,
-                 # network: str = None,
-                 # save_mask: bool=False,
-                 # mask_channels: list=[-2, -1],
+                 patch_type: str='masked_mat',
                  **kwargs):
     """ Wrapper method for prepare dataset for VAE encoding
 
@@ -157,7 +154,7 @@ def assemble_VAE(raw_folder: str,
         dat_fs.extend([os.path.join(supp_files_folder, f) \
             for f in os.listdir(supp_files_folder) if f.startswith('stacks')])
 
-    dataset, fs = prepare_dataset_v2(dat_fs, cs=channels)
+    dataset, fs = prepare_dataset_v2(dat_fs, channels=channels, key=patch_type)
     assert fs == sorted(fs)
     
     print(f"\tsaving {os.path.join(raw_folder, '%s_file_paths.pkl' % well)}")
@@ -168,17 +165,12 @@ def assemble_VAE(raw_folder: str,
     with open(os.path.join(raw_folder, '%s_static_patches.pkl' % well), 'wb') as f:
         pickle.dump(dataset, f, protocol=4)
 
-    # if save_mask:
-    #     dataset_mask, fs_mask = prepare_dataset_v2(dat_fs, cs=mask_channels)
-    #     assert fs_mask == fs
-    #     print(f"\tsaving {os.path.join(summary_folder, '%s_static_patches_mask.pkl' % well)}")
-    #     with open(os.path.join(summary_folder, '%s_static_patches_mask.pkl' % well), 'wb') as f:
-    #         pickle.dump(dataset_mask, f, protocol=4)
-
     well_supp_files_folder = os.path.join(supp_folder, '%s-supps' % well)
-    relations = process_well_generate_trajectory_relations(fs, sites, well_supp_files_folder)
+    relations, labels = process_well_generate_trajectory_relations(fs, sites, well_supp_files_folder)
     with open(os.path.join(raw_folder, "%s_static_patches_relations.pkl" % well), 'wb') as f:
         pickle.dump(relations, f)
+    with open(os.path.join(raw_folder, "%s_static_patches_labels.pkl" % well), 'wb') as f:
+        pickle.dump(labels, f)
 
     return
 
@@ -352,6 +344,7 @@ def process_VAE(raw_folder: str,
                 supp_folder: str,
                 sites: list,
                 config_: YamlReader,
+                gpu: int=0,
                 **kwargs):
     """ Wrapper method for VAE encoding
 
@@ -392,13 +385,17 @@ def process_VAE(raw_folder: str,
     assert len(channels) > 0, "At least one channel must be specified"
 
     # these sites should be from a single condition (C5, C4, B-wells, etc..)
-    # model_path = os.path.join(weights_dir, 'model.pt')
-    # model_name = os.path.basename(weights_dir)
-    # output_dir = os.path.join(raw_folder, model_name)
-    # os.makedirs(output_dir, exist_ok=True)
-    # output_dir = config_.inference.weights
-    output_dir = raw_folder
+    model_dir = os.path.dirname(model_path)
+    #TODO: add model_name to the config. Set the default to be the same as model folder name
+    model_name = os.path.basename(model_dir)
+    # output_dir = os.path.join(summary_folder, model_name + '_pool_norm')
+    output_dir = os.path.join(raw_folder, model_name)
+    os.makedirs(output_dir, exist_ok=True)
 
+    assert len(set(site[:2] for site in sites)) == 1, \
+        "Sites should be from a single well/condition"
+    well = sites[0][:2]
+    # TODO: expose normalization parameters in train config
     #### cardiomyocyte data###
     # channel_mean = [0.49998672, 0.007081]
     # channel_std = [0.00074311, 0.00906428]
@@ -407,104 +404,113 @@ def process_VAE(raw_folder: str,
     # channel_mean = [0.4, 0, 0.5]
     # channel_std = [0.05, 0.05, 0.05]
 
-    ### estimate mean and std from the data ###
-    # channel_mean = config_.inference.channel_mean
-    # channel_std = config_.inference.channel_std
-    channel_mean = None
-    channel_std = None
+    ###
+    # channel_mean = [32778.97446252,   681.61666079]
+    # channel_std = [1314.90374187,  688.80291129]
 
-    assert len(set(site[:2] for site in sites)) == 1, \
-        "Sites should be from a single well/condition"
-    well = sites[0][:2]
+    ### estimate mean and std from the data ###
+    channel_mean = config_.inference.channel_mean
+    channel_std = config_.inference.channel_std
+    # channel_mean = None
+    # channel_std = None
 
     print(f"\tloading file paths {os.path.join(raw_folder, '%s_file_paths.pkl' % well)}")
     fs = pickle.load(open(os.path.join(raw_folder, '%s_file_paths.pkl' % well), 'rb'))
-
-    # dataset = torch.load(os.path.join(summary_folder, '%s_static_patches.pt' % well))
-    # dataset = vae_preprocess(dataset,
-    #                          use_channels=channels,
-    #                          preprocess_setting=preprocess_setting,
-    #                          clamp=input_clamp)
-    #
     print(f"\tloading static patches {os.path.join(raw_folder, '%s_static_patches.pkl' % well)}")
     dataset = pickle.load(open(os.path.join(raw_folder, '%s_static_patches.pkl' % well), 'rb'))
-    dataset = zscore(dataset, channel_mean=channel_mean, channel_std=channel_std)
+    # dataset = zscore(np.squeeze(dataset), channel_mean=channel_mean, channel_std=channel_std)
+    dataset = zscore_patch(np.squeeze(dataset))
     dataset = TensorDataset(torch.from_numpy(dataset).float())
+    assert len(dataset.tensors[0].shape) == 4, "dataset tensor dimension can only be 4, not {}".format(len(dataset.tensors[0].shape))
+    _, n_channels, x_size, y_size = dataset.tensors[0].shape
+    device = torch.device('cuda:%d' % gpu)
+    print('Encoding images using gpu {}...'.format(gpu))
+    if 'VAE' in network:
+        network_cls = getattr(vae, network)
+        model = network_cls(num_inputs=2,
+                            num_hiddens=num_hiddens,
+                            num_residual_hiddens=num_residual_hiddens,
+                            num_residual_layers=2,
+                            num_embeddings=num_embeddings,
+                            gpu=True)
 
-    # old method to search for vae hyperparams.  We will use config values instead
-    # search_obj = re.search(r'nh(\d+)_nrh(\d+)_ne(\d+).*', model_name)
-    # num_hiddens = int(search_obj.group(1))
-    # num_residual_hiddens = int(search_obj.group(2))
-    # num_embeddings = int(search_obj.group(3))
-    # commitment_cost = float(search_obj.group(4))
+        model = model.to(device)
+        try:
+            if not model_path is None:
+                model.load_state_dict(torch.load(model_path))
+            else:
+                model.load_state_dict(torch.load('HiddenStateExtractor/save_0005_bkp4.pt'))
+        except Exception as ex:
+            print(ex)
+            raise ValueError("Error in loading model weights for VQ-VAE")
 
-    # NETWORK_MODULE can be changed to a common model directory in the future
-    network_cls = import_object(NETWORK_MODULE, network)
+        z_bs = {}
+        z_as = {}
+        for i in range(len(dataset)):
+            sample = dataset[i:(i + 1)][0]
+            sample = sample.reshape([-1, n_channels, x_size, y_size]).to(device)
+            z_b = model.enc(sample)
+            z_a, _, _ = model.vq(z_b)
+            f_n = fs[i]
+            z_bs[f_n] = z_b.cpu().data.numpy()
+            z_as[f_n] = z_a.cpu().data.numpy()
 
-    model = network_cls(num_inputs=2,
-                        num_hiddens=num_hiddens,
-                        num_residual_hiddens=num_residual_hiddens,
-                        num_residual_layers=2,
-                        num_embeddings=num_embeddings,
-                        gpu=True)
-    model = model.cuda()
-    try:
-        if not model_path is None:
-            model.load_state_dict(torch.load(model_path))
-        else:
-            model.load_state_dict(torch.load('HiddenStateExtractor/save_0005_bkp4.pt'))
-    except Exception as ex:
-        print(ex)
-        raise ValueError("Error in loading model weights for VQ-VAE")
+        dats = np.stack([z_bs[f] for f in fs], 0).reshape((len(dataset), -1))
+        print(f"\tsaving {os.path.join(output_dir, '%s_latent_space.pkl' % well)}")
+        with open(os.path.join(output_dir, '%s_latent_space.pkl' % well), 'wb') as f:
+            pickle.dump(dats, f, protocol=4)
 
-    _, n_channels, n_z, x_size, y_size = dataset.tensors[0].shape
-    z_bs = {}
-    z_as = {}
-    for i in range(len(dataset)):
-        sample = dataset[i:(i+1)][0]
-        sample = sample.reshape([-1, n_channels, x_size, y_size]).cuda()
-        z_b = model.enc(sample)
-        z_a, _, _ = model.vq(z_b)
-        f_n = fs[i]
-        z_bs[f_n] = z_b.cpu().data.numpy()
-        z_as[f_n] = z_a.cpu().data.numpy()
+        dats = np.stack([z_as[f] for f in fs], 0).reshape((len(dataset), -1))
+        print(f"\tsaving {os.path.join(output_dir, '%s_latent_space_after.pkl' % well)}")
+        with open(os.path.join(output_dir, '%s_latent_space_after.pkl' % well), 'wb') as f:
+            pickle.dump(dats, f, protocol=4)
 
-    dats = np.stack([z_bs[f] for f in fs], 0).reshape((len(dataset), -1))
-    print(f"\tsaving {os.path.join(output_dir, '%s_latent_space.pkl' % well)}")
-    with open(os.path.join(output_dir, '%s_latent_space.pkl' % well), 'wb') as f:
-        pickle.dump(dats, f, protocol=4)
-    
-    dats = np.stack([z_as[f] for f in fs], 0).reshape((len(dataset), -1))
-    print(f"\tsaving {os.path.join(output_dir, '%s_latent_space_after.pkl' % well)}")
-    with open(os.path.join(output_dir, '%s_latent_space_after.pkl' % well), 'wb') as f:
-        pickle.dump(dats, f, protocol=4)
+        if save_output:
+            np.random.seed(0)
+            random_inds = np.random.randint(0, len(dataset), (20,))
+            for i in random_inds:
+                sample = dataset[i:(i + 1)][0].to(device)
+                sample = sample.reshape([-1, n_channels, x_size, y_size]).to(device)
+                output = model(sample)[0]
+                im_phase = im_adjust(sample[0, 0].cpu().data.numpy())
+                im_phase_recon = im_adjust(output[0, 0].cpu().data.numpy())
+                im_retard = im_adjust(sample[0, 1].cpu().data.numpy())
+                im_retard_recon = im_adjust(output[0, 1].cpu().data.numpy())
+                n_rows = 2
+                n_cols = 2
+                fig, ax = plt.subplots(n_rows, n_cols, squeeze=False)
+                ax = ax.flatten()
+                fig.set_size_inches((15, 5 * n_rows))
+                axis_count = 0
+                for im, name in zip([im_phase, im_phase_recon, im_retard, im_retard_recon],
+                                    ['phase', 'phase_recon', 'im_retard', 'retard_recon']):
+                    ax[axis_count].imshow(np.squeeze(im), cmap='gray')
+                    ax[axis_count].axis('off')
+                    ax[axis_count].set_title(name, fontsize=12)
+                    axis_count += 1
+                fig.savefig(os.path.join(output_dir, 'recon_%d.jpg' % i),
+                            dpi=300, bbox_inches='tight')
+                plt.close(fig)
+    elif 'ResNet' in network:
+        network_cls = getattr(resnet, 'EncodeProject')
+        model = network_cls(arch=network)
+        model = model.to(device)
+        # print(model)
+        model.load_state_dict(torch.load(model_path, map_location=device))
+        model.eval()
+        # tri_val_set = TripletDataset(val_labels, lambda index: val_set[index], n_pos_samples)
+        h_s = []
+        for i in range(len(dataset)):
+            sample = dataset[i:(i + 1)][0]
+            sample = sample.reshape([-1, n_channels, x_size, y_size]).to(device)
+            h_s.append(model.encode(sample, out='z').cpu().data.numpy().squeeze())
+        dats = np.stack(h_s)
+        print(f"\tsaving {os.path.join(output_dir, '%s_latent_space.pkl' % well)}")
+        with open(os.path.join(output_dir, '%s_latent_space.pkl' % well), 'wb') as f:
+            pickle.dump(dats, f, protocol=4)
+    else:
+        raise ValueError('Network {} is not available'.format(network))
 
-    if save_output:
-        np.random.seed(0)
-        random_inds = np.random.randint(0, len(dataset), (10,))
-        for i in random_inds:
-            sample = dataset[i:(i + 1)][0].cuda()
-            # output = model(sample)[0]
-            # model still uses channels last?
-            # output = model(torch.transpose(sample[0], 0, 1))[0]
-            output = model(sample.reshape([-1, n_channels, x_size, y_size]))[0]
-            im_phase = im_adjust(sample[0, 0].cpu().data.numpy())
-            im_phase_recon = im_adjust(output[0, 0].cpu().data.numpy())
-            im_retard = im_adjust(sample[0, 1].cpu().data.numpy())
-            im_retard_recon = im_adjust(output[0, 1].cpu().data.numpy())
-            n_rows = 2
-            n_cols = 2
-            fig, ax = plt.subplots(n_rows, n_cols, squeeze=False)
-            ax = ax.flatten()
-            fig.set_size_inches((15, 5 * n_rows))
-            axis_count = 0
-            for im, name in zip([im_phase, im_phase_recon, im_retard, im_retard_recon],
-                                ['phase', 'phase_recon', 'im_retard', 'retard_recon']):
-                ax[axis_count].imshow(np.squeeze(im), cmap='gray')
-                ax[axis_count].axis('off')
-                ax[axis_count].set_title(name, fontsize=12)
-                axis_count += 1
-            fig.savefig(os.path.join(output_dir, 'recon_%d.jpg' % i),
-                        dpi=300, bbox_inches='tight')
-            plt.close(fig)
+
+
 

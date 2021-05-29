@@ -16,9 +16,6 @@ class Worker(Process):
         self.method = method
 
     def run(self):
-        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(self.cpu_id)
-
         if self.method == 'extract_patches':
             extract_patches(*self.inputs)
         elif self.method == 'build_trajectories':
@@ -32,9 +29,6 @@ def main(method_, raw_dir_, supp_dir_, config_):
     supp = supp_dir_
     method = method_
     fov = config.patch.fov
-
-    channels = config.patch.channels
-    assert len(channels) > 0, "At least one channel must be specified"
 
     n_cpus = config.patch.num_cpus
 
@@ -105,9 +99,6 @@ def parse_args():
 
 
 if __name__ == '__main__':
-    # arguments = parse_args()
-    # main(arguments)
-
     arguments = parse_args()
     config = YamlReader()
     config.read_config(arguments.config)

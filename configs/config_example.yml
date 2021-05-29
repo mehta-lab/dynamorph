@@ -77,35 +77,60 @@ dim_reduction:
 
 
 training:
-  raw_dirs:
-  supp_dirs:
-  weights_dirs:
+  raw_dirs: [
+    '/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_input_tstack',
+    '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_input_tstack',
+    ]
+  supp_dirs: [
+      '/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_supp_tstack',
+      '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_supp_tstack',
+  ]
 
-  # model definitions
-  model: 'VQ_VAE_z32'
+  weights_dirs: [
+      '/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_train_tstack',
+      '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_train_tstack',
+  ]
+
+  # model hyperparameters
+  network: 'VQ_VAE_z32'
   num_inputs: 2
   num_hiddens: 64
   num_residual_hiddens: 64
   num_residual_layers: 2
   num_embeddings: 512
-
-  # normalization
-  channel_mean: [0.4, 0, 0.5]
-  channel_std: [0.05, 0.05, 0.05]
-
+  commitment_cost: 0.25
+  weight_matching: 100
+  margin: 1
   w_a: 1
   w_t: 0.5
+  w_n: -0.5
+
+  # normalization
+  channel_mean: null
+  channel_std: null
+   ### microglia data####
+#  channel_mean: [0.4, 0, 0.5]
+#  channel_std: [0.05, 0.05, 0.05]
+
+
 
   # training parameters
-  commitment_cost: 0.25
-  alpha: 0.002
-  epochs: 5000
-  learning_rate: 0.0001
-  batch_size: 96
-  gpus: True
-  gpu_id: 3
+
+  n_epochs: 5000
+  learn_rate: 0.0001
+  batch_size: 768
+  val_split_ratio: 0.15
   shuffle_data: False
   transform: True
+  patience: 100
+  n_pos_samples: 4
+  gpu_id: 1
+  start_model_path: null
+  retrain: False
+  start_epoch: 0
+  earlystop_metric: 'positive_triplet'
+  model_name: 'CM+kidney+A549_vqvae32_test'
+  use_mask: False
 
 
   

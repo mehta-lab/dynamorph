@@ -61,7 +61,7 @@ def worker(f_n):
 
 def get_size(mask):
     """ Calculate cell size based on mask
-    
+
     Args:
         mask (np.array): segmentation mask of a single cell
 
@@ -93,12 +93,12 @@ def get_intensity_profile(dat, mask=None):
             summed phase intensities.
 
     """
-    
+
     output = []
     for channel_ind in range(len(dat)):
         channel_slice = dat[channel_ind]
         channel_slice = channel_slice / 65535.
-        
+
         # bg = np.median(channel_slice[np.where(mask == 0)])
         bg = 0.
 
