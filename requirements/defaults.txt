@@ -11,5 +11,6 @@ h5py>=2.10.0
 tensorflow==1.13
 keras==2.2.5
 pytorch>=1.0.1
-segmentation_models==0.2.1
+#segmentation_models==0.2.1
+segmentation_models==1.0.1
 yaml>=0.2.5
