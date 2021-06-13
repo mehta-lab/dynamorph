@@ -32,20 +32,21 @@ PREPROCESS = {
     'z_slice',
 }
 
-SEGMENTATION = {
+SEGMENTATION_INFERENCE = {
     'raw_dirs',
     'supp_dirs',
     'validation_dirs',
     'model',
     'weights',
-    'gpu_ids',
+    'num_gpus',
     'channels',
     'fov',
 
     'num_classes',
     'window_size',
     'batch_size',
-    'num_pred_rnd'
+    'num_pred_rnd',
+    'seg_val_cat'
 }
 
 PATCH = {
@@ -60,7 +61,7 @@ PATCH = {
     'skip_boundary'
 }
 
-INFERENCE = {
+VAE_INFERENCE = {
     'raw_dirs',
     'supp_dirs',
     'val_dirs',
@@ -129,8 +130,11 @@ class YamlReader(Object):
         # self.files = Object()
         self.preprocess = Object()
         self.segmentation = Object()
+        self.segmentation.training = Object()
+        self.segmentation.inference = Object()
         self.patch = Object()
-        self.inference = Object()
+        self.vae = Object()
+        self.vae.inference = Object()
         self.dim_reduction = Object()
         self.training = Object()
 
@@ -140,6 +144,7 @@ class YamlReader(Object):
 
             # self._parse_files()
             self._parse_preprocessing()
+            self._parse_segmentation()
             self._parse_patch()
             self._parse_inference()
             self._parse_dim_reduction()
@@ -153,9 +158,9 @@ class YamlReader(Object):
                 log.warning(f"yaml PREPROCESS config field {key} is not recognized")
 
     def _parse_segmentation(self):
-        for key, value in self.config['segmentation'].items():
-            if key in SEGMENTATION:
-                setattr(self.segmentation, key, value)
+        for key, value in self.config['segmentation_inference'].items():
+            if key in SEGMENTATION_INFERENCE:
+                setattr(self.segmentation.inference, key, value)
             else:
                 log.warning(f"yaml SEGMENTATION config field {key} is not recognized")
 
@@ -167,9 +172,9 @@ class YamlReader(Object):
                 log.warning(f"yaml PATCH config field {key} is not recognized")
 
     def _parse_inference(self):
-        for key, value in self.config['inference'].items():
-            if key in INFERENCE:
-                setattr(self.inference, key, value)
+        for key, value in self.config['vae_inference'].items():
+            if key in VAE_INFERENCE:
+                setattr(self.vae.inference, key, value)
             else:
                 log.warning(f"yaml INFERENCE config field {key} is not recognized")
 

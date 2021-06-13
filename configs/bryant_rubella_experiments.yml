@@ -20,19 +20,21 @@ preprocess:
   # if singlepage tiffs with z-stacks, select the z-slice to stack
 
 
-segmentation:
-  raw_dirs:
-  supp_dirs:
-  validation_dirs:
+segmentation_inference:
+  raw_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/raw']
+  supp_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/supp']
+  validation_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/val']
   model: 'UNet'
-  weights: '/Volumes/comp_micro/projects/dynamorph/model_save/final_reformat.pt'
-  gpu_ids: 0
+  weights: '/gpfs/CompMicro/projects/dynamorph/model_save/final_reformat.pt'
+  num_gpus: 3
   fov: ['C4-Site_0']
+  channels: [0,1]
 
-  num_classes:
-  window_size:
-  batch_size:
-  num_pred_rnd:
+  num_classes: 3
+  window_size: 256
+  batch_size: 8
+  num_pred_rnd: 5
+  seg_val_cat: 'mg'
 
 
 patch:
@@ -49,7 +51,7 @@ patch:
   skip_boundary: False
 
 
-inference:
+vae_inference:
   raw_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/raw']
   supp_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/supp']
   val_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/val']
@@ -63,12 +65,6 @@ inference:
   channels: [0,1]
   channel_mean: [0.4, 0, 0.5]
   channel_std: [0.05, 0.05, 0.05]
-
-  num_classes: 2
-  window_size: 256
-  batch_size: 8
-  num_pred_rnd: 5
-  seg_val_cat: 'mg'
 
 
 dim_reduction:

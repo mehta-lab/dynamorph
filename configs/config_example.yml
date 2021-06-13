@@ -25,14 +25,20 @@ preprocess:
   pos_dir: True
   # whether each position is in a subdirectory (True), or in the same directory (False)
 
-segmentation:
+segmentation_inference:
   raw_dirs:
   supp_dirs:
   validation_dirs:
-  weights:
-  gpu_ids:
-  channels: [0,1]
-  fov:
+  model: 'UNet'
+  weights: '/Volumes/comp_micro/projects/dynamorph/model_save/final_reformat.pt'
+  num_gpus: 1
+  fov: ['C4-Site_0', 'C4-Site_1', 'C4-Site_2']
+
+  num_classes: 3
+  window_size: 256
+  batch_size: 8
+  num_pred_rnd: 5
+  seg_val_cat: 'mg'
 
 patch:
   raw_dirs:
@@ -47,7 +53,7 @@ patch:
   skip_boundary: False
 
 
-inference:
+vae_inference:
   raw_dirs:
   supp_dirs:
   val_dirs:
