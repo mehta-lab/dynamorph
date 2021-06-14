@@ -4,8 +4,6 @@ import os
 import numpy as np
 from NNsegmentation.models import Segment
 from NNsegmentation.data import load_input, predict_whole_map
-from keras import backend as K
-import tensorflow as tf
 from SingleCellPatch.instance_clustering import process_site_instance_segmentation
 from configs.config_reader import YamlReader
 import logging
@@ -72,9 +70,9 @@ def segmentation(raw_folder_: str,
     for site in sites:
         site_path = os.path.join(raw_folder_, '%s.npy' % site)
         if not os.path.exists(site_path):
-            log.info("Site not found %s" % site_path, flush=True)
+            log.info("Site not found %s" % site_path)
         else:
-            log.info("Predicting %s" % site_path, flush=True)
+            log.info("Predicting %s" % site_path)
             try:
                 # Generate semantic segmentation
                 predict_whole_map(site_path,
@@ -85,7 +83,7 @@ def segmentation(raw_folder_: str,
                                   **kwargs)
             except Exception as ex:
                 log.error(ex)
-                log.error("Error in predicting site %s" % site, flush=True)
+                log.error("Error in predicting site %s" % site)
     return
 
 

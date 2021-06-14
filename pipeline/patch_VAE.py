@@ -42,7 +42,7 @@ def extract_patches(raw_folder: str,
         sites (list of str): list of site names
         config (YamlReader): config file supplied at CLI
     """
-    channels = config.inference.channels
+    channels = config.patch.channels
 
     assert len(channels) > 0, "At least one channel must be specified"
 
