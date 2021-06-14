@@ -1,9 +1,9 @@
 from pipeline.patch_VAE import assemble_VAE, process_VAE, trajectory_matching
+from SingleCellPatch.extract_patches import get_im_sites
 from torch.multiprocessing import Pool, Queue, Process
 import torch.multiprocessing as mp
 import os, sys
 import argparse
-
 from configs.config_reader import YamlReader
 
 
@@ -16,9 +16,11 @@ class Worker(Process):
 
     def run(self):
         if self.method == 'assemble':
-            assemble_VAE(*self.inputs)
+            # assemble_VAE(*self.inputs)
+            #TODO: make "patch_type" part of the config
+            assemble_VAE(*self.inputs, patch_type='mat')
         elif self.method == 'process':
-            process_VAE(*self.inputs)
+            process_VAE(*self.inputs, gpu=self.gpuid)
         elif self.method == 'trajectory_matching':
             trajectory_matching(*self.inputs)
 
@@ -63,25 +65,27 @@ def main(method_, raw_dir_, supp_dir_, config_):
         sites = config_.latent_encoding.fov
     else:
         # get all "XX-SITE_#" identifiers in raw data directory
-        img_names = [file for file in os.listdir(inputs) if (file.endswith(".npy")) & ('_NN' not in file)]
-        sites = [os.path.splitext(img_name)[0] for img_name in img_names]
-        sites = list(set(sites))
+        sites = get_im_sites(inputs)
 
     wells = set(s[:2] for s in sites)
     mp.set_start_method('spawn', force=True)
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
-    print("CUDA_VISIBLE_DEVICES=" + os.environ["CUDA_VISIBLE_DEVICES"])
+    # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    # os.environ['CUDA_VISIBLE_DEVICES'] = ','.join([str(i) for i in gpu_ids])
+    # print("CUDA_VISIBLE_DEVICES=" + os.environ["CUDA_VISIBLE_DEVICES"])
     for i, well in enumerate(wells):
-        # don't batch weights here
-        # for weight in weights:
-        # print('Encoding using model {}'.format(weight))
         well_sites = [s for s in sites if s[:2] == well]
-        # args = (inputs, outputs, channels, weights, well_sites, network)
         args = (inputs, outputs, well_sites, config_)
-        p = Worker(args, gpuid=gpu_id, method=method)
+        p = Worker(args, gpuid=gpu_ids[0], method=method)
         p.start()
         p.join()
+
+        # for weight in weights:
+        #     print('Encoding using model {}'.format(weight))
+        #     well_sites = [s for s in sites if s[:2] == well]
+        #     args = (inputs, outputs, channels, weight, well_sites, network)
+        #     p = Worker(args, gpuid=gpu, method=method)
+        #     p.start()
+        #     p.join()
 
 
 def parse_args():

@@ -133,7 +133,7 @@ def predict(fs,
 #     path = '/mnt/comp_micro/Projects/CellVAE'
 #     fs = read_file_path(os.path.join(path, 'Data', 'StaticPatches'))
 #     extractor, preprocess_fn = initiate_model()
-#     ys = predict(fs, extractor, preprocess_fn, cs=[0, 1], channel_max=CHANNEL_MAX)
+#     ys = predict(fs, extractor, preprocess_fn, channels=[0, 1], channel_max=CHANNEL_MAX)
     
 #     output = {}
 #     for f_n, y in zip(fs, ys):

@@ -92,6 +92,8 @@ def instance_segmentation(raw_folder: str,
                           val_folder: str,
                           sites: list,
                           config_: YamlReader,
+                          rerun=False,
+
                           **kwargs):
     """ Helper function for instance segmentation
 
@@ -117,16 +119,23 @@ def instance_segmentation(raw_folder: str,
         site_segmentation_path = os.path.join(raw_folder,
                                               '%s_NNProbabilities.npy' % site)
         if not os.path.exists(site_path) or not os.path.exists(site_segmentation_path):
-            log.info("Site not found %s" % site_path)
-        else:
-            log.info("Clustering %s" % site_path)
-            site_supp_files_folder = os.path.join(supp_folder,
-                                                  '%s-supps' % site[:2],
-                                                  '%s' % site)
-            if not os.path.exists(site_supp_files_folder):
-                os.makedirs(site_supp_files_folder, exist_ok=True)
-            process_site_instance_segmentation(site_path,
-                                               site_segmentation_path,
-                                               site_supp_files_folder,
-                                               **kwargs)
+            log.info("Site not found %s" % site_path, flush=True)
+            continue
+
+        log.info("Clustering %s" % site_path, flush=True)
+        site_supp_files_folder = os.path.join(supp_folder,
+                                              '%s-supps' % site[:2],
+                                              '%s' % site)
+
+        if os.path.exists(os.path.join(site_supp_files_folder, 'cell_pixel_assignments.pkl')) and not rerun:
+            log.info('Found previously saved instance clustering output in {}. Skip processing...'
+                  .format(site_supp_files_folder))
+            continue
+        elif not os.path.exists(site_supp_files_folder):
+            os.makedirs(site_supp_files_folder, exist_ok=True)
+
+        process_site_instance_segmentation(site_path,
+                                           site_segmentation_path,
+                                           site_supp_files_folder,
+                                           **kwargs)
     return
