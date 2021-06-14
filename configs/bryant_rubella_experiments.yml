@@ -25,14 +25,14 @@ segmentation_inference:
   supp_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/supp']
   validation_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/val']
   model: 'UNet'
-  weights: '/gpfs/CompMicro/projects/dynamorph/model_save/final_reformat.pt'
+  weights: '/gpfs/CompMicro/projects/dynamorph/model_save/final_reformat.h5'
   num_gpus: 3
   fov: ['C4-Site_0']
   channels: [0,1]
 
   num_classes: 3
   window_size: 256
-  batch_size: 8
+  batch_size: 32
   num_pred_rnd: 5
   seg_val_cat: 'mg'
 
