@@ -8,16 +8,16 @@ Created on Wed Feb  6 13:22:55 2019
 
 import tensorflow as tf
 import numpy as np
-import keras
+from tensorflow import keras
 keras.backend.set_image_data_format('channels_first')
 import tempfile
 import os
 import scipy
 from scipy.special import logsumexp
 from copy import deepcopy
-from keras import backend as K
-from keras.models import Model, load_model
-from keras.layers import Dense, Layer, Input, BatchNormalization, Conv2D, Lambda
+# from keras import backend as K
+# from keras.models import Model, load_model
+# from keras.layers import Dense, Layer, Input, BatchNormalization, Conv2D, Lambda
 import segmentation_models
 from .layers import weighted_binary_cross_entropy, ValidMetrics, SplitSlice, MergeSlices
 from .data import load_input, preprocess
@@ -73,8 +73,8 @@ class Segment(object):
     def build_model(self):
         """ Define model structure and compile """
 
-        self.input = Input(shape=self.input_shape, dtype='float32')
-        self.pre_conv = Conv2D(3, (1, 1), activation=None, name='pre_conv')(self.input)
+        self.input = keras.layers.Input(shape=self.input_shape, dtype='float32')
+        self.pre_conv = keras.layers.Conv2D(3, (1, 1), activation=None, name='pre_conv')(self.input)
 
         self.unet = segmentation_models.Unet(
             backbone_name='resnet34', 
@@ -89,7 +89,7 @@ class Segment(object):
         
         output = self.unet(self.pre_conv)
         
-        self.model = Model(self.input, output)
+        self.model = keras.models.Model(self.input, output)
         self.model.compile(optimizer='Adam', 
                            loss=self.loss_func,
                            metrics=[])
@@ -228,11 +228,11 @@ class SegmentWithMultipleSlice(Segment):
         """ Define model structure and compile """
 
         # input shape: batch_size, n_channel, n_slice, x_size, y_size
-        self.input = Input(shape=self.input_shape, dtype='float32')
+        self.input = keras.layers.Input(shape=self.input_shape, dtype='float32')
 
         # Combine time slice dimension and batch dimension
         inp = SplitSlice(self.n_channels, self.x_size, self.y_size)(self.input)
-        self.pre_conv = Conv2D(3, (1, 1), activation=None, name='pre_conv')(inp)
+        self.pre_conv = keras.layers.Conv2D(3, (1, 1), activation=None, name='pre_conv')(inp)
         
         self.unet = segmentation_models.Unet(
             backbone_name='resnet34', 
@@ -249,10 +249,10 @@ class SegmentWithMultipleSlice(Segment):
 
         # Split time slice dimension and merge to channel dimension
         output = MergeSlices(self.n_slices, self.unet_feat)(output)
-        output = Conv2D(self.unet_feat, (1, 1), activation='relu', name='post_conv')(output)
-        output = Conv2D(self.n_classes, (1, 1), activation=None, name='pred_head')(output)
+        output = keras.layers.Conv2D(self.unet_feat, (1, 1), activation='relu', name='post_conv')(output)
+        output = keras.layers.Conv2D(self.n_classes, (1, 1), activation=None, name='pred_head')(output)
         
-        self.model = Model(self.input, output)
+        self.model = keras.models.Model(self.input, output)
         self.model.compile(optimizer='Adam',
                            loss=self.loss_func,
                            metrics=[])

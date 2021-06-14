@@ -8,14 +8,14 @@ Created on Thu Feb 14 17:51:20 2019
 
 import tensorflow as tf
 import numpy as np
-import keras
-from keras import backend as K
-from keras.models import Model, load_model
-from keras.layers import Dense, Layer, Input
+from tensorflow import keras
+# from keras import backend as K
+# from keras.models import Model, load_model
+# from keras.layers import Dense, Layer, Input
 from sklearn.metrics import roc_auc_score, f1_score
 
 
-class SplitSlice(Layer):
+class SplitSlice(keras.layers.Layer):
     """ Customized layer for tensor reshape
     
     Used for 2.5D segmentation
@@ -36,9 +36,9 @@ class SplitSlice(Layer):
     def call(self, x):
         # Input shape: (batch_size, n_channel, n_slice, x_size, y_size)
         # Output shape: (batch_size * n_slice, n_channel, x_size, y_size)
-        _x = K.permute_dimensions(x, (0, 2, 1, 3, 4))
+        _x = keras.backend.permute_dimensions(x, (0, 2, 1, 3, 4))
         target_shape = (-1, self.n_channels, self.x_size, self.y_size)
-        output = K.reshape(_x, target_shape)
+        output = keras.backend.reshape(_x, target_shape)
         return output
 
     def compute_output_shape(self, input_shape):
@@ -48,7 +48,7 @@ class SplitSlice(Layer):
                       input_shape[-1]]) # y
 
 
-class MergeSlices(Layer):
+class MergeSlices(keras.layers.Layer):
     """ Customized layer for tensor reshape
     """
     def __init__(self,
@@ -66,14 +66,14 @@ class MergeSlices(Layer):
     def call(self, x):
         # Input shape: (batch_size * n_slice, n_channel, x_size, y_size)
         # Output shape: (batch_size, n_slice * n_channel, x_size, y_size)
-        x_shape = K.shape(x)
-        _x = K.reshape(x, [x_shape[0]//self.n_slice, # Batch size
+        x_shape = keras.backend.shape(x)
+        _x = keras.backend.reshape(x, [x_shape[0]//self.n_slice, # Batch size
                           self.n_slice, # n_slice
                           self.n_channel, # n_channel
                           x_shape[2], # x
                           x_shape[3]]) # y
 
-        output = K.reshape(_x, [x_shape[0]//self.n_slice, # Batch size
+        output = keras.backend.reshape(_x, [x_shape[0]//self.n_slice, # Batch size
                                 self.output_dim, # n_slice * n_channel
                                 x_shape[2], # x
                                 x_shape[3]]) # y
@@ -108,10 +108,10 @@ class weighted_binary_cross_entropy(object):
         y_true = y_true[:, :-1]
         
         # Switch to channel last form
-        y_true = K.permute_dimensions(y_true, (0, 2, 3, 1))
-        y_pred = K.permute_dimensions(y_pred, (0, 2, 3, 1))
+        y_true = keras.backend.permute_dimensions(y_true, (0, 2, 3, 1))
+        y_pred = keras.backend.permute_dimensions(y_pred, (0, 2, 3, 1))
         
-        loss = K.categorical_crossentropy(y_true, y_pred, from_logits=True) * w
+        loss = keras.backend.categorical_crossentropy(y_true, y_pred, from_logits=True) * w
         return loss
 
 
@@ -142,3 +142,4 @@ class ValidMetrics(keras.callbacks.Callback):
             print('\r test-roc-auc: %f  test-f1: %f\n' % (roc, f1))
         return
    
+
