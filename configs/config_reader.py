@@ -61,7 +61,8 @@ PATCH = {
     'skip_boundary'
 }
 
-VAE_INFERENCE = {
+# change this to "latent encoding" or similar
+LATENT_ENCODING = {
     'raw_dirs',
     'supp_dirs',
     'val_dirs',
@@ -70,13 +71,17 @@ VAE_INFERENCE = {
     'save_output',
     'gpu_ids',
     'fov',
+
     'channels',
     'channel_mean',
     'channel_std',
+
     'num_classes',
-    'window_size',
-    'batch_size',
+    'num_hiddens',
+    'num_residual_hiddens',
+    'num_embeddings',
     'num_pred_rnd',
+    'commitment_cost',
     'seg_val_cat'
 }
 
@@ -130,11 +135,9 @@ class YamlReader(Object):
         # self.files = Object()
         self.preprocess = Object()
         self.segmentation = Object()
-        self.segmentation.training = Object()
         self.segmentation.inference = Object()
         self.patch = Object()
-        self.vae = Object()
-        self.vae.inference = Object()
+        self.latent_encoding = Object()
         self.dim_reduction = Object()
         self.training = Object()
 
@@ -142,7 +145,6 @@ class YamlReader(Object):
         with open(yml_config, 'r') as f:
             self.config = yaml.load(f)
 
-            # self._parse_files()
             self._parse_preprocessing()
             self._parse_segmentation()
             self._parse_patch()
@@ -172,11 +174,11 @@ class YamlReader(Object):
                 log.warning(f"yaml PATCH config field {key} is not recognized")
 
     def _parse_inference(self):
-        for key, value in self.config['vae_inference'].items():
-            if key in VAE_INFERENCE:
-                setattr(self.vae.inference, key, value)
+        for key, value in self.config['latent_encoding'].items():
+            if key in LATENT_ENCODING:
+                setattr(self.latent_encoding, key, value)
             else:
-                log.warning(f"yaml INFERENCE config field {key} is not recognized")
+                log.warning(f"yaml LATENT_ENCODING config field {key} is not recognized")
 
     def _parse_dim_reduction(self):
         for key, value in self.config['dim_reduction'].items():

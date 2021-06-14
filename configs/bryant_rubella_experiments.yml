@@ -51,7 +51,7 @@ patch:
   skip_boundary: False
 
 
-vae_inference:
+latent_encoding:
   raw_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/raw']
   supp_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/supp']
   val_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/val']
@@ -60,11 +60,16 @@ vae_inference:
   save_output: True
 
   gpu_ids: 3
-#  fov: ['C4-Site_0']
-  fov: ['C4-Site_0', 'C4-Site_1', 'C4-Site_2', 'C4-Site_3', 'C4-Site_4', 'C4-Site_5', 'C4-Site_6', 'C4-Site_7', 'C4-Site_8']
+  fov: ['C4-Site_0', 'C4-Site_1', ]
+#  fov: ['C4-Site_0', 'C4-Site_1', 'C4-Site_2', 'C4-Site_3', 'C4-Site_4', 'C4-Site_5', 'C4-Site_6', 'C4-Site_7', 'C4-Site_8']
   channels: [0,1]
-  channel_mean: [0.4, 0, 0.5]
-  channel_std: [0.05, 0.05, 0.05]
+  channel_mean: [0.4, 0]
+  channel_std: [0.05, 0.05]
+
+  num_hiddens: 16
+  num_residual_hiddens: 32
+  num_embeddings: 64
+  commitment_cost: 0.25
 
 
 dim_reduction:
