@@ -38,7 +38,7 @@ def main(method_, raw_dir_, supp_dir_, val_dir_, config_):
 
     inputs = raw_dir_
     outputs = supp_dir_
-    gpus = config_.segmentation.inference.gpu_ids
+    gpus = config_.segmentation.inference.num_gpus
     # gpus = [int(g) for g in gpus]
 
     assert len(config_.segmentation.inference.channels) > 0, "At least one channel must be specified"
