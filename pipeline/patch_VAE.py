@@ -113,13 +113,8 @@ def build_trajectories(summary_folder: str,
 
 def assemble_VAE(raw_folder: str,
                  supp_folder: str,
-                 # channels: list,
-                 # model_path: str,
                  sites: list,
                  config: YamlReader,
-                 # network: str = None,
-                 # save_mask: bool=False,
-                 # mask_channels: list=[-2, -1],
                  **kwargs):
     """ Wrapper method for prepare dataset for VAE encoding
 
@@ -141,7 +136,7 @@ def assemble_VAE(raw_folder: str,
 
     """
 
-    channels = config.inference.channels
+    channels = config.latent_encoding.channels
 
     assert len(channels) > 0, "At least one channel must be specified"
 
@@ -167,13 +162,6 @@ def assemble_VAE(raw_folder: str,
     print(f"\tsaving {os.path.join(raw_folder, '%s_static_patches.pkl' % well)}")
     with open(os.path.join(raw_folder, '%s_static_patches.pkl' % well), 'wb') as f:
         pickle.dump(dataset, f, protocol=4)
-
-    # if save_mask:
-    #     dataset_mask, fs_mask = prepare_dataset_v2(dat_fs, cs=mask_channels)
-    #     assert fs_mask == fs
-    #     print(f"\tsaving {os.path.join(summary_folder, '%s_static_patches_mask.pkl' % well)}")
-    #     with open(os.path.join(summary_folder, '%s_static_patches_mask.pkl' % well), 'wb') as f:
-    #         pickle.dump(dataset_mask, f, protocol=4)
 
     well_supp_files_folder = os.path.join(supp_folder, '%s-supps' % well)
     relations = process_well_generate_trajectory_relations(fs, sites, well_supp_files_folder)
@@ -379,15 +367,16 @@ def process_VAE(raw_folder: str,
     # For inference same normalization parameters can be used or determined from the inference data,
     # depending on if the inference data has the same distribution as training data
 
-    model_path = config_.inference.weights
-    # weights_dir = config_.files.weights_dir
-    channels = config_.inference.channels
-    num_hiddens = config_.training.num_hiddens
-    num_residual_hiddens = config_.training.num_residual_hiddens
-    num_embeddings = config_.training.num_embeddings
-    commitment_cost = config_.training.commitment_cost
-    network = config_.inference.model
-    save_output = config_.inference.save_output
+    model_path = config_.latent_encoding.weights
+    channels = config_.latent_encoding.channels
+
+    num_hiddens = config_.latent_encoding.num_hiddens
+    num_residual_hiddens = config_.latent_encoding.num_residual_hiddens
+    num_embeddings = config_.latent_encoding.num_embeddings
+    commitment_cost = config_.latent_encoding.commitment_cost
+
+    network = config_.latent_encoding.model
+    save_output = config_.latent_encoding.save_output
 
     assert len(channels) > 0, "At least one channel must be specified"
 
@@ -396,7 +385,6 @@ def process_VAE(raw_folder: str,
     # model_name = os.path.basename(weights_dir)
     # output_dir = os.path.join(raw_folder, model_name)
     # os.makedirs(output_dir, exist_ok=True)
-    # output_dir = config_.inference.weights
     output_dir = raw_folder
 
     #### cardiomyocyte data###
@@ -408,10 +396,8 @@ def process_VAE(raw_folder: str,
     # channel_std = [0.05, 0.05, 0.05]
 
     ### estimate mean and std from the data ###
-    # channel_mean = config_.inference.channel_mean
-    # channel_std = config_.inference.channel_std
-    channel_mean = None
-    channel_std = None
+    channel_mean = config_.latent_encoding.channel_mean
+    channel_std = config_.latent_encoding.channel_std
 
     assert len(set(site[:2] for site in sites)) == 1, \
         "Sites should be from a single well/condition"
