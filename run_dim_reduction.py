@@ -7,6 +7,9 @@ import matplotlib
 matplotlib.use('AGG')
 import matplotlib.pyplot as plt
 import umap
+from configs.config_reader import YamlReader
+from time import gmtime, strftime
+
 
 def fit_PCA(train_data, weights_dir, labels, conditions):
     """ Fit a PCA model accounting for top 50% variance to the train_data,
@@ -22,7 +25,14 @@ def fit_PCA(train_data, weights_dir, labels, conditions):
         pca (sklearn PCA model): trained PCA instance
 
     """
-    model_path = os.path.join(weights_dir, 'pca_model.pkl')
+    now = strftime("%Y_%m_%d_%H%M", gmtime())
+    if os.path.isdir(weights_dir):
+        model_path = os.path.join(weights_dir, f'pca_model_{now}.pkl')
+    elif os.path.isfile(weights_dir):
+        model_path = os.path.join(os.path.dirname(weights_dir), f'pca_model_{now}.pkl')
+    else:
+        raise FileNotFoundError("supplied weights directory is not valid")
+
     pca = PCA(0.5, svd_solver='auto')
     print('Fitting PCA model {} ...'.format(model_path))
     pcas = pca.fit_transform(train_data)
@@ -41,7 +51,9 @@ def fit_PCA(train_data, weights_dir, labels, conditions):
                         loc="upper right", title="condition", labels=conditions)
     ax.set_xlabel('PC 1')
     ax.set_ylabel('PC 2')
-    plt.savefig(os.path.join(weights_dir, 'PCA.png'), dpi=300)
+    # plt.savefig(os.path.join(weights_dir, 'PCA.png'), dpi=300)
+    plt.savefig(os.path.join(os.path.dirname(model_path), f'PCA_{now}.png'), dpi=300)
+
     return pca
 
 def process_PCA(input_dir, output_dir, weights_dir, prefix, suffix='_after'):
@@ -64,16 +76,21 @@ def process_PCA(input_dir, output_dir, weights_dir, prefix, suffix='_after'):
         suffix (str): suffix for input file name
 
     """
-    model_path = os.path.join(weights_dir, 'pca_model.pkl')
+    # model_path = os.path.join(weights_dir, 'pca_model.pkl')
+    model_path = weights_dir
     try:
-        pca = pickle.load(open(model_path, 'rb'))
+        with open(model_path, 'rb') as pretrained_model:
+            pca = pickle.load(pretrained_model)
+        # pca = pickle.load(open(model_path, 'rb'))
     except Exception as ex:
         print(ex)
         raise ValueError("Error in loading pre-saved PCA weights")
 
     input_fname = '{}_latent_space{}.pkl'.format(prefix, suffix)
     output_fname = '{}_latent_space{}_PCAed.pkl'.format(prefix, suffix)
-    dats = pickle.load(open(os.path.join(input_dir, input_fname), 'rb'))
+    with open(os.path.join(input_dir, input_fname), 'rb') as latent:
+        dats = pickle.load(latent)
+    # dats = pickle.load(open(os.path.join(input_dir, input_fname), 'rb'))
     dats_ = pca.transform(dats)
     output_file = os.path.join(output_dir, output_fname)
     print(f"\tsaving {output_file}")
@@ -188,13 +205,13 @@ def fit_umap(train_data, weights_dir, labels, conditions, n_nbrs=(15, 50, 200, 1
                         dpi=300, bbox_inches='tight')
     plt.close(fig)
 
-def dim_reduction(input_dirs,
-                  output_dirs,
-                  weights_dir,
-                  method,
-                  fit_model,
-                  prefix=None,
-                  conditions=None):
+def dim_reduction(method_,
+                  input_dir_,
+                  output_dir_,
+                  weights_dir_,
+                  file_prefix_,
+                  condition_,
+                  config_):
     """
     Wrapper fucntion for dimensionality reduction, save the reduced vectors (embeddings),
     output 2D embedding plot.
@@ -210,49 +227,62 @@ def dim_reduction(input_dirs,
 
     """
 
-    if type(input_dirs) is not list:
-        input_dirs = [input_dirs]
-    if not output_dirs:
-        output_dirs = input_dirs
-    assert len(output_dirs) == len(input_dirs), 'Numbers of input and output directories must have match.'
+    # if type(input_dirs_) is not list:
+    #     input_dirs = [input_dirs_]
+    # if not output_dirs_:
+    #     output_dirs = input_dirs_
+    # assert len(output_dirs_) == len(input_dirs_), 'Numbers of input and output directories must have match.'
     if prefix is not None:
         fname = '_'.join([prefix, 'latent_space_after.pkl'])
-    if method == 'pca':
+
+    if method_ == 'pca':
         fit_func = fit_PCA
         transform_func = process_PCA
-    elif method == 'umap':
+    elif method_ == 'umap':
         fit_func = fit_umap
         transform_func = umap_transform
-        if not fit_model:
+        if not config.dim_reduction.fit_model:
             raise NotImplemented('Inference mode is only supported for PCA at the moment')
     else:
         raise ValueError('Dimensionality reduction method has to be "pca" or "umap"')
-    if conditions is None:
-        conditions = [os.path.basename(input_dir) for input_dir in input_dirs]
-    elif type(conditions) is not list:
-        conditions = [conditions]
-    if fit_model:
+
+    # if config.dim_reduction.conditions is None:
+    #     conditions = [os.path.basename(input_dir) for input_dir in config.dim_reduction.input_dirs]
+    # elif type(config.dim_reduction.conditions) is not list:
+    #     conditions = [config.dim_reduction.conditions]
+
+    # fitting model,
+    if config.dim_reduction.fit_model:
         vector_list = []
         labels = []
         label = 0
-        for input_dir in input_dirs:
-            vec = pickle.load(open(os.path.join(input_dir, fname), 'rb'))
+        for input_dir in config.dim_reduction.input_dirs:
+            with open(os.path.join(input_dir, fname), 'rb') as latent:
+                vec = pickle.load(latent)
+            # vec = pickle.load(open(os.path.join(input_dir, fname), 'rb'))
             vector_list.append(vec)
             labels += [label] * vec.shape[0]
             label += 1
         vectors = np.concatenate(vector_list, axis=0)
-        _ = fit_func(vectors, weights_dir, labels=labels, conditions=conditions)
+        _ = fit_func(vectors, weights_dir_, labels=labels, conditions=condition_)
         # UMAP model from umap 0.5.0 can't be pickled with protocol=4.
         # Transform from saved models is currently not supported
-        if method == 'umap':
+        if method_ == 'umap':
             return
+
     # run inference for PCA
-    for input_dir, output_dir in zip(input_dirs, output_dirs):
-        print('Transforming latent vectors for {}'.format(input_dir))
-        transform_func(input_dir=input_dir,
-                    output_dir=output_dir,
-                    weights_dir=weights_dir,
-                    prefix=prefix)
+    # for input_dir, output_dir in zip(input_dirs, output_dirs):
+    #     print('Transforming latent vectors for {}'.format(input_dir))
+    #     transform_func(input_dir=input_dir,
+    #                 output_dir=output_dir,
+    #                 weights_dir=weights_dir,
+    #                 prefix=prefix)
+    if not config.dim_reduction.fit_model:
+        print('Transforming latent vectors for {}'.format(input_dir_))
+        transform_func(input_dir=input_dir_,
+                       output_dir=output_dir_,
+                       weights_dir=weights_dir_,
+                       prefix=file_prefix_)
 
 
 def parse_args():
@@ -263,74 +293,98 @@ def parse_args():
     """
     parser = argparse.ArgumentParser()
 
-    parser.add_argument(
-        '-i', '--input',
-        nargs='+',
-        type=str,
-        required=True,
-        help='Input directory/directories containing latent vectors to reduce dimension. '
-             'If multiple directories are supplied, all inputs will be concatenated for model fitting',
-    )
-    parser.add_argument(
-        '-o', '--output',
-        nargs='+',
-        default=[],
-        type=str,
-        required=False,
-        help='Output directory to save the reduced vectors. Same as input if not specified',
-    )
+    # parser.add_argument(
+    #     '-i', '--input',
+    #     nargs='+',
+    #     type=str,
+    #     required=True,
+    #     help='Input directory/directories containing latent vectors to reduce dimension. '
+    #          'If multiple directories are supplied, all inputs will be concatenated for model fitting',
+    # )
+    # parser.add_argument(
+    #     '-o', '--output',
+    #     nargs='+',
+    #     default=[],
+    #     type=str,
+    #     required=False,
+    #     help='Output directory to save the reduced vectors. Same as input if not specified',
+    # )
     parser.add_argument(
         '-m', '--method',
         type=str,
-        required=False,
+        required=True,
         choices=['pca', 'umap'],
         default='umap',
         help="Dimensionality reduction method",
     )
+    # parser.add_argument(
+    #     '-w', '--weights',
+    #     type=str,
+    #     required=True,
+    #     help="Directory to load/save the PCA weights.",
+    # )
+    # parser.add_argument(
+    #     '-f', '--fit',
+    #     dest='fit_model',
+    #     action='store_true',
+    #     help="Fit pca or umap model to the data and save the weights to 'weights'. "
+    #          "If left out the script will run with inference model and load saved model in 'weights'"
+    #          "to transform the vectors. Inference mode is only supported for PCA at the moment"
+    # )
+    # parser.set_defaults(fit_model=False)
+    # parser.add_argument(
+    #     '-p', '--prefix',
+    #     type=str,
+    #     required=False,
+    #     default=None,
+    #     help='prefix of the latent vector filename "{}_latent_space"',
+    # )
+
+    # parser.add_argument(
+    #     '-c', '--condition',
+    #     nargs='+',
+    #     type=str,
+    #     required=False,
+    #     default=None,
+    #     help='Condition for each input directory',
+    # )
     parser.add_argument(
-        '-w', '--weights',
+        '-c', '--config',
         type=str,
         required=True,
-        help="Directory to load/save the PCA weights.",
-    )
-    parser.add_argument(
-        '-f', '--fit',
-        dest='fit_model',
-        action='store_true',
-        help="Fit pca or umap model to the data and save the weights to 'weights'. "
-             "If left out the script will run with inference model and load saved model in 'weights'"
-             "to transform the vectors. Inference mode is only supported for PCA at the moment"
-    )
-    parser.set_defaults(fit_model=False)
-    parser.add_argument(
-        '-p', '--prefix',
-        type=str,
-        required=False,
-        default=None,
-        help='prefix of the latent vector filename "{}_latent_space"',
-    )
-
-    parser.add_argument(
-        '-c', '--condition',
-        nargs='+',
-        type=str,
-        required=False,
-        default=None,
-        help='Condition for each input directory',
+        help='path to yaml configuration file'
     )
     return parser.parse_args()
 
 
 if __name__ == '__main__':
-    args = parse_args()
+    arguments = parse_args()
+    config = YamlReader()
+    config.read_config(arguments.config)
 
-    dim_reduction(input_dirs=args.input,
-                  output_dirs=args.output,
-                  weights_dir=args.weights,
-                  method=args.method,
-                  fit_model=args.fit_model,
-                  prefix=args.prefix,
-                  conditions=args.condition,
-                  )
+    # dim_reduction(input_dirs=args.input,
+    #               output_dirs=args.output,
+    #               weights_dir=args.weights,
+    #               method=args.method,
+    #               fit_model=args.fit_model,
+    #               prefix=args.prefix,
+    #               conditions=args.condition,
+    #               )
+
+    # batch run
+    for (input, output, weights, prefix, condition) in list(zip(config.dim_reduction.input_dirs,
+                                                                config.dim_reduction.output_dirs,
+                                                                config.dim_reduction.weights_dirs,
+                                                                config.dim_reduction.file_name_prefixes,
+                                                                config.dim_reduction.conditions)):
+
+        dim_reduction(arguments.method,
+                      input,
+                      output,
+                      weights,
+                      prefix,
+                      condition,
+                      config
+                      )
 
 
