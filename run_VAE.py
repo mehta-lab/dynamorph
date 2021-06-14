@@ -28,10 +28,10 @@ def main(method_, raw_dir_, supp_dir_, config_):
 
     inputs = raw_dir_
     outputs = supp_dir_
-    weights = config_.inference.weights
+    weights = config_.latent_encoding.weights
     # channels = config_.inference.channels
     # network = config_.inference.model
-    gpu_id = config_.inference.gpu_id
+    gpu_id = config_.latent_encoding.gpu_ids
 
     # assert len(channels) > 0, "At least one channel must be specified"
 
@@ -59,8 +59,8 @@ def main(method_, raw_dir_, supp_dir_, config_):
         if not outputs:
             raise AttributeError("supplementary directory must be specified when method = trajectory_matching")
 
-    if config_.inference.fov:
-        sites = config_.inference.fov
+    if config_.latent_encoding.fov:
+        sites = config_.latent_encoding.fov
     else:
         # get all "XX-SITE_#" identifiers in raw data directory
         img_names = [file for file in os.listdir(inputs) if (file.endswith(".npy")) & ('_NN' not in file)]
@@ -115,5 +115,5 @@ if __name__ == '__main__':
     config.read_config(arguments.config)
 
     # batch run
-    for (raw_dir, supp_dir) in list(zip(config.inference.raw_dirs, config.inference.supp_dirs)):
+    for (raw_dir, supp_dir) in list(zip(config.latent_encoding.raw_dirs, config.latent_encoding.supp_dirs)):
         main(arguments.method, raw_dir, supp_dir, config)
