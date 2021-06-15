@@ -19,18 +19,23 @@ This is a repo storing codes and scripts for **DynaMorph: learning morphodynamic
 
 DynaMorph is developed and tested under Python 3.7, packages below are required.
 
-- [imageio](https://imageio.github.io/)
-- [Keras](https://keras.io/)
-- [Matplotlib](https://matplotlib.org/)
-- [NumPy](https://numpy.org/)
-- [OpenCV](https://opencv.org/about/)
-- [PyTorch](https://pytorch.org/)
-- [SciPy](https://www.scipy.org/)
-- [scikit-learn](https://scikit-learn.org/)
-- [segmentation-models](https://github.com/qubvel/segmentation_models)
-  - DynaMorph requires segmentation-models v0.2.1
-- [TensorFlow](https://www.tensorflow.org/)
-- [tifffile](https://pypi.org/project/tifffile/)
+For u-net segmentation
+- [TensorFlow](https://www.tensorflow.org/) ==v.2.1
+- [segmentation-models](https://github.com/qubvel/segmentation_models) ==v1.0.1
+
+For preprcoessing, patching, latent-space encoding, latent-space training
+- [imageio](https://imageio.github.io/) 
+- [tifffile](https://pypi.org/project/tifffile/) 
+- [Matplotlib](https://matplotlib.org/) 
+- [OpenCV](https://opencv.org/about/) 
+- [PyTorch](https://pytorch.org/) 
+- [SciPy](https://www.scipy.org/) 
+- [scikit-learn](https://scikit-learn.org/) 
+- [umap-learn](https://umap-learn.readthedocs.io/en/latest/#)
+- [pyyaml](https://pyyaml.org/)
+- [h5py](https://docs.h5py.org/en/stable/)
+- [POT](https://pythonot.github.io/)
+
 
 ## Getting Started
 
@@ -40,74 +45,76 @@ DynaMorph utilizes a broad set of deep learning and machine learning tools to an
 
 DynaMorph starts with raw image files from cell imaging experiments and sequentially applies a set of segmentation and encoding tools. Below we briefly introduced the main processing steps.
 
-### Label-free Imaging
-(for pipeline, can use data acquired from any microscopy source -- file format as .tif)
-(in dynamorph paper, we use phase and retardance)
-(collect polarization-resolved label-free images using method in <reference to virtual staining paper> )
 
-### Cell Segmentation and Tracking
+### Label-free Imaging, Cell Segmentation, and Tracking
 
 ![pipeline_fig](pipeline.jpg)
 
-Scripts under `NNsegmentation` folder contain codes for U-Net based cell segmentation model. `NNsegmentation/run.py` provides an example on the model training procedure. Usage of the segmentation model in the whole pipeline can be found in `pipeline/segmentation.py`.
+Starting from any microscopy data (file format is .tif single-page series or multi-page stacks acquired from micro-manager) (panel A), use a segmentation model of your choice to generate semantic segmentation maps (panel C).  In the dynamorph paper, we used Quantitative Label-Free Imaging with Phase and Polarization microscopy to depict cellular Phase and Retardance.
 
-Instance segmentation in this work is based on clustering, related methods can be found in `SingleCellPatch/extract_patches.py`. Following cell tracking methods can be found in `SingleCellPatch/generate_trajectories.py`.
+Instance segmentation in this work is based on clustering, related methods can be found in `SingleCellPatch/extract_patches.py`. Cell tracking methods can be found in `SingleCellPatch/generate_trajectories.py`.
 
 To generate segmentation and tracking from scratch, follow steps below:
 
 ##### <a name="step1"></a> 1. (optional) prepare training images and labels
 
-##### <a name="step2"></a> 2. (optional) train a classifier, see scripts in `NNsegmentation/run.py`
+##### <a name="step2"></a> 2. (optional) train a classifier to provide per-pixel class probabilities, see scripts in `NNsegmentation/run.py`
 
-##### <a name="step3"></a> 3. prepare inputs as 4-D numpy arrays of shape (n<sub>time frames</sub>, height, width, n<sub>channels</sub>), see method `pipeline.preprocess.write_raw_to_npy` for an example
+##### <a name="step3"></a> 3. prepare inputs as 4-D numpy arrays of shape (n<sub>time frames</sub>, height, width, <sub>channels</sub>), see method `pipeline.preprocess.write_raw_to_npy` for an example
 
-##### <a name="step4"></a> 4. apply trained model for semantic segmentation, see method `pipeline.segmentation.segmentation` or `run_segmentation.py` 
+##### <a name="step4"></a> 4. apply trained classifier for semantic segmentation, see method `pipeline.segmentation.segmentation` or `run_segmentation.py` 
 
 ##### <a name="step5"></a> 5. use predicted class probabilities for instance segmentation, see method `pipeline.segmentation.instance_segmentation` or `run_segmentation.py` 
-
-##### <a name="step6"></a> 6. connect static cell frames to trajectories, see method `pipeline.patch_VAE.build_trajectories` or `run_patch.py` 
 
 ### Latent Representations of Morphology
 DynaMorph uses VQ-VAE to encode and reconstruct cell image patches, from which latent vectors are used as morphology descriptor. Codes for building and training VAE models are stored in `HiddenStateExtractor/vq_vae.py`.
 
 To extract single cell patches and employ morphology encoding, follow steps below:
 
-##### <a name="step7"></a> 7. extract cell patches based on instance segmentation, see method `pipeline.patch_VAE.extract_patches` or `run_patch.py` 
+##### <a name="step6"></a> 6. extract cell patches based on instance segmentation, see method `pipeline.patch_VAE.extract_patches` or `run_patch.py -m 'extract_patches'` 
 
-##### <a name="step8"></a> 8. (optional) train a VAE for cell patch reconstruction, see the [main block](https://github.com/czbiohub/dynamorph/blob/8965b5d7b21895d95d548cc3ef6c1a397cee8255/HiddenStateExtractor/vq_vae.py#L1041) of `HiddenStateExtractor/vq_vae.py` for reference.
+##### <a name="step7"></a> 7. extract cell trajectories based on instance segmentation, see method `pipeline.patch_VAE.extract_patches` or `run_patch.py -m 'build_trajectories'` 
 
-##### <a name="step9"></a> 9. assemble cell patches generate from step 7 to model-compatible datasets, see method `pipeline.patch_VAE.assemble_VAE` or `run_VAE.py`
+##### <a name="step8"></a> 8. Train a VAE for cell patch latent-encoding, see method `run_training.py`
 
-##### <a name="step10"></a> 10. apply trained VAE models on cell patches, see method `pipeline.patch_VAE.process_VAE` or `run_VAE.py` 
+##### <a name="step9"></a> 9. assemble cell patches generated from step 7 to model-compatible datasets, see method `pipeline.patch_VAE.assemble_VAE` or `run_VAE.py -m 'assemble'`
+
+##### <a name="step10"></a> 10. apply trained VAE models on cell patches, see method `pipeline.patch_VAE.process_VAE` or `run_VAE.py -m 'process'` 
+
 
 ## Usage
 
-The dataset accopanying this repository is large and currently available upon request for demonstration. 
+The dataset accompanying this repository is large and currently available upon request for demonstration. 
 
-Example scripts `run_preproc.py`, `run_segmentation.py`, `run_patch.py` and `run_VAE.py` provide command line interface, for detailed usages please check by using the `-h` option. 
+Scripts `run_preproc.py`, `run_segmentation.py`, `run_patch.py`, `run_VAE.py` and `run_training.py` provide command line interface, for details please check by using the `-h` option.
+Each CLI requires a configuration file (.yaml format) that contains parameters for each stage.  Please see the example: `configs/config_example.yml`
 
-To run the dynamorph pipeline, data should first be assembled into 4-D numpy arrays ([step 3](#step3)). Assume raw data (named as `$SITE_NAMES.npy`) are saved under `$RAW_PATH`, and intermediate data will be saved under supplementary folder `$SUPP_PATH`. Related model weights are respectively located at `$UNET_WEIGHT_PATH`, `$VQVAE_WEIGHT_PATH` and `$PCA_WEIGHT_PATH`, below is a simple sequence of commands that could run dynamorph.
+To run the dynamorph pipeline, data should first be assembled into 4-D numpy arrays ([step 3](#step3)). 
 
 Semantic segmentation ([step 4](#step4)) and instance segmentation ([step 5](#step5))):
 
-	python run_segmentation.py -r $RAW_PATH -s $SUPP_PATH -m segmentation -f $SITE_NAMES -w $UNET_WEIGHT_PATH
-	python run_segmentation.py -r $RAW_PATH -s $SUPP_PATH -m instance_segmentation -f $SITE_NAMES
+	python run_segmentation.py -m "segmentation" -c <path-to-your-config-yaml>
+	python run_segmentation.py -m "instance_segmentation" -c <path-to-your-config-yaml>
 
-Extract patches from segmentation results ([step 7](#step7)), then connect them into trajectories ([step 6](#step6)):
+Extract patches from segmentation results ([step 6](#step6)), then connect them into trajectories ([step 7](#step7)):
 
-	python run_patch.py -r $RAW_PATH -s $SUPP_PATH -m extract_patches -f $SITE_NAMES
-	python run_patch.py -r $RAW_PATH -s $SUPP_PATH -m build_trajectories -f $SITE_NAMES
+	python run_patch.py -m "extract_patches" -c <path-to-your-config-yaml>
+	python run_patch.py -m "build_trajectories" -c <path-to-your-config-yaml>
+	
+Train a DNN model (VQ-VAE) to learn a representation of your image data ([step 8](#step8)):
 
-Initiate a trained VQ-VAE model and encode cell image patches into morphology descriptors ([step 9](#step9) and [10](#step10)):
+	python run_training.py -c <path-to-your-config-yaml>
 
-	python run_VAE.py -r $RAW_PATH -s $SUPP_PATH -m assemble -f $SITE_NAMES
-	python run_VAE.py -r $RAW_PATH -s $SUPP_PATH -m process -f $SITE_NAMES -w $VQVAE_WEIGHT_PATH
-	python run_VAE.py -r $RAW_PATH -s $SUPP_PATH -m pca -f $SITE_NAMES -w $PCA_WEIGHT_PATH
+Transform image patches into DNN model (VQ-VAE) latent-space by running inference. ([step 9](#step9) and [10](#step10)):
+
+	python run_VAE.py -m "assemble" -c <path-to-your-config-yaml>
+	python run_VAE.py -m "process" -c <path-to-your-config-yaml>
 
 Reduce the dimension of latent vectors for visualization by fitting a PCA or UMAP model to the data. For UMAP:
 
-    python run_dim_reduction.py -i <input dir 1> <input dir 2> ... -w <model dir> -f -m umap -p <prefix> -c <condition 1> <condition 2> ...
-"prefix" is the string in the latent vector filename "{prefix}_latent_space"
+    python run_dim_reduction.py -m "pca" -c <path-to-your-config-yaml>
+    
+    
 ## Citing DynaMorph
 
 To cite DynaMorph, please use the bibtex entry below:
@@ -124,7 +131,7 @@ To cite DynaMorph, please use the bibtex entry below:
 
 ## Contact Us
 
-If you have any questions regarding this work or codes in this repo, feel free to raise an issue or reach out to us through:
+If you have any questions regarding this work or code in this repo, feel free to raise an issue or reach out to us through:
 - Zhenqin Wu <zqwu@stanford.edu>
 - Bryant Chhun <bryant.chhun@czbiohub.org>
 - Shalin Mehta <shalin.mehta@czbiohub.org> 
