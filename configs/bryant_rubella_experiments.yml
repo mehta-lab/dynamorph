@@ -26,7 +26,7 @@ segmentation_inference:
   validation_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/val']
   model: 'UNet'
   weights: '/gpfs/CompMicro/projects/dynamorph/model_save/final_reformat.h5'
-  num_gpus: 3
+  gpu_ids: [1,2,3]
   fov: ['C4-Site_0']
   channels: [0,1]
 

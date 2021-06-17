@@ -39,9 +39,9 @@ SEGMENTATION_INFERENCE = {
     'validation_dirs',
     'model',
     'weights',
-    'num_gpus',
-    'channels',
+    'gpu_ids',
     'fov',
+    'channels',
 
     'num_classes',
     'window_size',
@@ -55,6 +55,7 @@ PATCH = {
     'supp_dirs',
     'channels',
     'fov',
+
     'num_cpus',
     'window_size',
     'save_fig',
