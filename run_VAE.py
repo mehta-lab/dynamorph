@@ -33,7 +33,9 @@ def main(method_, raw_dir_, supp_dir_, config_):
     weights = config_.latent_encoding.weights
     # channels = config_.inference.channels
     # network = config_.inference.model
-    gpu_id = config_.latent_encoding.gpu_ids
+    # gpu_id = config_.latent_encoding.gpu_ids
+    gpus = config_.latent_encoding.gpu_ids
+    gpu_count = len(gpus)
 
     # assert len(channels) > 0, "At least one channel must be specified"
 
@@ -69,13 +71,16 @@ def main(method_, raw_dir_, supp_dir_, config_):
 
     wells = set(s[:2] for s in sites)
     mp.set_start_method('spawn', force=True)
+
     # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     # os.environ['CUDA_VISIBLE_DEVICES'] = ','.join([str(i) for i in gpu_ids])
     # print("CUDA_VISIBLE_DEVICES=" + os.environ["CUDA_VISIBLE_DEVICES"])
     for i, well in enumerate(wells):
         well_sites = [s for s in sites if s[:2] == well]
         args = (inputs, outputs, well_sites, config_)
-        p = Worker(args, gpuid=gpu_ids[0], method=method)
+        gpu_idx = i % gpu_count
+        gpu_id = gpus[gpu_idx]
+        p = Worker(args, gpuid=gpu_id, method=method)
         p.start()
         p.join()
 
