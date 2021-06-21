@@ -381,17 +381,18 @@ def process_VAE(raw_folder: str,
     commitment_cost = config_.latent_encoding.commitment_cost
 
     network = config_.latent_encoding.network
+    weights_dir = config_.latent_encoding.weights
     save_output = config_.latent_encoding.save_output
 
     assert len(channels) > 0, "At least one channel must be specified"
 
     # these sites should be from a single condition (C5, C4, B-wells, etc..)
 
-    # model_path = os.path.join(weights_dir, 'model.pt')
-    # model_name = os.path.basename(weights_dir)
-    # output_dir = os.path.join(raw_folder, model_name)
-    # os.makedirs(output_dir, exist_ok=True)
-    output_dir = raw_folder
+    model_path = os.path.join(weights_dir, 'model.pt')
+    model_name = os.path.basename(weights_dir)
+    output_dir = os.path.join(raw_folder, model_name)
+    os.makedirs(output_dir, exist_ok=True)
+    # output_dir = raw_folder
 
     #### cardiomyocyte data###
     # channel_mean = [0.49998672, 0.007081]
