@@ -37,7 +37,7 @@ SEGMENTATION_INFERENCE = {
     'raw_dirs',
     'supp_dirs',
     'validation_dirs',
-    'model',
+    'network',
     'weights',
     'gpu_ids',
     'fov',
@@ -67,24 +67,22 @@ PATCH = {
 LATENT_ENCODING = {
     'raw_dirs',
     'supp_dirs',
-    'val_dirs',
-    'model',
     'weights',
     'save_output',
     'gpu_ids',
     'fov',
+    'patch_type',
 
     'channels',
     'channel_mean',
     'channel_std',
 
+    'network',
     'num_classes',
     'num_hiddens',
     'num_residual_hiddens',
     'num_embeddings',
-    'num_pred_rnd',
     'commitment_cost',
-    'seg_val_cat'
 }
 
 DIM_REDUCTION = {

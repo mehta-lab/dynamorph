@@ -380,7 +380,7 @@ def process_VAE(raw_folder: str,
     num_embeddings = config_.latent_encoding.num_embeddings
     commitment_cost = config_.latent_encoding.commitment_cost
 
-    network = config_.latent_encoding.model
+    network = config_.latent_encoding.network
     save_output = config_.latent_encoding.save_output
 
     assert len(channels) > 0, "At least one channel must be specified"
