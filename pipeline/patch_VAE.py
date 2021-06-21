@@ -138,6 +138,7 @@ def assemble_VAE(raw_folder: str,
     """
 
     channels = config.latent_encoding.channels
+    patch_type = config.latent_encoding.patch_type
 
     assert len(channels) > 0, "At least one channel must be specified"
 
