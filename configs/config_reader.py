@@ -88,8 +88,8 @@ LATENT_ENCODING = {
 DIM_REDUCTION = {
     'input_dirs',
     'output_dirs',
-    'file_name_prefixes',
     'weights_dirs',
+    'file_name_prefixes',
     'fit_model',
     'conditions'
 }
@@ -98,6 +98,7 @@ TRAINING = {
     'raw_dirs',
     'supp_dirs',
     'weights_dirs',
+
     'network',
     'num_inputs',
     'num_hiddens',
@@ -111,6 +112,7 @@ TRAINING = {
     'w_n',
     'channel_mean',
     'channel_std',
+
     'commitment_cost',
     'n_epochs',
     'learn_rate',

@@ -77,7 +77,7 @@ dim_reduction:
   output_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/pca_out']
   file_name_prefixes: ['C4']
   weights_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/pca_out/pca_save_after_JUNE.pkl']
-  fit_model: False
+  fit_model: True
   conditions: ['rubella']
 
 
@@ -101,8 +101,8 @@ training:
   commitment_cost: 0.25
 
   alpha: 0.002
-  epochs: 5000
-  learning_rate: 0.0001
+  n_epochs: 5000
+  learn_rate: 0.0001
   batch_size: 96
   gpus: True
   gpu_id: 3
