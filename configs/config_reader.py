@@ -88,7 +88,7 @@ LATENT_ENCODING = {
 DIM_REDUCTION = {
     'input_dirs',
     'output_dirs',
-    'weights_dirs',
+    'weights_dir',
     'file_name_prefixes',
     'fit_model',
     'conditions'

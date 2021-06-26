@@ -129,11 +129,13 @@ dim_reduction:
     '<path to folder containing first experiment PCA outputs>',
     '<path to folder containing second experiment PCA outputs>'
   ]
-  file_name_prefixes: ['C4']
+  # PCA transform outputs are written to output dirs
+
   weights_dirs: [
     '<path to folder containing first experiment "SUPP" data>',
     '<path to folder containing second experiment "SUPP" data>'
   ]
+  file_name_prefixes: ['C4', 'C5']
   fit_model: False
   conditions: ['<filename>']
 

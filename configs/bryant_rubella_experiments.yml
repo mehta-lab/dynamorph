@@ -76,8 +76,8 @@ dim_reduction:
   input_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/raw']
   output_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/pca_out']
   file_name_prefixes: ['C4']
-  weights_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/pca_out/pca_save_after_JUNE.pkl']
-  fit_model: True
+  weights_dir: '/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/pca_out/weights'
+  fit_model: False
   conditions: ['rubella']
 
 

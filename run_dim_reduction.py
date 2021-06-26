@@ -26,6 +26,8 @@ def fit_PCA(train_data, weights_dir, labels, conditions):
         pca (sklearn PCA model): trained PCA instance
 
     """
+    os.mkdir(weights_dir) if not os.path.exists(weights_dir) else print()
+
     model_path = os.path.join(weights_dir, 'pca_model.pkl')
     pca = PCA(0.5, svd_solver='auto')
     print('Fitting PCA model {} ...'.format(model_path))
@@ -68,6 +70,7 @@ def process_PCA(input_dir, output_dir, weights_dir, prefix, suffix='_after'):
         suffix (str): suffix for input file name
 
     """
+    os.mkdir(output_dir) if not os.path.exists(output_dir) else print()
     model_path = os.path.join(weights_dir, 'pca_model.pkl')
     try:
         with open(model_path, 'rb') as pretrained_model:
@@ -84,7 +87,7 @@ def process_PCA(input_dir, output_dir, weights_dir, prefix, suffix='_after'):
     # dats = pickle.load(open(os.path.join(input_dir, input_fname), 'rb'))
     dats_ = pca.transform(dats)
     output_file = os.path.join(output_dir, output_fname)
-    print(f"\tsaving {output_file}")
+    print(f"\tSaving PCA-transformed latent space to {output_file}")
     with open(output_file, 'wb') as f:
         pickle.dump(dats_, f, protocol=4)
 
@@ -230,6 +233,8 @@ def dim_reduction(method,
     # if not output_dirs_:
     #     output_dirs = input_dirs_
     # assert len(output_dirs_) == len(input_dirs_), 'Numbers of input and output directories must have match.'
+
+    # Assign prefix as list
     if prefix is not None and type(prefix) is not list:
         fname = ['_'.join([prefix, 'latent_space_after.pkl'])]
     elif type(prefix) is list:
@@ -237,6 +242,7 @@ def dim_reduction(method,
     else:
         raise ValueError("latent space vector file name must contain a prefix: '<prefix>_latent_space.pkl'")
 
+    # assign fit and transform functions
     if method == 'pca':
         fit_func = fit_PCA
         transform_func = process_PCA
@@ -258,6 +264,7 @@ def dim_reduction(method,
 
     # run fit for PCA
     if config.dim_reduction.fit_model:
+        weights_output = os.path.dirname(weights_dir) if os.path.isfile(weights_dir) else weights_dir
         vector_list = []
         labels = []
         label = 0
@@ -274,7 +281,7 @@ def dim_reduction(method,
                 label += 1
 
         vectors = np.concatenate(vector_list, axis=0)
-        _ = fit_func(vectors, weights_dir, labels=labels, conditions=conditions)
+        _ = fit_func(vectors, weights_output, labels=labels, conditions=conditions)
         # UMAP model from umap 0.5.0 can't be pickled with protocol=4.
         # Transform from saved models is currently not supported
         if method == 'umap':
@@ -282,12 +289,14 @@ def dim_reduction(method,
 
     # run inference for PCA
     if not config.dim_reduction.fit_model:
+        weights_input = os.path.dirname(weights_dir)
         for input_d, output_d in zip(input_dir, output_dir):
-            print('Transforming latent vectors for {}'.format(input_dir))
-            transform_func(input_dir=input_d,
-                           output_dir=output_d,
-                           weights_dir=weights_dir,
-                           prefix=prefix)
+            for p in prefix:
+                print('Transforming latent vectors for {}'.format(input_dir))
+                transform_func(input_dir=input_d,
+                               output_dir=output_d,
+                               weights_dir=weights_input,
+                               prefix=p)
 
     # if not config.dim_reduction.fit_model:
     #     print('Transforming latent vectors for {}'.format(input_dir_))
@@ -374,10 +383,10 @@ if __name__ == '__main__':
     config = YamlReader()
     config.read_config(arguments.config)
 
-    dim_reduction(config.dim_reduction.method,
+    dim_reduction(arguments.method,
                   config.dim_reduction.input_dirs,
                   config.dim_reduction.output_dirs,
-                  config.dim_reduction.weights_dirs,
+                  config.dim_reduction.weights_dir,
                   config
                   )
     # else:
