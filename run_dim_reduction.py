@@ -292,7 +292,9 @@ def dim_reduction(method,
         weights_input = os.path.dirname(weights_dir)
         for input_d, output_d in zip(input_dir, output_dir):
             for p in prefix:
-                print('Transforming latent vectors for {}'.format(input_dir))
+                print(f'Transforming latent vectors for prefix {p} '
+                      f'\n\t in folder {input_d} '
+                      f'\n\t using weights {weights_input}')
                 transform_func(input_dir=input_d,
                                output_dir=output_d,
                                weights_dir=weights_input,
