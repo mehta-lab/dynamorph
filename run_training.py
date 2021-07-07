@@ -15,7 +15,7 @@ from scipy.sparse import csr_matrix
 
 from HiddenStateExtractor.vae import CHANNEL_MAX
 from SingleCellPatch.extract_patches import im_adjust, cv2_fn_wrapper
-from pipeline.train_utils import EarlyStopping, TripletDataset, zscore, zscore_patch
+from pipeline.train_utils import EarlyStopping, TripletDataset, zscore, zscore_patch, apply_affine_transform
 from HiddenStateExtractor.losses import AllTripletMiner
 from HiddenStateExtractor.resnet import EncodeProject
 import HiddenStateExtractor.vae as vae
@@ -320,15 +320,43 @@ def concat_relations(relations, labels, offsets):
     new_labels = np.concatenate(new_labels, axis=0)
     return new_relations, new_labels
 
+def random_crop(img, crop_ratio = (0.6, 1)):
+    # Note: image_data_format is 'channel_first'
+    height, width = img.shape[1], img.shape[2]
+    dy = int(np.random.uniform(crop_ratio[0], crop_ratio[1]) * height)
+    dx = int(np.random.uniform(crop_ratio[0], crop_ratio[1]) * height)
+    x = np.random.randint(0, width - dx + 1)
+    y = np.random.randint(0, height - dy + 1)
+    img = img[:, y:(y+dy), x:(x+dx)]
+    return cv2_fn_wrapper(cv2.resize, img, (height, width))
 
-def augment_img(img):
+
+def random_intensity_jitter(img, mean_jitter, std_jitter):
+    img_j = []
+    for im in img:
+        mean_offset = np.random.uniform(-mean_jitter, mean_jitter)
+        std_scale = 1 + np.random.uniform(-std_jitter, std_jitter)
+        im = unzscore(im, mean_offset, std_scale)
+        img_j.append(im)
+    return np.stack(img_j)
+
+def augment_img(img, rotate_range=180, zoom_range=(1, 1), crop_ratio = (0.6, 1), intensity_jitter=(0.5, 0.5)):
+# def augment_img(img, rotate_range=180, zoom_range=(1, 1), crop_ratio=(0.6, 1), intensity_jitter=(0, 0)):
+# def augment_img(img, rotate_range=180, zoom_range=(1, 1), crop_ratio=(1, 1), intensity_jitter=(0.5, 0.5)):
     """Data augmentation with flipping and rotation"""
     # TODO: Rewrite with torchvision transform
+    img = random_intensity_jitter(img, intensity_jitter[0], intensity_jitter[1])
+    if crop_ratio[0] != 1 or crop_ratio[1] != 1:
+        img = random_crop(img, crop_ratio=crop_ratio)
     flip_idx = np.random.choice([0, 1, 2])
     if flip_idx != 0:
         img = np.flip(img, axis=flip_idx)
-    rot_idx = int(np.random.choice([0, 1, 2, 3]))
-    img = np.rot90(img, k=rot_idx, axes=(1, 2))
+    theta = np.random.uniform(-rotate_range, rotate_range)
+    zoom = np.random.uniform(zoom_range[0], zoom_range[1])
+    img = apply_affine_transform(img, zx=zoom, theta=theta,
+                                zy=zoom, fill_mode='constant', cval=0., order=1)
+    # rot_idx = int(np.random.choice([0, 1, 2, 3]))
+    # img = np.rot90(img, k=rot_idx, axes=(1, 2))
     return img
 
 
@@ -816,12 +844,12 @@ def main(config_):
     # earlystop_metric = 'total_loss'
     retrain = config.training.retrain
     earlystop_metric = 'positive_triplet'
-    # model_name = 'A549_{}_mrg{}_npos{}_bh{}_alltriloss_tr'.format(
     model_name = config.training.model_name
     start_model_path = config.training.start_model_path
     start_epoch = config.training.start_epoch
     use_mask = config.training.use_mask
-
+    channels = config.training.channels
+    normalization = config.training.normalization
     cs = [0, 1]
     cs_mask = [2, 3]
     input_shape = (128, 128)
@@ -834,8 +862,6 @@ def main(config_):
         use_loader = True
 
     dir_sets = list(zip(supp_dirs, train_dirs, raw_dirs))
-    # dir_sets = dir_sets[0:1]
-    ts_keys = []
     datasets = []
     masks = []
     relations = []
@@ -844,10 +870,9 @@ def main(config_):
     ### Load Data ###
     for supp_dir, train_dir, raw_dir in dir_sets:
         os.makedirs(train_dir, exist_ok=True)
-        print(f"\tloading file paths {os.path.join(raw_dir, 'im_file_paths.pkl')}")
-        ts_key = pickle.load(open(os.path.join(raw_dir, 'im_file_paths.pkl'), 'rb'))
         print(f"\tloading static patches {os.path.join(raw_dir, 'im_static_patches.pkl')}")
         dataset = pickle.load(open(os.path.join(raw_dir, 'im_static_patches.pkl'), 'rb'))
+        dataset = dataset[:, channels, ...]
         print('dataset.shape:', dataset.shape)
         label = pickle.load(open(os.path.join(raw_dir, "im_static_patches_labels.pkl"), 'rb'))
         # Note that `relations` is depending on the order of fs (should not sort)
@@ -855,12 +880,16 @@ def main(config_):
         relation = pickle.load(open(os.path.join(raw_dir, 'im_static_patches_relations.pkl'), 'rb'))
         # dataset_mask = TensorDataset(dataset_mask.tensors[0][np.array(inds_in_order)])
         # print('relations:', relations)
-        print('len(ts_key):', len(ts_key))
+        print('len(label):', len(label))
         print('len(dataset):', len(dataset))
         relations.append(relation)
-        ts_keys += ts_key
         # TODO: handle non-singular z-dimension case earlier in the pipeline
-        dataset = zscore(np.squeeze(dataset), channel_mean=channel_mean, channel_std=channel_std).astype(np.float32)
+        if normalization == 'dataset':
+            dataset = zscore(np.squeeze(dataset), channel_mean=channel_mean, channel_std=channel_std).astype(np.float32)
+        elif normalization == 'patch':
+            dataset = zscore_patch(np.squeeze(dataset)).astype(np.float32)
+        else:
+            raise ValueError('Parameter "normalization" must be "dataset" or "patch"')
         datasets.append(dataset)
         labels.append(label)
         id_offsets.append(len(dataset))
@@ -875,6 +904,10 @@ def main(config_):
         masks = None
     # dataset = zscore(dataset, channel_mean=channel_mean, channel_std=channel_std).astype(np.float32)
     relations, labels = concat_relations(relations, labels, offsets=id_offsets)
+    print('len(labels):', len(labels))
+    print('len(dataset):', len(dataset))
+    # treat every patch as different
+    # labels = np.arange(len(labels))
     # Save the model in the train directory of the last dataset
     model_dir = os.path.join(train_dir, model_name)
     #TODO: write dataset class for VAE models

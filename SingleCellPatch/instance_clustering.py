@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt
 import pickle
 from sklearn.cluster import DBSCAN
 from copy import copy
+import logging
+log = logging.getLogger(__name__)
 
 """ Functions for clustering single cells from semantic segmentation """
 
@@ -45,9 +47,16 @@ def check_segmentation_dim(segmentation):
         segmentation: (np.array): segmentation mask for the frame
 
     """
-
-    assert len(segmentation.shape) == 4, "Semantic segmentation should be formatted with dimension (c, z, x, y)"
-    n_channels, _, _, _ = segmentation.shape
+    # if segmentation.ndim == 4:
+    #     n_channels, n_z, x_full_size, y_full_size = segmentation.shape
+    if segmentation.ndim == 3:
+        n_channels, x_full_size, y_full_size = segmentation.shape
+        # segmentation = segmentation[:, np.newaxis, ...]
+    elif segmentation.ndim == 2:
+        n_channels = 1
+        segmentation = segmentation[np.newaxis, ...]
+    else:
+        raise ValueError('Semantic segmentation mask must be 2 or 3D, not {}'.format(segmentation.ndim))
 
     # binary segmentation has only foreground channel, add background channel
     if n_channels == 1:
@@ -56,12 +65,15 @@ def check_segmentation_dim(segmentation):
     return segmentation
 
 
-def instance_clustering(cell_segmentation, 
-                        ct_thr=(500, 12000), 
-                        instance_map=True, 
-                        map_path=None, 
-                        fg_thr=0.3,
-                        DBSCAN_thr=(10, 250)):
+def instance_clustering(cell_segmentation,
+                        # ct_thr=(500, 12000),
+                        ct_thr=(0, np.inf),
+                        save_fig=True,
+                        map_path=None,
+                        fg_thr=0.5,
+                        DBSCAN_thr=(10, 250),
+                        # DBSCAN_thr=(2, 15),
+                        n_jobs=10):
     """ Perform instance clustering on a static frame
 
     Args:
@@ -69,9 +81,9 @@ def instance_clustering(cell_segmentation,
             size (n_classes(3), z(1), x, y)
         ct_thr (tuple, optional): lower and upper threshold for cell size 
             (number of pixels in segmentation mask)
-        instance_map (bool, optional): if to save instance segmentation as an 
+        save_fig (bool, optional): if to save instance segmentation as an
             image
-        map_path (str or None, optional): path to the image (if `instance_map` 
+        map_path (str or None, optional): path to the image (if `save_fig`
             is True)
         fg_thr (float, optional): threshold of foreground, any pixel with 
             predicted background prob less than this value would be regarded as
@@ -86,26 +98,28 @@ def instance_clustering(cell_segmentation,
 
     """
     cell_segmentation = check_segmentation_dim(cell_segmentation)
-    all_cells = np.mean(cell_segmentation[0], axis=0) < fg_thr
-    positions = np.array(list(zip(*np.where(all_cells))))
-    if len(positions) < 1000:
+    all_cells = cell_segmentation[0] < fg_thr
+    pixel_ids = np.array(list(zip(*np.nonzero(all_cells))))
+    if len(pixel_ids) < 1000:
         # No cell detected
-        return [], np.zeros((0, 2), dtype=int), np.zeros((0,), dtype=int)
+        return [], [], np.zeros((0, 2), dtype=int), np.zeros((0,), dtype=int)
 
     # DBSCAN clustering of cell pixels
-    clustering = DBSCAN(eps=DBSCAN_thr[0], min_samples=DBSCAN_thr[1]).fit(positions)
+    clustering = DBSCAN(eps=DBSCAN_thr[0], min_samples=DBSCAN_thr[1], n_jobs=n_jobs).fit(pixel_ids)
     positions_labels = clustering.labels_
-    cell_ids, point_cts = np.unique(positions_labels, return_counts=True)
-    
+    cell_ids, cell_sizes = np.unique(positions_labels, return_counts=True)
+    # neglect unclustered pixels
+    cell_sizes = cell_sizes[cell_ids >= 0]
+    cell_ids = cell_ids[cell_ids >= 0]
     cell_positions = []
-    for cell_id, ct in zip(cell_ids, point_cts):
-        if cell_id < 0:
-            # neglect unclustered pixels
-            continue
-        if ct <= ct_thr[0] or ct >= ct_thr[1]:
-            # neglect cells that are too small/big
-            continue
-        points = positions[np.where(positions_labels == cell_id)[0]]
+    cell_ids = list(cell_ids)
+    cell_ids_new = []
+    cell_sizes_new = []
+    for cell_id, cell_size in zip(cell_ids, cell_sizes):
+        # if cell_size <= ct_thr[0] or cell_size >= ct_thr[1]:
+        #     # neglect cells that are too small/big
+        #     continue
+        points = pixel_ids[np.nonzero(positions_labels == cell_id)[0]]
         # calculate cell center
         mean_pos = np.mean(points, 0).astype(int)
         # define window
@@ -114,15 +128,17 @@ def instance_clustering(cell_segmentation,
         outliers = [p for p in points if not within_range(window, p)]
         if len(outliers) > len(points) * 0.05:
             continue
-        cell_positions.append((cell_id, mean_pos))
+        cell_positions.append(mean_pos)
+        cell_ids_new.append(cell_id)
+        cell_sizes_new.append(cell_size)
 
     # Save instance segmentation results as image
-    if instance_map and map_path is not None:
+    if save_fig and map_path is not None:
         x_size, y_size = cell_segmentation.shape[-2:]
         # bg as -1
         segmented = np.zeros((x_size, y_size)) - 1
-        for cell_id, mean_pos in cell_positions:
-            points = positions[np.where(positions_labels == cell_id)[0]]
+        for cell_id, mean_pos in zip(cell_ids_new, cell_positions):
+            points = pixel_ids[np.where(positions_labels == cell_id)[0]]
             for p in points:
                 segmented[p[0], p[1]] = cell_id%10
         plt.clf()
@@ -131,14 +147,15 @@ def instance_clustering(cell_segmentation,
         cmap.set_under(color='k')
         plt.imshow(segmented, cmap=cmap, vmin=-0.001, vmax=10.001)
         font = {'color': 'white', 'size': 4}
-        for cell_id, mean_pos in cell_positions:
+        for cell_id, mean_pos in zip(cell_ids_new, cell_positions):
             plt.text(mean_pos[1], mean_pos[0], str(cell_id), fontdict=font)
         plt.axis('off')
         plt.savefig(map_path, dpi=300)
-    return cell_positions, positions, positions_labels
+    return cell_ids_new, cell_positions, cell_sizes_new, pixel_ids, positions_labels
 
 
-def process_site_instance_segmentation(raw_data,
+def process_site_instance_segmentation(site,
+                                       raw_data,
                                        raw_data_segmented,
                                        site_supp_files_folder,
                                        **kwargs):
@@ -165,19 +182,32 @@ def process_site_instance_segmentation(raw_data,
     # Should be of size (n_frame, n_classes, z(1), x(2048), y(2048)), float
     print(f"\tLoading {raw_data_segmented}")
     segmentation_stack = np.load(raw_data_segmented)
-
+    meta_list = []
     cell_positions = {}
     cell_pixel_assignments = {}
     for t_point in range(image_stack.shape[0]):
-        print("\tClustering time %d" % t_point)
-        cell_segmentation = segmentation_stack[t_point]
-        instance_map_path = os.path.join(site_supp_files_folder, 'segmentation_%d.png' % t_point)
-        #TODO: expose instance clustering parameters in config
-        res = instance_clustering(cell_segmentation, instance_map=True, map_path=instance_map_path)
-        cell_positions[t_point] = res[0] # List of cell: (cell_id, mean_pos)
-        cell_pixel_assignments[t_point] = res[1:]
+        cell_positions[t_point] = {}
+        cell_pixel_assignments[t_point] = {}
+        for z in range(image_stack.shape[2]):
+            print("\tClustering time {} z {}".format(t_point, z))
+            cell_segmentation = segmentation_stack[t_point, :, z, ...]
+            instance_map_path = os.path.join(site_supp_files_folder, 'segmentation_t{}_z{}.png'.format(t_point, z))
+            #TODO: expose instance clustering parameters in config
+            cell_ids, positions, cell_sizes, pixel_ids, positions_labels = \
+                instance_clustering(cell_segmentation, save_fig=False, map_path=instance_map_path)
+            cell_positions[t_point][z] = list(zip(cell_ids, positions)) # List of cell: (cell_id, mean_pos)
+            cell_pixel_assignments[t_point][z] = (pixel_ids, positions_labels)
+            # new metadata format
+            for cell_id, cell_pos, cell_size in zip(cell_ids, positions, cell_sizes):
+                meta_row = {'FOV': site,
+                            'time': t_point,
+                            'slice': z,
+                            'cell ID': cell_id,
+                            'cell position': cell_pos,
+                            'cell size': cell_size}
+                meta_list.append(meta_row)
     with open(os.path.join(site_supp_files_folder, 'cell_positions.pkl'), 'wb') as f:
         pickle.dump(cell_positions, f)
     with open(os.path.join(site_supp_files_folder, 'cell_pixel_assignments.pkl'), 'wb') as f:
         pickle.dump(cell_pixel_assignments, f)
-    return
+    return meta_list

@@ -11,6 +11,8 @@ import numpy as np
 import os
 import pickle
 import matplotlib
+import natsort
+import pandas as pd
 matplotlib.use('AGG')
 import matplotlib.pyplot as plt
 from scipy.signal import convolve2d
@@ -61,7 +63,7 @@ def select_window(img, window, padding=0., skip_boundary=False):
     elif len(img.shape) == 3:
         n_channels, x_full_size, y_full_size = img.shape
         # add a z axis
-        img = np.expand_dims(img, 1)
+        # img = np.expand_dims(img, 1)
     else:
         raise NotImplementedError("window must be extracted from raw data of 3 or 4 dims")
     # print(f"\nwindow selection, img.shape = {img.shape}\twindow.shape = {window}")
@@ -73,20 +75,20 @@ def select_window(img, window, padding=0., skip_boundary=False):
         return None
 
     if window[0][0] < 0:
-        output_img = np.concatenate([padding * np.ones_like(img[:, :, window[0][0]:]),
-                                     img[:, :, :window[0][1]]], 2)
+        output_img = np.concatenate([padding * np.ones_like(img[..., window[0][0]:, :]),
+                                     img[..., :window[0][1], :]], 1)
     elif window[0][1] > x_full_size:
-        output_img = np.concatenate([img[:, :, window[0][0]:],
-                                     padding * np.ones_like(img[:, :, :(window[0][1] - x_full_size)])], 2)
+        output_img = np.concatenate([img[..., window[0][0]:, :],
+                                     padding * np.ones_like(img[..., :(window[0][1] - x_full_size), :])], 1)
     else:
-        output_img = img[:, :, window[0][0]:window[0][1]]
+        output_img = img[..., window[0][0]:window[0][1], :]
 
     if window[1][0] < 0:
         output_img = np.concatenate([padding * np.ones_like(output_img[..., window[1][0]:]),
-                                     output_img[..., :window[1][1]]], 3)
+                                     output_img[..., :window[1][1]]], 2)
     elif window[1][1] > y_full_size:
         output_img = np.concatenate([output_img[..., window[1][0]:],
-                                     padding * np.ones_like(output_img[..., :(window[1][1] - y_full_size)])], 3)
+                                     padding * np.ones_like(output_img[..., :(window[1][1] - y_full_size)])], 2)
     else:
         output_img = output_img[..., window[1][0]:window[1][1]]
     return output_img
@@ -188,92 +190,105 @@ def process_site_extract_patches(site_path,
 
     # Load data
     image_stack = np.load(site_path)
-    if channels is None:
-        channels = list(range(len(image_stack)))
-    image_stack = image_stack[channels]
     segmentation_stack = np.load(site_segmentation_path)
     with open(os.path.join(site_supp_files_folder, 'cell_positions.pkl'), 'rb') as f:
         cell_positions = pickle.load(f)
     with open(os.path.join(site_supp_files_folder, 'cell_pixel_assignments.pkl'), 'rb') as f:
         cell_pixel_assignments = pickle.load(f)
-
-    n_frames, n_channels, n_z, x_full_size, y_full_size = image_stack.shape
+    meta_path = os.path.join(site_supp_files_folder, 'patch_meta.csv')
+    df_meta = pd.read_csv(meta_path, index_col=0)
+    n_z = 1
+    if image_stack.ndim == 5:
+        n_frames, n_channels, n_z, x_full_size, y_full_size = image_stack.shape
+    elif image_stack.ndim == 4:
+        n_frames, n_channels, x_full_size, y_full_size = image_stack.shape
+        image_stack = np.expand_dims(image_stack, axis=2)
+    else:
+        raise ValueError('Input image must be 4 or 5D, not {}'.format(image_stack.ndim))
+    if channels is None:
+        channels = list(range(n_channels))
+    image_stack = image_stack[:, channels, ...]
     for t_point in range(n_frames):
-        print(f"processing timepoint {t_point}")
-        stack_dat_path = os.path.join(site_supp_files_folder, 'stacks_%d.pkl' % t_point)
-        if reload and os.path.exists(stack_dat_path):
-            try:
-                site_data = pickle.load(open(stack_dat_path, 'rb'))
-                continue
-            except Exception as e:
-                print(e)
+        for z in range(n_z):
+            print("processing timepoint {} z {}".format(t_point, z))
+            stack_dat_path = os.path.join(site_supp_files_folder, 'stacks_t{}_z{}.pkl'.format(t_point, z))
+            if reload and os.path.exists(stack_dat_path):
+                try:
+                    site_data = pickle.load(open(stack_dat_path, 'rb'))
+                    continue
+                except Exception as e:
+                    print(e)
+                    site_data = {}
+            else:
                 site_data = {}
-        else:
-            site_data = {}
-        print("\tWriting time %d" % t_point)
-        raw_image = image_stack[t_point]
-        cell_segmentation = segmentation_stack[t_point]
-        cell_segmentation = check_segmentation_dim(cell_segmentation)
-        positions, positions_labels = cell_pixel_assignments[t_point]
-        all_cells = cell_positions[t_point]
+            print('Writing timepoint {} z {}'.format(t_point, z))
+            raw_image = image_stack[t_point, :, z, ...]
+            cell_segmentation = segmentation_stack[t_point, :, z, ...]
+            cell_segmentation = check_segmentation_dim(cell_segmentation)
+            positions, positions_labels = cell_pixel_assignments[t_point][z]
+            all_cells = cell_positions[t_point][z]
 
-        # Define fillings for the masked pixels in this slice
-        cells_to_keep = []
-        print(f"t{t_point} cell segmentation shape = {cell_segmentation.shape}")
-        print(f"t{t_point} raw_image shape = {raw_image.shape}")
-        background_positions = np.where(cell_segmentation[0][0] > 0.9)
-        background_pool = np.array([np.median(raw_image[i][0][background_positions]) for i in range(n_channels)])
-        background_filling = np.ones((n_channels, n_z, window_size, window_size)) * background_pool.reshape((n_channels, 1, 1, 1))
+            # Define fillings for the masked pixels in this slice
+            cells_to_keep = []
+            background_positions = np.where(cell_segmentation[0] > 0.9)
+            background_pool = np.array([np.median(raw_image[i][background_positions]) for i in range(n_channels)])
+            background_filling = np.ones((n_channels, window_size, window_size)) * background_pool.reshape((n_channels, 1, 1))
 
-        # Save all cells in this step, filtering will be performed during analysis
-        cells_to_keep = []
-        for cell_id, cell_position in all_cells:
-            # print(f"cell_id : {cell_id}")
-            cell_name = os.path.join(site_supp_files_folder, '%d_%d.h5' % (t_point, cell_id))
-            if cell_name in site_data:
-                continue
-            # Define window based on cell center and extract mask
-            window = [(cell_position[0]-window_size//2, cell_position[0]+window_size//2),
-                      (cell_position[1]-window_size//2, cell_position[1]+window_size//2)]
-            window_segmentation = select_window(cell_segmentation,
-                                                window,
-                                                padding=-1,
-                                                skip_boundary=skip_boundary)
-            if window_segmentation is None:
-                continue
-            # only keep the cells that has patches
-            cells_to_keep.append(cell_id)
-            remove_mask, tm, tm2 = generate_mask(positions, 
-                                                 positions_labels, 
-                                                 cell_id, 
-                                                 window, 
-                                                 window_segmentation)
+            # Save all cells in this step, filtering will be performed during analysis
+            cells_to_keep = []
+            for cell_id, cell_position in all_cells:
+                # print(f"cell_id : {cell_id}")
+                cell_name = os.path.join(site_supp_files_folder, 't{}_z{}_cell{}'.format(t_point, z, cell_id))
+                if cell_name in site_data:
+                    continue
+                # Define window based on cell center and extract mask
+                window = [(cell_position[0]-window_size//2, cell_position[0]+window_size//2),
+                          (cell_position[1]-window_size//2, cell_position[1]+window_size//2)]
+                window_segmentation = select_window(cell_segmentation,
+                                                    window,
+                                                    padding=-1,
+                                                    skip_boundary=skip_boundary)
+                if window_segmentation is None:
+                    # drop cell that did not get patched
+                    df_meta.drop(df_meta[(df_meta['cell ID'] == cell_id) &
+                                         (df_meta['time'] == t_point) &
+                                         (df_meta['slice'] == z)].index, inplace=True)
+                    continue
+                # only keep the cells that has patches
+                cells_to_keep.append(cell_id)
+                remove_mask, tm, tm2 = generate_mask(positions,
+                                                     positions_labels,
+                                                     cell_id,
+                                                     window,
+                                                     window_segmentation)
 
-            # Reshape (x, y) to (c, z, x, y)
-            remove_mask = np.expand_dims(np.stack([remove_mask] * n_z, 0), 0)
-            tm = np.expand_dims(np.stack([tm] * n_z, 0), 0)
-            tm2 = np.expand_dims(np.stack([tm2] * n_z, 0), 0)
+                # Reshape (x, y) to (c, x, y)
+                remove_mask = np.expand_dims(remove_mask, 0)
+                tm = np.expand_dims(tm, 0)
+                tm2 = np.expand_dims(tm2, 0)
 
-            # Select submatrix from the whole slice
-            output_mat = select_window(raw_image, window, padding=0, skip_boundary=skip_boundary)
-            assert not output_mat is None
-            masked_output_mat = output_mat * (1 - remove_mask) + background_filling * remove_mask
-            site_data[cell_name] = {
-                "mat": np.concatenate([output_mat, tm, tm2], 0).astype('float64'),
-                "masked_mat": np.concatenate([masked_output_mat, tm, tm2], 0).astype('float64')
-                }
+                # Select submatrix from the whole slice
+                output_mat = select_window(raw_image, window, padding=0, skip_boundary=skip_boundary)
+                assert not output_mat is None
+                masked_output_mat = output_mat * (1 - remove_mask) + background_filling * remove_mask
+                site_data[cell_name] = {
+                    "mat": np.concatenate([output_mat, tm, tm2], 0).astype('float64'),
+                    "masked_mat": np.concatenate([masked_output_mat, tm, tm2], 0).astype('float64')
+                    }
 
-            if save_fig:
-                im_path = os.path.join(site_supp_files_folder, 'patch_t%d_id%d.jpg' % (t_point, cell_id))
-                save_single_cell_im(output_mat, masked_output_mat, tm, tm2, im_path)
+                if save_fig:
+                    im_path = os.path.join(site_supp_files_folder, 'patch_t{}_z{}_cell{}'.format(t_point, z, cell_id))
+                    save_single_cell_im(output_mat, masked_output_mat, tm, tm2, im_path)
 
-        with open(stack_dat_path, 'wb') as f:
-            print(f"WRITING STACKS TO {stack_dat_path}")
-            pickle.dump(site_data, f)
-            
-        # remove cells that don't have patches, update cell_positions
-        updated_cell_positions_t = [cell for cell in all_cells if cell[0] in cells_to_keep]
-        cell_positions[t_point] = updated_cell_positions_t
+            with open(stack_dat_path, 'wb') as f:
+                print(f"WRITING STACKS TO {stack_dat_path}")
+                pickle.dump(site_data, f)
+
+            # remove cells that don't have patches, update cell_positions
+            updated_cell_positions_tz = [cell for cell in all_cells if cell[0] in cells_to_keep]
+            cell_positions[t_point][z] = updated_cell_positions_tz
+    df_meta.reset_index(drop=True, inplace=True)
+    df_meta.to_csv(meta_path, sep=',')
     with open(os.path.join(site_supp_files_folder, 'cell_positions.pkl'), 'wb') as f:
         pickle.dump(cell_positions, f)
 
@@ -286,10 +301,10 @@ def save_single_cell_im(output_mat,
                         im_path):
     """ Plot single cell patch (unmasked, masked, segmentation mask)
     """
-    tm = tm[0, 0]
-    tm2 = tm2[0, 0]
-    im_phase = output_mat[0, 0]
-    im_phase_masked = masked_output_mat[0, 0]
+    # tm = tm[0, 0]
+    # tm2 = tm2[0, 0]
+    im_phase = output_mat[0]
+    im_phase_masked = masked_output_mat[0]
     # replace zero-padding with min for display
     im_phase[im_phase == 0] = np.nanmin(im_phase[im_phase != 0])
     im_phase_masked[im_phase_masked == 0] = np.nanmin(im_phase_masked[im_phase_masked != 0])
@@ -346,7 +361,7 @@ def get_im_sites(input_dir):
     """
     img_names = [file for file in os.listdir(input_dir) if (file.endswith(".npy")) & ('_NN' not in file)]
     sites = [os.path.splitext(img_name)[0] for img_name in img_names]
-    sites = list(set(sites))
+    sites = natsort.natsorted(list(set(sites)))
     return sites
 
 

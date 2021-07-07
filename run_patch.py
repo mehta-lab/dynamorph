@@ -1,6 +1,7 @@
 # bchhun, {2020-02-21}
 
 from pipeline.patch_VAE import extract_patches, build_trajectories
+from SingleCellPatch.extract_patches import get_im_sites
 from multiprocessing import Pool, Queue, Process
 import os
 import numpy as np
@@ -48,9 +49,7 @@ def main(method_, raw_dir_, supp_dir_, config_):
         sites = fov
     else:
         # get all "XX-SITE_#" identifiers in raw data directory
-        img_names = [file for file in os.listdir(raw) if (file.endswith(".npy")) & ('_NN' not in file)]
-        sites = [os.path.splitext(img_name)[0] for img_name in img_names]
-        sites = list(set(sites))
+        sites = get_im_sites(raw)
     # if probabilities and formatted stack exist
     segment_sites = [site for site in sites if os.path.exists(os.path.join(raw, "%s.npy" % site)) and \
                      os.path.exists(os.path.join(raw, "%s_NNProbabilities.npy" % site))]

@@ -154,6 +154,8 @@ def fit_umap(train_data, weights_dir, labels, conditions, n_nbrs=(15, 50, 200), 
 
     """
     #TODO: Find a way to save umap models gernerated with version >= 0.5
+    label_unique = np.unique(labels)
+    last_label = labels[-1]
     n_plots = len(n_nbrs) * len(a_s) * len(b_s)
     # n_cols = int(np.ceil(np.sqrt(n_plots)))
     n_cols = 3
@@ -164,16 +166,19 @@ def fit_umap(train_data, weights_dir, labels, conditions, n_nbrs=(15, 50, 200), 
     axis_count = 0
     # top and bottom % of data to cut off
     zoom_cutoff = 1
-    # conditions = ['mock', 'infected']
+    cmap = plt.cm.tab20(np.linspace(0, 1, len(conditions)))
+    colors = cmap[labels]
+    print('conditions =', conditions)
     for n_nbr in n_nbrs:
         for a, b in zip(a_s, b_s):
             print('Fitting UMAP model {} with N(neighbors)={}, a={}, b={} ...'.format(weights_dir, n_nbr, a, b))
             reducer = umap.UMAP(a=a, b=b, n_neighbors=n_nbr)
             embedding = reducer.fit_transform(train_data)
             print('Saving UMAP model {}...'.format(weights_dir))
-            with open(os.path.join(weights_dir, 'umap_nbr{}_a{}_b{}.pkl'.format(n_nbr, a, b)), 'wb') as f:
-            # with open(os.path.join(weights_dir, 'umap_nbr{}_a{}_b{}_pool_norm.pkl'.format(n_nbr, a, b)), 'wb') as f:
+            with open(os.path.join(weights_dir, 'umap_nbr{}_a{}_b{}_A549+HEK_long.pkl'.format(n_nbr, a, b)), 'wb') as f:
+            # with open(os.path.join(weights_dir, 'umap_nbr{}_a{}_b{}_all.pkl'.format(n_nbr, a, b)), 'rb') as f:
                 pickle.dump([embedding, labels], f, protocol=4)
+                # embedding, labels = pickle.load(f)
             scatter = ax[axis_count].scatter(embedding[:, 0], embedding[:, 1], s=7, c=labels,
                                              facecolors='none', cmap='Paired', alpha=0.1)
             scatter.set_facecolor("none")
@@ -191,7 +196,8 @@ def fit_umap(train_data, weights_dir, labels, conditions, n_nbrs=(15, 50, 200), 
             ax[axis_count].set_ylabel('UMAP 2')
 
             axis_count += 1
-            fig.savefig(os.path.join(weights_dir, 'UMAP.png'),
+            # fig.savefig(os.path.join(weights_dir, 'UMAP.png'),
+            fig.savefig(os.path.join(weights_dir, 'UMAP_A549+HEK_long.png'),
             # fig.savefig(os.path.join(weights_dir, 'UMAP_pool_norm.png'),
                         dpi=300, bbox_inches='tight')
     plt.close(fig)
@@ -256,6 +262,7 @@ def dim_reduction(input_dirs,
             labels += [label] * vec.shape[0]
             label += 1
         vectors = np.concatenate(vector_list, axis=0)
+        labels = np.array(labels, dtype=np.int32)
         _ = fit_func(vectors, weights_dir, labels=labels, conditions=conditions)
         # UMAP model from umap 0.5.0 can't be pickled with protocol=4.
         # Transform from saved models is currently not supported

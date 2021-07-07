@@ -8,17 +8,17 @@ Created on Wed Feb  6 13:22:55 2019
 
 import tensorflow as tf
 import numpy as np
-import keras
-keras.backend.set_image_data_format('channels_first')
+# import keras
+# keras.backend.set_image_data_format('channels_first')
 import tempfile
 import os
 import scipy
 from scipy.special import logsumexp
 from copy import deepcopy
-from keras import backend as K
-from keras.models import Model, load_model
-from keras.layers import Dense, Layer, Input, BatchNormalization, Conv2D, Lambda
-import segmentation_models
+# from keras import backend as K
+# from keras.models import Model, load_model
+# from keras.layers import Dense, Layer, Input, BatchNormalization, Conv2D, Lambda
+# import segmentation_models
 from .layers import weighted_binary_cross_entropy, ValidMetrics, SplitSlice, MergeSlices
 from .data import load_input, preprocess
 

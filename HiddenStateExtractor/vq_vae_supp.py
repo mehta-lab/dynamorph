@@ -145,6 +145,53 @@ def prepare_dataset_v2(dat_fs,
     dataset = np.stack([tensors[key] for key in ts_keys], 0)
     return dataset, ts_keys
 
+def assemble_patches(df_meta,
+                     supp_folder,
+                     channels=None,
+                     input_shape=(128, 128),
+                     key='masked_mat'):
+    """ Prepare input dataset for VAE
+
+    This function reads assembled pickle files (dict)
+
+    Args:
+        stack_paths (list of str): list of pickle file paths
+        channels (list of int, optional): channels in the input
+        input_shape (tuple, optional): input shape (height and width only)
+        key (str): 'mat' or 'masked_mat'
+
+    Returns:
+        np array: dataset of training inputs
+        list of str: identifiers of single cell image patches
+
+    """
+    dataset = []
+    sites = df_meta['FOV'].unique()
+    t_points = df_meta['time'].unique()
+    slices = df_meta['slice'].unique()
+    for site in sites:
+        supp_files_folder = os.path.join(supp_folder, '%s-supps' % site[:2], '%s' % site)
+        for t in t_points:
+            for z in slices:
+                cell_ids = df_meta.loc[(df_meta['FOV'] == site) &
+                                       (df_meta['time'] == t) &
+                                       (df_meta['slice'] == z), 'cell ID'].to_list()
+                stack_path_site = os.path.join(supp_files_folder, 'stacks_t{}_z{}.pkl'.format(t, z))
+                print(f"\tloading data {stack_path_site}")
+                with open(stack_path_site, 'rb') as f:
+                    stack_dict = pickle.load(f)
+                for cell_id in cell_ids:
+                    patch_key = os.path.join(supp_files_folder, 't{}_z{}_cell{}'.format(t, z, cell_id))
+                    # patch_key = 't{}_z{}_cell{}'.format(t, z, cell_id)
+                    dat = stack_dict[patch_key][key]
+                    if channels is None:
+                        channels = np.arange(dat.shape[0])
+                    dat = np.array(dat)[np.array(channels)].astype(float)
+                    resized_dat = cv2_fn_wrapper(cv2.resize, dat, input_shape)
+                    dataset.append(resized_dat)
+    dataset = np.stack(dataset)
+    return dataset
+
 def reorder_with_trajectories(dataset, relations, seed=None, w_a=1.1, w_t=0.1):
     """ Reorder `dataset` to facilitate training with matching loss
 

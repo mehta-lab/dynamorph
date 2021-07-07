@@ -2,9 +2,10 @@
 
 import os
 import numpy as np
-from NNsegmentation.models import Segment
+import pandas as pd
+# from NNsegmentation.models import Segment
 from NNsegmentation.data import load_input, predict_whole_map
-from keras import backend as K
+# from keras import backend as K
 import tensorflow as tf
 from SingleCellPatch.instance_clustering import process_site_instance_segmentation
 from configs.config_reader import YamlReader
@@ -73,9 +74,9 @@ def segmentation(raw_folder_: str,
     for site in sites:
         site_path = os.path.join(raw_folder_, '%s.npy' % site)
         if not os.path.exists(site_path):
-            log.info("Site not found %s" % site_path, flush=True)
+            log.info("Site not found %s" % site_path)
         else:
-            log.info("Predicting %s" % site_path, flush=True)
+            log.info("Predicting %s" % site_path)
             try:
                 # Generate semantic segmentation
                 predict_whole_map(site_path,
@@ -86,7 +87,7 @@ def segmentation(raw_folder_: str,
                                   **kwargs)
             except Exception as ex:
                 log.error(ex)
-                log.error("Error in predicting site %s" % site, flush=True)
+                log.error("Error in predicting site %s" % site)
     return
 
 
@@ -96,7 +97,6 @@ def instance_segmentation(raw_folder: str,
                           sites: list,
                           config_: YamlReader,
                           rerun=False,
-
                           **kwargs):
     """ Helper function for instance segmentation
 
@@ -117,15 +117,16 @@ def instance_segmentation(raw_folder: str,
 
     """
 
+    # meta_list = []
     for site in sites:
         site_path = os.path.join(raw_folder, '%s.npy' % site)
         site_segmentation_path = os.path.join(raw_folder,
                                               '%s_NNProbabilities.npy' % site)
         if not os.path.exists(site_path) or not os.path.exists(site_segmentation_path):
-            log.info("Site not found %s" % site_path, flush=True)
+            log.info("Site not found %s" % site_path)
             continue
 
-        log.info("Clustering %s" % site_path, flush=True)
+        log.info("Clustering %s" % site_path)
         site_supp_files_folder = os.path.join(supp_folder,
                                               '%s-supps' % site[:2],
                                               '%s' % site)
@@ -137,8 +138,12 @@ def instance_segmentation(raw_folder: str,
         elif not os.path.exists(site_supp_files_folder):
             os.makedirs(site_supp_files_folder, exist_ok=True)
 
-        process_site_instance_segmentation(site_path,
-                                           site_segmentation_path,
-                                           site_supp_files_folder,
-                                           **kwargs)
+        meta_list_site = process_site_instance_segmentation(site,
+                                                           site_path,
+                                                           site_segmentation_path,
+                                                           site_supp_files_folder,
+                                                           **kwargs)
+        # meta_list += meta_list_site
+        df_meta = pd.DataFrame.from_dict(meta_list_site)
+        df_meta.to_csv(os.path.join(site_supp_files_folder, 'patch_meta.csv'), sep=',')
     return

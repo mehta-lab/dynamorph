@@ -1,7 +1,9 @@
 # bchhun, {2020-02-21}
 
-from pipeline.segmentation import segmentation, instance_segmentation
-from pipeline.segmentation_validation import segmentation_validation_michael
+# from pipeline.segmentation import segmentation, instance_segmentation
+from pipeline.segmentation import instance_segmentation
+from SingleCellPatch.extract_patches import get_im_sites
+# from pipeline.segmentation_validation import segmentation_validation_michael
 from multiprocessing import Process
 import os
 import numpy as np
@@ -28,7 +30,7 @@ class Worker(Process):
             segmentation(*self.inputs)
         elif self.method == 'instance_segmentation':
             log.info(f"running instance segmentation")
-            instance_segmentation(*self.inputs)
+            instance_segmentation(*self.inputs, rerun=True)
         elif self.method == 'segmentation_validation':
             segmentation_validation_michael(*self.inputs)
 
@@ -38,10 +40,11 @@ def main(method_, raw_dir_, supp_dir_, val_dir_, config_):
 
     inputs = raw_dir_
     outputs = supp_dir_
-    gpus = config.inference.gpu_ids
+    gpus = config.segmentation.gpu_ids
     gpus = [int(g) for g in gpus]
+    n_workers = config.segmentation.num_workers
 
-    assert len(config_.inference.channels) > 0, "At least one channel must be specified"
+    assert len(config_.segmentation.channels) > 0, "At least one channel must be specified"
 
     # segmentation validation requires raw, supp, and validation definitions
     if method == 'segmentation_validation':
@@ -52,7 +55,7 @@ def main(method_, raw_dir_, supp_dir_, val_dir_, config_):
 
     # segmentation requires raw (NNProb), and weights to be defined
     elif method == 'segmentation':
-        if config_.inference.weights is None:
+        if config_.segmentation.weights is None:
             raise AttributeError("Weights supp_dir must be specified when method=segmentation")
 
     # instance segmentation requires raw (stack, NNprob), supp (to write outputs) to be defined
@@ -62,22 +65,21 @@ def main(method_, raw_dir_, supp_dir_, val_dir_, config_):
         raise AttributeError(f"method flag {method} not implemented")
 
     # all methods all require
-    if config_.inference.fov:
-        sites = config.inference.fov
+    if config_.segmentation.fov:
+        sites = config.segmentation.fov
     else:
         # get all "XX-SITE_#" identifiers in raw data directory
-        img_names = [file for file in os.listdir(inputs) if (file.endswith(".npy")) & ('_NN' not in file)]
-        sites = [os.path.splitext(img_name)[0] for img_name in img_names]
-        sites = list(set(sites))
+        sites = get_im_sites(inputs)
 
     segment_sites = [site for site in sites if os.path.exists(os.path.join(inputs, "%s.npy" % site))]
-    sep = np.linspace(0, len(segment_sites), gpus + 1).astype(int)
+    print(segment_sites)
+    sep = np.linspace(0, len(segment_sites), n_workers + 1).astype(int)
 
     processes = []
-    for i, gpu in enumerate(gpus):
+    for i in range(n_workers):
         _sites = segment_sites[sep[i]:sep[i + 1]]
         args = (inputs, outputs, val_dir_, _sites, config_)
-        process = Worker(args, gpuid=gpu, method=method)
+        process = Worker(args, gpuid=gpus[0], method=method)
         process.start()
         processes.append(process)
     for p in processes:
@@ -118,5 +120,5 @@ if __name__ == '__main__':
     config.read_config(arguments.config)
 
     # batch run
-    for (raw_dir, supp_dir, val_dir) in list(zip(config.inference.raw_dirs, config.inference.supp_dirs, config.inference.val_dirs)):
+    for (raw_dir, supp_dir, val_dir) in list(zip(config.segmentation.raw_dirs, config.segmentation.supp_dirs, config.segmentation.val_dirs)):
         main(arguments.method, raw_dir, supp_dir, val_dir, config)

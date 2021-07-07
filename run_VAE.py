@@ -49,8 +49,6 @@ def main(method_, raw_dir_, supp_dir_, config_):
     elif method == 'process':
         if not inputs:
             raise AttributeError("raw directory must be specified when method = process")
-        # if type(weights) is not list:
-        #     weights = [weights]
         if not weights:
             raise AttributeError("pytorch VQ-VAE weights path must be specified when method = process")
 
@@ -117,7 +115,12 @@ if __name__ == '__main__':
     arguments = parse_args()
     config = YamlReader()
     config.read_config(arguments.config)
-
+    if type(config.inference.weights) is not list:
+        weights = [config.inference.weights]
+    else:
+        weights = config.inference.weights
     # batch run
-    for (raw_dir, supp_dir) in list(zip(config.inference.raw_dirs, config.inference.supp_dirs)):
-        main(arguments.method, raw_dir, supp_dir, config)
+    for (raw_dir, supp_dir) in zip(config.inference.raw_dirs, config.inference.supp_dirs):
+        for weight in weights:
+            config.inference.weights = weight
+            main(arguments.method, raw_dir, supp_dir, config)
