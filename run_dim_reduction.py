@@ -80,8 +80,8 @@ def process_PCA(input_dir, output_dir, weights_dir, prefix, suffix='_after'):
         print(ex)
         raise ValueError("Error in loading pre-saved PCA weights")
 
-    input_fname = '{}_latent_space{}.pkl'.format(prefix, suffix)
-    output_fname = '{}_latent_space{}_PCAed.pkl'.format(prefix, suffix)
+    input_fname = '{}_latent_space_{}.pkl'.format(prefix, suffix)
+    output_fname = '{}_latent_space_{}_PCAed.pkl'.format(prefix, suffix)
     with open(os.path.join(input_dir, input_fname), 'rb') as latent:
         dats = pickle.load(latent)
     # dats = pickle.load(open(os.path.join(input_dir, input_fname), 'rb'))
@@ -208,8 +208,8 @@ def fit_umap(train_data, weights_dir, labels, conditions, n_nbrs=(15, 50, 200), 
 
 
 def dim_reduction(method,
-                  input_dir,
-                  output_dir,
+                  input_dirs,
+                  output_dirs,
                   weights_dir,
                   config):
     """
@@ -227,6 +227,8 @@ def dim_reduction(method,
 
     """
     prefix = config.dim_reduction.file_name_prefixes
+    conditions = config.dim_reduction.conditions
+    fit_model = config.dim_reduction.fit_model
 
     # if type(input_dirs_) is not list:
     #     input_dirs = [input_dirs_]
@@ -237,6 +239,7 @@ def dim_reduction(method,
     # Assign prefix as list
     if prefix is not None and type(prefix) is not list:
         fname = ['_'.join([prefix, 'latent_space_after.pkl'])]
+        prefix = list(prefix)
     elif type(prefix) is list:
         fname = ['_'.join([p, 'latent_space_after.pkl']) for p in prefix]
     else:
@@ -249,28 +252,28 @@ def dim_reduction(method,
     elif method == 'umap':
         fit_func = fit_umap
         transform_func = umap_transform
-        if not config.dim_reduction.fit_model:
+        if not fit_model:
             raise NotImplemented('Inference mode is only supported for PCA at the moment')
     else:
         raise ValueError('Dimensionality reduction method has to be "pca" or "umap"')
 
     # format conditions as a list
     if config.dim_reduction.conditions is None:
-        conditions = [os.path.basename(input_dir) for input_dir in config.dim_reduction.input_dirs]
+        conditions = [os.path.basename(input_dir) for input_dir in input_dirs]
     elif type(config.dim_reduction.conditions) is not list:
-        conditions = [config.dim_reduction.conditions]
+        conditions = [conditions]
     else:
-        conditions = config.dim_reduction.conditions
+        pass
 
     # run fit for PCA
-    if config.dim_reduction.fit_model:
+    if fit_model:
         weights_output = os.path.dirname(weights_dir) if os.path.isfile(weights_dir) else weights_dir
         vector_list = []
         labels = []
         label = 0
 
         # POOL ALL DATA IN INPUT_DIRS
-        for input_dir in config.dim_reduction.input_dirs:
+        for input_dir in input_dirs:
             # POOL ALL PREFIXES IN FNAME
             for f in fname:
                 with open(os.path.join(input_dir, f), 'rb') as latent:
@@ -288,9 +291,9 @@ def dim_reduction(method,
             return
 
     # run inference for PCA
-    if not config.dim_reduction.fit_model:
+    if not fit_model:
         weights_input = os.path.dirname(weights_dir)
-        for input_d, output_d in zip(input_dir, output_dir):
+        for input_d, output_d in zip(input_dirs, output_dirs):
             for p in prefix:
                 print(f'Transforming latent vectors for prefix {p} '
                       f'\n\t in folder {input_d} '
@@ -316,22 +319,6 @@ def parse_args():
     """
     parser = argparse.ArgumentParser()
 
-    # parser.add_argument(
-    #     '-i', '--input',
-    #     nargs='+',
-    #     type=str,
-    #     required=True,
-    #     help='Input directory/directories containing latent vectors to reduce dimension. '
-    #          'If multiple directories are supplied, all inputs will be concatenated for model fitting',
-    # )
-    # parser.add_argument(
-    #     '-o', '--output',
-    #     nargs='+',
-    #     default=[],
-    #     type=str,
-    #     required=False,
-    #     help='Output directory to save the reduced vectors. Same as input if not specified',
-    # )
     parser.add_argument(
         '-m', '--method',
         type=str,
@@ -340,37 +327,7 @@ def parse_args():
         default='umap',
         help="Dimensionality reduction method",
     )
-    # parser.add_argument(
-    #     '-w', '--weights',
-    #     type=str,
-    #     required=True,
-    #     help="Directory to load/save the PCA weights.",
-    # )
-    # parser.add_argument(
-    #     '-f', '--fit',
-    #     dest='fit_model',
-    #     action='store_true',
-    #     help="Fit pca or umap model to the data and save the weights to 'weights'. "
-    #          "If left out the script will run with inference model and load saved model in 'weights'"
-    #          "to transform the vectors. Inference mode is only supported for PCA at the moment"
-    # )
-    # parser.set_defaults(fit_model=False)
-    # parser.add_argument(
-    #     '-p', '--prefix',
-    #     type=str,
-    #     required=False,
-    #     default=None,
-    #     help='prefix of the latent vector filename "{}_latent_space"',
-    # )
 
-    # parser.add_argument(
-    #     '-c', '--condition',
-    #     nargs='+',
-    #     type=str,
-    #     required=False,
-    #     default=None,
-    #     help='Condition for each input directory',
-    # )
     parser.add_argument(
         '-c', '--config',
         type=str,
@@ -391,19 +348,6 @@ if __name__ == '__main__':
                   config.dim_reduction.weights_dir,
                   config
                   )
-    # else:
-    #     # batch run
-    #     for (input, output, weights, prefix, condition) in list(zip(config.dim_reduction.input_dirs,
-    #                                                                 config.dim_reduction.output_dirs,
-    #                                                                 config.dim_reduction.weights_dirs,
-    #                                                                 config.dim_reduction.file_name_prefixes,
-    #                                                                 config.dim_reduction.conditions)):
-    #
-    #         dim_reduction(config.dim_reduction.method,
-    #                       input,
-    #                       output,
-    #                       weights,
-    #                       config
-    #                       )
+
 
 
