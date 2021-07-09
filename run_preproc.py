@@ -31,7 +31,7 @@ def main(input_, output_, config_):
 
     chans = config_.preprocess.channels
     multi = config_.preprocess.multipage
-    z_slice = config_.preprocess.z_slice
+    z_slice = config_.preprocess.z_slice if config_.preprocess.z_slice else None
     fovs = config_.preprocess.fov
 
     # === build list or dict of all sites we wish to process ===

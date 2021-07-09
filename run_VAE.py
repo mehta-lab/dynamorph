@@ -30,10 +30,12 @@ def main(method_, raw_dir_, supp_dir_, config_):
 
     inputs = raw_dir_
     outputs = supp_dir_
-    weights = config_.inference.weights
+    weights = config_.latent_encoding.weights
     # channels = config_.inference.channels
     # network = config_.inference.model
-    gpu_ids = config_.inference.gpu_ids
+    # gpu_id = config_.latent_encoding.gpu_ids
+    gpus = config_.latent_encoding.gpu_ids
+    gpu_count = len(gpus)
 
     # assert len(channels) > 0, "At least one channel must be specified"
 
@@ -61,21 +63,24 @@ def main(method_, raw_dir_, supp_dir_, config_):
         if not outputs:
             raise AttributeError("supplementary directory must be specified when method = trajectory_matching")
 
-    if config_.inference.fov:
-        sites = config_.inference.fov
+    if config_.latent_encoding.fov:
+        sites = config_.latent_encoding.fov
     else:
         # get all "XX-SITE_#" identifiers in raw data directory
         sites = get_im_sites(inputs)
 
     wells = set(s[:2] for s in sites)
     mp.set_start_method('spawn', force=True)
+
     # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     # os.environ['CUDA_VISIBLE_DEVICES'] = ','.join([str(i) for i in gpu_ids])
     # print("CUDA_VISIBLE_DEVICES=" + os.environ["CUDA_VISIBLE_DEVICES"])
     for i, well in enumerate(wells):
         well_sites = [s for s in sites if s[:2] == well]
         args = (inputs, outputs, well_sites, config_)
-        p = Worker(args, gpuid=gpu_ids[0], method=method)
+        gpu_idx = i % gpu_count
+        gpu_id = gpus[gpu_idx]
+        p = Worker(args, gpuid=gpu_id, method=method)
         p.start()
         p.join()
 
@@ -119,5 +124,5 @@ if __name__ == '__main__':
     config.read_config(arguments.config)
 
     # batch run
-    for (raw_dir, supp_dir) in list(zip(config.inference.raw_dirs, config.inference.supp_dirs)):
+    for (raw_dir, supp_dir) in list(zip(config.latent_encoding.raw_dirs, config.latent_encoding.supp_dirs)):
         main(arguments.method, raw_dir, supp_dir, config)

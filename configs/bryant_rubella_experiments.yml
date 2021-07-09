@@ -2,7 +2,6 @@
 
 preprocess:
   image_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/20191107_1209_1_GW23/blank_bg_stabilized']
-
   target_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/raw']
 
   channels: ["Phase2D", "Retardance"]
@@ -21,6 +20,23 @@ preprocess:
   # if singlepage tiffs with z-stacks, select the z-slice to stack
 
 
+segmentation_inference:
+  raw_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/raw']
+  supp_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/supp']
+  validation_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/val']
+  network: 'UNet'
+  weights: '/gpfs/CompMicro/projects/dynamorph/model_save/final_reformat.h5'
+  gpu_ids: [1,2,3]
+  fov: ['C4-Site_0']
+  channels: [0,1]
+
+  num_classes: 3
+  window_size: 256
+  batch_size: 32
+  num_pred_rnd: 5
+  seg_val_cat: 'mg'
+
+
 patch:
   raw_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/seg_test/raw']
   supp_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/seg_test/supp']
@@ -35,49 +51,39 @@ patch:
   skip_boundary: False
 
 
-inference:
+latent_encoding:
   raw_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/raw']
-
   supp_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/supp']
-
-  val_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/val']
-
-  model: 'VQ_VAE_z16'
-#  model: "UNet"
-  # VQ_VAE_z16 or UNet
-
-#  weights: '/Volumes/comp_micro/projects/dynamorph/model_save/final_reformat.pt'
   weights: '/gpfs/CompMicro/projects/dynamorph/model_save/VQVAE_save.pt'
-
   save_output: True
-  # for vae-process, True if you want to write .jpg of reconstructions.
 
-  gpu_ids: 3
-#  fov: ['C4-Site_0']
-  fov: ['C4-Site_0', 'C4-Site_1', 'C4-Site_2', 'C4-Site_3', 'C4-Site_4', 'C4-Site_5', 'C4-Site_6', 'C4-Site_7', 'C4-Site_8']
+  gpu_ids: [1,2,3]
+  fov: ['C4-Site_0', 'C4-Site_1', ]
+#  fov: ['C4-Site_0', 'C4-Site_1', 'C4-Site_2', 'C4-Site_3', 'C4-Site_4', 'C4-Site_5', 'C4-Site_6', 'C4-Site_7', 'C4-Site_8']
   channels: [0,1]
-  channel_mean: [0.4, 0, 0.5]
-  channel_std: [0.05, 0.05, 0.05]
+  channel_mean: [0.4, 0]
+  channel_std: [0.05, 0.05]
+  patch_type: "masked_mat"
 
-  num_classes: 2
-  window_size: 256
-  batch_size: 8
-  num_pred_rnd: 5
-  seg_val_cat: 'mg'
+  network: 'VQ_VAE_z16'
+  num_hiddens: 16
+  num_residual_hiddens: 32
+  num_embeddings: 64
+  commitment_cost: 0.25
 
 
 dim_reduction:
   input_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/raw']
   output_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/pca_out']
   file_name_prefixes: ['C4']
-  weights_dirs: ['/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/pca_out/pca_save_after_JUNE.pkl']
+  weights_dir: '/gpfs/CompMicro/projects/dynamorph/microglia/rubella_experiments/NOVEMBER/new-3-17-2021/pca_out/weights'
   fit_model: False
   conditions: ['rubella']
 
 
 training:
   # model definitions
-  model: 'VQ_VAE_z32'
+  network: 'VQ_VAE_z32'
   num_inputs: 2
   num_hiddens: 16
   num_residual_hiddens: 32
@@ -93,9 +99,10 @@ training:
 
   # training parameters
   commitment_cost: 0.25
+
   alpha: 0.002
-  epochs: 5000
-  learning_rate: 0.0001
+  n_epochs: 5000
+  learn_rate: 0.0001
   batch_size: 96
   gpus: True
   gpu_id: 3

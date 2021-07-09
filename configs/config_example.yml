@@ -1,11 +1,14 @@
 
 
 preprocess:
-  image_dirs: ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_input_tstack',
-               '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_input_tstack']
-
-  target_dirs: ['/CompMicro/projects/cardiomyocytes/200721_CM_Mock_SPS_Fluor/20200721_CM_Mock_SPS/dnm_supp_tstack',
-                '/CompMicro/projects/cardiomyocytes/20200722CM_LowMOI_SPS_Fluor/20200722 CM_LowMOI_SPS/dnm_supp_tstack']
+  image_dirs: [
+    '<path to folder containing first experiment to batch>',
+    '<path to folder containing second experiment to batch>'
+  ]
+  target_dirs: [
+    '<path to OUTPUT folder for first experiment>',
+    '<path to OUTPUT folder for second experiment>'
+  ]
 
   channels: ["Retardance", "Phase2D", "Brightfield"]
   # list of channels to include.  Resulting array is (phase, retardance, brightfield) = (0, 1, 2) index
@@ -20,46 +23,40 @@ preprocess:
   # if images are multipage-tiffs
 
   z_slice: 2
-  # single integer to select the z-plane.  "z###" must exist in file names
+  # single integer to select the in-focus z-plane.
+  # "z###" must exist in file names
+  # only required for multipage-tiff stacks
 
   pos_dir: True
   # whether each position is in a subdirectory (True), or in the same directory (False)
 
 
-patch:
-  raw_dirs:
-  supp_dirs:
+segmentation_inference:
+  raw_dirs: [
+    '<path to folder containing first experiment "RAW" data>',
+    '<path to folder containing second experiment "RAW" data>'
+  ]
+  supp_dirs: [
+    '<path to folder containing first experiment "SUPP" data>',
+    '<path to folder containing second experiment "SUPP" data>'
+  ]
+  validation_dirs: [
+    '<path to folder containing first experiment "Validation" data>',
+    '<path to folder containing second experiment "Validation" data>'
+  ]
 
-  channels: [0,1,2]
-  fov: ['C5-Site_0','C5-Site_1']
-  num_cpus: 1
-  window_size: 256
-  save_fig: False
-  reload: True
-  skip_boundary: False
+  model: 'UNet'
+  # only UNet was implemented for the dynamorph paper
 
+  weights: '<full path to weights filename as .h5 file>'
 
-inference:
-  raw_dirs:
-  supp_dirs:
-  val_dirs:
+  gpu_ids: [1,2,3]
+  # list of GPUs to distribute inference across
 
-  weights: ['/gpfs/CompMicro/projects/dynamorph/CellVAE/save_0005_bkp4.pt']
-  # pytorch weight files
+  fov: ['C4-Site_0', 'C4-Site_1', 'C4-Site_2']
+  # well positions (<fov>.npy is the output of "preprocess" above)
 
-  model: 'VQ_VAE_z16'
-  # VQ_VAE_z16 or UNet
-
-  save_output: True
-  # write .jpg results from run_vae.process
-
-  gpu_ids: [3]
-  # list of GPUs to run inference on.
-
-  fov: ['C5-Site_0','C5-Site_1']
-  channels: [0,1,2]
-  channel_mean:
-  channel_std:
+  channels: [0,1]
   num_classes: 3
   window_size: 256
   batch_size: 8
@@ -67,13 +64,80 @@ inference:
   seg_val_cat: 'mg'
 
 
+patch:
+  raw_dirs: [
+    '<path to folder containing first experiment "RAW" data>',
+    '<path to folder containing second experiment "RAW" data>'
+  ]
+  supp_dirs: [
+    '<path to folder containing first experiment "SUPP" data>',
+    '<path to folder containing second experiment "SUPP" data>'
+  ]
+
+  channels: [0,1]
+  fov: ['C5-Site_0','C5-Site_1']
+  num_cpus: 4
+  window_size: 256
+  save_fig: False
+  reload: False # ??? not functional?
+  skip_boundary: False
+  # True to skip patches whose edges exceed the image boundaries
+  # False to pad patches with mean background values
+
+
+latent_encoding:
+  raw_dirs: [
+    '<path to folder containing first experiment "RAW" data>',
+    '<path to folder containing second experiment "RAW" data>'
+  ]
+  supp_dirs: [
+    '<path to folder containing first experiment "SUPP" data>',
+    '<path to folder containing second experiment "SUPP" data>'
+  ]
+
+  weights: ['<path to pytorch weight file that will be used across all experiments>']
+  # pytorch weight file
+
+  save_output: True
+  # write .jpg results from run_vae.process
+
+  gpu_ids: [0,1,2]
+  # list of GPU ids to run inference across.
+
+  fov: ['C5-Site_0','C5-Site_1']
+  patch_type: "masked_mat"
+
+  channels: [0,1]
+  channel_mean: [0.4, 0]
+  channel_std: [0.05, 0.05]
+  # for each channel in channels, hardcode a mean and std for zscoring
+
+  network: 'VQ_VAE_z16'
+  # VQ_VAE_z16 or UNet
+  num_hiddens: 16
+  num_residual_hiddens: 32
+  num_embeddings: 64
+  commitment_cost: 0.25
+
+
 dim_reduction:
-  input_dirs:
-  output_dirs:
-  file_name_prefixes:
-  weights_dirs:
-  fit_model:
-  conditions:
+  input_dirs: [
+    '<path to folder containing first experiment LATENT SPACE.pkl files>',
+    '<path to folder containing second experiment LATENT SPACE.pkl files>'
+  ]
+  output_dirs: [
+    '<path to folder containing first experiment PCA outputs>',
+    '<path to folder containing second experiment PCA outputs>'
+  ]
+  # PCA transform outputs are written to output dirs
+
+  weights_dirs: [
+    '<path to folder containing first experiment "SUPP" data>',
+    '<path to folder containing second experiment "SUPP" data>'
+  ]
+  file_name_prefixes: ['C4', 'C5']
+  fit_model: False
+  conditions: ['<filename>']
 
 
 training:
@@ -108,11 +172,10 @@ training:
   # normalization
   channel_mean: null
   channel_std: null
+
    ### microglia data####
 #  channel_mean: [0.4, 0, 0.5]
 #  channel_std: [0.05, 0.05, 0.05]
-
-
 
   # training parameters
 

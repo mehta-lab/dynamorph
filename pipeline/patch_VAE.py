@@ -40,7 +40,7 @@ def extract_patches(raw_folder: str,
         sites (list of str): list of site names
         config (YamlReader): config file supplied at CLI
     """
-    channels = config.inference.channels
+    channels = config.patch.channels
 
     assert len(channels) > 0, "At least one channel must be specified"
 
@@ -116,7 +116,6 @@ def assemble_VAE(raw_folder: str,
                  supp_folder: str,
                  sites: list,
                  config: YamlReader,
-                 patch_type: str='masked_mat',
                  **kwargs):
     """ Wrapper method for prepare dataset for VAE encoding
 
@@ -138,7 +137,8 @@ def assemble_VAE(raw_folder: str,
 
     """
 
-    channels = config.inference.channels
+    channels = config.latent_encoding.channels
+    patch_type = config.latent_encoding.patch_type
 
     assert len(channels) > 0, "At least one channel must be specified"
 
@@ -372,30 +372,28 @@ def process_VAE(raw_folder: str,
     # For inference same normalization parameters can be used or determined from the inference data,
     # depending on if the inference data has the same distribution as training data
 
-    model_path = config_.inference.weights
-    # weights_dir = config_.files.weights_dir
-    channels = config_.inference.channels
-    num_hiddens = config_.training.num_hiddens
-    num_residual_hiddens = config_.training.num_residual_hiddens
-    num_embeddings = config_.training.num_embeddings
-    commitment_cost = config_.training.commitment_cost
-    network = config_.inference.model
-    save_output = config_.inference.save_output
+    model_path = config_.latent_encoding.weights
+    channels = config_.latent_encoding.channels
+
+    num_hiddens = config_.latent_encoding.num_hiddens
+    num_residual_hiddens = config_.latent_encoding.num_residual_hiddens
+    num_embeddings = config_.latent_encoding.num_embeddings
+    commitment_cost = config_.latent_encoding.commitment_cost
+
+    network = config_.latent_encoding.network
+    weights_dir = config_.latent_encoding.weights
+    save_output = config_.latent_encoding.save_output
 
     assert len(channels) > 0, "At least one channel must be specified"
 
     # these sites should be from a single condition (C5, C4, B-wells, etc..)
-    model_dir = os.path.dirname(model_path)
-    #TODO: add model_name to the config. Set the default to be the same as model folder name
-    model_name = os.path.basename(model_dir)
-    # output_dir = os.path.join(summary_folder, model_name + '_pool_norm')
+
+    model_path = os.path.join(weights_dir, 'model.pt')
+    model_name = os.path.basename(weights_dir)
     output_dir = os.path.join(raw_folder, model_name)
     os.makedirs(output_dir, exist_ok=True)
+    # output_dir = raw_folder
 
-    assert len(set(site[:2] for site in sites)) == 1, \
-        "Sites should be from a single well/condition"
-    well = sites[0][:2]
-    # TODO: expose normalization parameters in train config
     #### cardiomyocyte data###
     # channel_mean = [0.49998672, 0.007081]
     # channel_std = [0.00074311, 0.00906428]
@@ -404,15 +402,13 @@ def process_VAE(raw_folder: str,
     # channel_mean = [0.4, 0, 0.5]
     # channel_std = [0.05, 0.05, 0.05]
 
-    ###
-    # channel_mean = [32778.97446252,   681.61666079]
-    # channel_std = [1314.90374187,  688.80291129]
-
     ### estimate mean and std from the data ###
-    channel_mean = config_.inference.channel_mean
-    channel_std = config_.inference.channel_std
-    # channel_mean = None
-    # channel_std = None
+    channel_mean = config_.latent_encoding.channel_mean
+    channel_std = config_.latent_encoding.channel_std
+
+    assert len(set(site[:2] for site in sites)) == 1, \
+        "Sites should be from a single well/condition"
+    well = sites[0][:2]
 
     print(f"\tloading file paths {os.path.join(raw_folder, '%s_file_paths.pkl' % well)}")
     fs = pickle.load(open(os.path.join(raw_folder, '%s_file_paths.pkl' % well), 'rb'))

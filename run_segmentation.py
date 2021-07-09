@@ -38,10 +38,10 @@ def main(method_, raw_dir_, supp_dir_, val_dir_, config_):
 
     inputs = raw_dir_
     outputs = supp_dir_
-    gpus = config.inference.gpu_ids
-    gpus = [int(g) for g in gpus]
+    gpus = config_.segmentation.inference.gpu_ids
+    gpu_count = len(gpus)
 
-    assert len(config_.inference.channels) > 0, "At least one channel must be specified"
+    assert len(config_.segmentation.inference.channels) > 0, "At least one channel must be specified"
 
     # segmentation validation requires raw, supp, and validation definitions
     if method == 'segmentation_validation':
@@ -52,7 +52,7 @@ def main(method_, raw_dir_, supp_dir_, val_dir_, config_):
 
     # segmentation requires raw (NNProb), and weights to be defined
     elif method == 'segmentation':
-        if config_.inference.weights is None:
+        if config_.segmentation.inference.weights is None:
             raise AttributeError("Weights supp_dir must be specified when method=segmentation")
 
     # instance segmentation requires raw (stack, NNprob), supp (to write outputs) to be defined
@@ -62,8 +62,8 @@ def main(method_, raw_dir_, supp_dir_, val_dir_, config_):
         raise AttributeError(f"method flag {method} not implemented")
 
     # all methods all require
-    if config_.inference.fov:
-        sites = config.inference.fov
+    if config_.segmentation.inference.fov:
+        sites = config_.segmentation.inference.fov
     else:
         # get all "XX-SITE_#" identifiers in raw data directory
         img_names = [file for file in os.listdir(inputs) if (file.endswith(".npy")) & ('_NN' not in file)]
@@ -71,7 +71,7 @@ def main(method_, raw_dir_, supp_dir_, val_dir_, config_):
         sites = list(set(sites))
 
     segment_sites = [site for site in sites if os.path.exists(os.path.join(inputs, "%s.npy" % site))]
-    sep = np.linspace(0, len(segment_sites), gpus + 1).astype(int)
+    sep = np.linspace(0, len(segment_sites), gpu_count + 1).astype(int)
 
     processes = []
     for i, gpu in enumerate(gpus):
@@ -118,5 +118,7 @@ if __name__ == '__main__':
     config.read_config(arguments.config)
 
     # batch run
-    for (raw_dir, supp_dir, val_dir) in list(zip(config.inference.raw_dirs, config.inference.supp_dirs, config.inference.val_dirs)):
+    for (raw_dir, supp_dir, val_dir) in list(zip(config.segmentation.inference.raw_dirs,
+                                                 config.segmentation.inference.supp_dirs,
+                                                 config.segmentation.inference.validation_dirs)):
         main(arguments.method, raw_dir, supp_dir, val_dir, config)

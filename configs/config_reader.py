@@ -2,13 +2,6 @@ import yaml
 import logging
 
 
-# def log_warning(msg, *args, **kwargs):
-#     """Log message with level WARNING."""
-#     # import logging
-#
-#     logging.getLogger(__name__).warning(msg, *args, **kwargs)
-
-
 # replicate from aicsimageio logging mechanism
 ###############################################################################
 
@@ -29,13 +22,6 @@ log = logging.getLogger(__name__)
 ###############################################################################
 
 # to add a new configuration parameter, simply add the string to the appropriate set here
-# FILES = {
-#     'raw_dirs',
-#     'supp_dirs',
-#     'train_dirs',
-#     'val_dirs',
-#     'weights_dir'
-# }
 
 PREPROCESS = {
     'image_dirs',
@@ -47,30 +33,16 @@ PREPROCESS = {
     'z_slice',
 }
 
-PATCH = {
+SEGMENTATION_INFERENCE = {
     'raw_dirs',
     'supp_dirs',
-    'channels',
-    'fov',
-    'num_cpus',
-    'window_size',
-    'save_fig',
-    'reload',
-    'skip_boundary'
-}
-
-INFERENCE = {
-    'raw_dirs',
-    'supp_dirs',
-    'val_dirs',
-    'model',
+    'validation_dirs',
+    'network',
     'weights',
-    'save_output',
     'gpu_ids',
     'fov',
     'channels',
-    'channel_mean',
-    'channel_std',
+
     'num_classes',
     'window_size',
     'batch_size',
@@ -78,11 +50,46 @@ INFERENCE = {
     'seg_val_cat'
 }
 
+PATCH = {
+    'raw_dirs',
+    'supp_dirs',
+    'channels',
+    'fov',
+
+    'num_cpus',
+    'window_size',
+    'save_fig',
+    'reload',
+    'skip_boundary'
+}
+
+# change this to "latent encoding" or similar
+LATENT_ENCODING = {
+    'raw_dirs',
+    'supp_dirs',
+    'weights',
+    'save_output',
+    'gpu_ids',
+    'fov',
+    'patch_type',
+
+    'channels',
+    'channel_mean',
+    'channel_std',
+
+    'network',
+    'num_classes',
+    'num_hiddens',
+    'num_residual_hiddens',
+    'num_embeddings',
+    'commitment_cost',
+}
+
 DIM_REDUCTION = {
     'input_dirs',
     'output_dirs',
+    'weights_dir',
     'file_name_prefixes',
-    'weights_dirs',
     'fit_model',
     'conditions'
 }
@@ -91,6 +98,7 @@ TRAINING = {
     'raw_dirs',
     'supp_dirs',
     'weights_dirs',
+
     'network',
     'num_inputs',
     'num_hiddens',
@@ -104,6 +112,7 @@ TRAINING = {
     'w_n',
     'channel_mean',
     'channel_std',
+
     'commitment_cost',
     'n_epochs',
     'learn_rate',
@@ -136,8 +145,10 @@ class YamlReader(Object):
         # easy way to assign attributes to each category
         # self.files = Object()
         self.preprocess = Object()
+        self.segmentation = Object()
+        self.segmentation.inference = Object()
         self.patch = Object()
-        self.inference = Object()
+        self.latent_encoding = Object()
         self.dim_reduction = Object()
         self.training = Object()
 
@@ -145,19 +156,12 @@ class YamlReader(Object):
         with open(yml_config, 'r') as f:
             self.config = yaml.load(f)
 
-            # self._parse_files()
             self._parse_preprocessing()
+            self._parse_segmentation()
             self._parse_patch()
             self._parse_inference()
             self._parse_dim_reduction()
             self._parse_training()
-
-    # def _parse_files(self):
-    #     for key, value in self.config['files'].items():
-    #         if key in FILES:
-    #             setattr(self.files, key, value)
-    #         else:
-    #             log_warning(f"yaml FILE config field {key} is not recognized")
 
     def _parse_preprocessing(self):
         for key, value in self.config['preprocess'].items():
@@ -165,6 +169,13 @@ class YamlReader(Object):
                 setattr(self.preprocess, key, value)
             else:
                 log.warning(f"yaml PREPROCESS config field {key} is not recognized")
+
+    def _parse_segmentation(self):
+        for key, value in self.config['segmentation_inference'].items():
+            if key in SEGMENTATION_INFERENCE:
+                setattr(self.segmentation.inference, key, value)
+            else:
+                log.warning(f"yaml SEGMENTATION config field {key} is not recognized")
 
     def _parse_patch(self):
         for key, value in self.config['patch'].items():
@@ -174,11 +185,11 @@ class YamlReader(Object):
                 log.warning(f"yaml PATCH config field {key} is not recognized")
 
     def _parse_inference(self):
-        for key, value in self.config['inference'].items():
-            if key in INFERENCE:
-                setattr(self.inference, key, value)
+        for key, value in self.config['latent_encoding'].items():
+            if key in LATENT_ENCODING:
+                setattr(self.latent_encoding, key, value)
             else:
-                log.warning(f"yaml INFERENCE config field {key} is not recognized")
+                log.warning(f"yaml LATENT_ENCODING config field {key} is not recognized")
 
     def _parse_dim_reduction(self):
         for key, value in self.config['dim_reduction'].items():
