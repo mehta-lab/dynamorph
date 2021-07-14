@@ -7,7 +7,7 @@ Subsequent stages of the dynamorph pipeline require raw data to be formatted pro
 This section addresses necessary data structures to execute this CLI:
 
 ```text
-python run_preproc.py --c <path to config file>
+python run_preproc.py -c <path to config file>
 ```
 
 ## input
