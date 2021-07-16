@@ -1,4 +1,4 @@
-# Patching
+# Latent Encoding
 
 ## Purpose
 
