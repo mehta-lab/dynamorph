@@ -29,12 +29,16 @@ patch:
 ```
 
 **inputs**
+From "raw" directory
 - `<fov>.npy` file generated from `run_preproc.py`
 - `<fov>_NNProbabilities.npy` file generated from `run_segmentation.py -m segmentation`
+
+From "<fov>-supps/<fov>" directory
 - `cell_pixel_assignments.pkl` file generated from `run_segmentation.py -m instance_segmentation`
 - `cell_positions.pkl` file generated from `run_segmentation.py -m instance_segmentation`
 
 **outputs**
+To "<fov>-supps/<fov>" directory
 - `stacks_<timepoint>.pkl` 
     - is a dictionary of {key:value} = {`full_path/<tpoint>_<cellid>.h5`: `matrix_dict` }
         - where `matrix_dict` is dictionary of {key:value} = {"mat": <np.array_of_image_patch>}, 
@@ -44,40 +48,36 @@ patch:
 -------------------------------------------
 ####**method = "build_trajectories"**
 
-This method 
+This method builds a `cell_traj.pkl` file that describes cell motion between frames
 
 ```text
-python run_segmentation.py -m instance_segmentation -c myconfig.yml
+python run_patch.py -m build_trajectories -c myconfig.yml
 ```
 
-instance segmentation is done using the clustering method DBSCAN (sklearn.cluster).  The process is as follows:
-
+Methodology
 ```text
-for each time point
-1. filter cells whose probability qualifies it for "foreground".  This is "fg_thr" < 0.3 in the paper.
-2. perform DBSCAN clustering with `eps = 10` and `min_samples = 250` (values used in dynamorph paper)
-3. position_labels is the output of step 2
-4. cell_ids, point_counts is set of unique values from position_labels
-5. for each cell_id/point_counts
-        define a "mean position" around each cluster
-        define a window of 256x256 around that mean
-        exclude clusters that have too many outliers outside that window (> 5% of points) 
-6.      append (cell_id, mean_pos) to qualifying cells to the `cell_positions` list
-7. assign the output of 6 to the dictionary `cell_positions[time_point]`
+for each fov's supplementary folder
+1. gather the cell centroid positions and sizes from the `cell_positions.pkl` and the `cell_pixel_assignments.pkl` files.
+2. for each time point `T`
+    3. gather all cell positions and sizes at `T`, as well as the cells for timepoint `T+1`
+    4. generate pairs of "matched" cells by using `scipy.optimize.linear_sum_assignment`
+        whose cost matrix is based on a 100 pixel distance cutoff
+5. with all pairwise "matchings" for all timepoints, generate full trajectories using:
+    - "Robust single-particle tracking in live-cell time-lapse sequences" (https://www.nature.com/articles/nmeth.1237)
+        - an approach to model gaps, splits and merges of objects over time.
 ```
 
 **inputs**
+From "raw" directory
 - reads `<fov>.npy`
-- reads `<fov>_NNProbabilities.npy`
+
+From "<fov>-supps" subdirectory
+- reads `cell_positions.pkl`
+- reads `cell_pixel_assignments.pkl`
 
 **outputs**
-- writes `cell_positions.pkl`
-- writes `cell_pixel_assignments.pkl`
-
-where `cell_positions.pkl` is a dictionary of {key:value} = {timepoint: (microglia-cell-map, non-microglia-cell-map, other-cell-map)}  
-and where `<MG or nonMG or other>-cell-map` represents `[ (cell_id, np.array(mean-x-pos, mean-y-pos)), (next_cell_id, np.array(mean-x-pos, mean-y-pos)), ... ]`
-
-
-where `cell_pixel_assignments.pkl` is a dictionary of {key:value} = {timepoint: (positions, position_labels)}
-and where `positions` represents array of (X, Y) coordinates of foreground pixels  
-and where `position_labels` represents an array of cell_IDs of those foreground pixels  
+To "<fov>-supps" directory
+- writes `cell_traj.pkl`
+    - is a list of `[cell_trajectories, cell_trajectory_positions]`
+        where cell_trajectories is a dictionary of {t_point: cell_ID}
+        where cell_trajectory_positions is a dictionary of {t_point: cell_center_position}
