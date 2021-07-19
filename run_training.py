@@ -403,7 +403,7 @@ def get_mask(mask, sample_ids, device='cuda:0'):
 
 
 def run_one_batch(model, batch, train_loss, model_kwargs = None, optimizer=None,
-                transform=None, training=True):
+                transform=False, training=True):
     """ Train on a single batch of data
     Args:
         model (nn.Module): pytorch model object
@@ -421,7 +421,7 @@ def run_one_batch(model, batch, train_loss, model_kwargs = None, optimizer=None,
         train_loss (dict): updated batch-wise training or validation loss
 
     """
-    if transform is not None:
+    if transform:
         for idx_in_batch in range(len(batch)):
             img = batch[idx_in_batch]
             flip_idx = np.random.choice([0, 1, 2])
@@ -907,7 +907,7 @@ def main(config_):
     print('len(labels):', len(labels))
     print('len(dataset):', len(dataset))
     # treat every patch as different
-    # labels = np.arange(len(labels))
+    labels = np.arange(len(labels))
     # Save the model in the train directory of the last dataset
     model_dir = os.path.join(train_dir, model_name)
     #TODO: write dataset class for VAE models
