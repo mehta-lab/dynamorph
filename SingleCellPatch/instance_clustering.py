@@ -7,7 +7,6 @@ Created on Mon Feb  8 21:27:26 2021
 
 import cv2
 import numpy as np
-import h5py
 import os
 import matplotlib
 matplotlib.use('AGG')
