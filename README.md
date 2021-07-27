@@ -36,10 +36,28 @@ For preprcoessing, patching, latent-space encoding, latent-space training
 - [h5py](https://docs.h5py.org/en/stable/)
 - [POT](https://pythonot.github.io/)
 
+## Installation
+
+To install this codebase, you must first install `git`
+
+[getting-started-installing-git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)
+
+Then you can clone this repository onto your computer:
+
+```text
+git clone https://github.com/czbiohub/dynamorph.git
+```
+
+If you are missing a particular dependency (listed in /requirements/default.txt), you can install them using `pip`
+```text
+pip install <missing package>
+```
 
 ## Getting Started
 
-DynaMorph utilizes a broad set of deep learning and machine learning tools to analyze cell imaging data, [pipeline](https://github.com/czbiohub/dynamorph/tree/master/pipeline) folder contains wrapper methods for easy access to the functionalities of DynaMorph. We also maintained some example scripts `run_preproc.py`, `run_segmentation.py`, `run_patch.py` and `run_VAE.py` to facilitate parallelization of data processing. Check [section](#cell-segmentation-and-tracking) below for functionalities this repo provides.
+DynaMorph utilizes a broad set of deep learning and machine learning tools to analyze cell imaging data, the [pipeline](https://github.com/czbiohub/dynamorph/tree/master/pipeline) folder contains wrapper methods for easy access to the functionalities of DynaMorph. 
+We also maintained some example scripts `run_preproc.py`, `run_segmentation.py`, `run_patch.py` and `run_VAE.py` to facilitate parallelization of data processing. 
+Check [section](#cell-segmentation-and-tracking) below for functionalities this repo provides.
 
 ## DynaMorph Pipeline
 
