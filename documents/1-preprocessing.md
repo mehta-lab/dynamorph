@@ -50,7 +50,7 @@ In both cases, there is a check that every image of the series has the same X-Y 
  
 The output file will be:
 
-- a single .npy of shape `(T, C, Y, X)`
+- a single .npy of shape `(T, C, Z, Y, X)`
 - C represents "channel" and will always be length 3
 - Channel index 0, 1, 2 will correspond to "Phase", "Retardance", and "Brightfield" respectively
 - If one of the above channels is not present in the raw data, that array will be empty in the output.

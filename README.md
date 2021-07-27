@@ -50,24 +50,25 @@ DynaMorph starts with raw image files from cell imaging experiments and sequenti
 
 ![pipeline_fig](pipeline.jpg)
 
-Starting from any microscopy data (file format is .tif single-page series or multi-page stacks acquired from micro-manager) (panel A), use a segmentation model of your choice to generate semantic segmentation maps (panel C).  In the dynamorph paper, we used Quantitative Label-Free Imaging with Phase and Polarization microscopy to depict cellular Phase and Retardance.
+Starting from any microscopy data (file format is .tif single-page series or multi-page stacks acquired from micro-manager) (panel A). In the dynamorph paper, we used Phase and Retardance images measured with Quantitative Label-Free Imaging with Phase and Polarization microscopy as the input.
+Then use a segmentation model of your choice to generate semantic segmentation maps from the input (panel C).  
 
 Instance segmentation in this work is based on clustering, related methods can be found in `SingleCellPatch/extract_patches.py`. Cell tracking methods can be found in `SingleCellPatch/generate_trajectories.py`.
 
 To generate segmentation and tracking from scratch, follow steps below:
 
-##### <a name="step1"></a> 1. (optional) prepare training images and labels
+##### <a name="step1"></a> 1. (optional) prepare training images and labels for training segmentation models
 
-##### <a name="step2"></a> 2. (optional) train a classifier to provide per-pixel class probabilities, see scripts in `NNsegmentation/run.py`
+##### <a name="step2"></a> 2. (optional) train a segmentation model to provide per-pixel class probabilities, see scripts in `NNsegmentation/run.py`
 
-##### <a name="step3"></a> 3. prepare inputs as 4-D numpy arrays of shape (n<sub>time frames</sub>, height, width, <sub>channels</sub>), see method `pipeline.preprocess.write_raw_to_npy` for an example
+##### <a name="step3"></a> 3. prepare inputs as 5-D numpy arrays of shape (N<sub>time frames</sub>, N<sub>channels</sub>, N<sub>slices</sub>, height, width), see `run_preproc.py` for an example
 
-##### <a name="step4"></a> 4. apply trained classifier for semantic segmentation, see method `pipeline.segmentation.segmentation` or `run_segmentation.py` 
+##### <a name="step4"></a> 4. apply trained segmentation model for semantic segmentation, see method `pipeline.segmentation.segmentation` or `run_segmentation.py` 
 
-##### <a name="step5"></a> 5. use predicted class probabilities for instance segmentation, see method `pipeline.segmentation.instance_segmentation` or `run_segmentation.py` 
+##### <a name="step5"></a> 5. use predicted class probability maps for instance segmentation, see method `pipeline.segmentation.instance_segmentation` or `run_segmentation.py` 
 
 ### Latent Representations of Morphology
-DynaMorph uses VQ-VAE to encode and reconstruct cell image patches, from which latent vectors are used as morphology descriptor. Codes for building and training VAE models are stored in `HiddenStateExtractor/vq_vae.py`.
+DynaMorph uses VQ-VAE to encode and reconstruct cell image patches, from which latent vectors are used as morphology descriptor.
 
 To extract single cell patches and employ morphology encoding, follow steps below:
 
@@ -75,21 +76,21 @@ To extract single cell patches and employ morphology encoding, follow steps belo
 
 ##### <a name="step7"></a> 7. extract cell trajectories based on instance segmentation, see method `pipeline.patch_VAE.extract_patches` or `run_patch.py -m 'build_trajectories'` 
 
-##### <a name="step8"></a> 8. Train a VAE for cell patch latent-encoding, see method `run_training.py`
+##### <a name="step8"></a> 8. train a VAE for cell patch latent-encoding, see method `run_training.py`
 
 ##### <a name="step9"></a> 9. assemble cell patches generated from step 7 to model-compatible datasets, see method `pipeline.patch_VAE.assemble_VAE` or `run_VAE.py -m 'assemble'`
 
-##### <a name="step10"></a> 10. apply trained VAE models on cell patches, see method `pipeline.patch_VAE.process_VAE` or `run_VAE.py -m 'process'` 
+##### <a name="step10"></a> 10. Generate latent representations for cell patches using trained VAE models, see method `pipeline.patch_VAE.process_VAE` or `run_VAE.py -m 'process'` 
 
 
 ## Usage
 
 The dataset accompanying this repository is large and currently available upon request for demonstration. 
 
-Scripts `run_preproc.py`, `run_segmentation.py`, `run_patch.py`, `run_VAE.py` and `run_training.py` provide command line interface, for details please check by using the `-h` option.
+Scripts `run_preproc.py`, `run_segmentation.py`, `run_patch.py`, `run_VAE.py` and `run_training.py` provide command line interface to run each module. For details please check by using the `-h` option.
 Each CLI requires a configuration file (.yaml format) that contains parameters for each stage.  Please see the example: `configs/config_example.yml`
 
-To run the dynamorph pipeline, data should first be assembled into 4-D numpy arrays ([step 3](#step3)). 
+To run the dynamorph pipeline, data should first be assembled into 5-D numpy arrays ([step 3](#step3)). 
 
 Semantic segmentation ([step 4](#step4)) and instance segmentation ([step 5](#step5))):
 
@@ -110,7 +111,7 @@ Transform image patches into DNN model (VQ-VAE) latent-space by running inferenc
 	python run_VAE.py -m "assemble" -c <path-to-your-config-yaml>
 	python run_VAE.py -m "process" -c <path-to-your-config-yaml>
 
-Reduce the dimension of latent vectors for visualization by fitting a PCA or UMAP model to the data. For UMAP:
+Reduce the dimension of latent vectors for visualization by fitting a PCA or UMAP model to the data. For PCA:
 
     python run_dim_reduction.py -m "pca" -c <path-to-your-config-yaml>
     
@@ -134,4 +135,5 @@ To cite DynaMorph, please use the bibtex entry below:
 If you have any questions regarding this work or code in this repo, feel free to raise an issue or reach out to us through:
 - Zhenqin Wu <zqwu@stanford.edu>
 - Bryant Chhun <bryant.chhun@czbiohub.org>
+- Syuan-Ming Guo <syuan-ming.guo@czbiohub.org>  
 - Shalin Mehta <shalin.mehta@czbiohub.org> 

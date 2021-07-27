@@ -75,4 +75,11 @@ To `config.dim_reduction.weights_dir`, if `fit_model: True`
 
 fit a UMAP model on all latent space representations of the data and on all well prefixes specified in the config.
 
-Inputs and outputs are the same as above except the UMAP method takes only `fit_model: True`.
+**inputs**
+Inputs are the same as PCA except the UMAP method takes only `fit_model: True`.
+
+**outputs**
+To `config.dim_reduction.weights_dir`
+- `umap_nbr#_a#_b#.pkl`
+    - `embedding`: UMAP reduced embeddings
+    - `labels`: Class label of embeddings

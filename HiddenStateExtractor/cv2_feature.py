@@ -6,7 +6,6 @@ Created on Mon Aug 12 09:53:46 2019
 @author: michaelwu
 """
 import cv2
-import h5py
 import numpy as np
 import scipy
 import pickle
