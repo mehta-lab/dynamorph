@@ -5,7 +5,6 @@ Created on Thu Jul 11 14:22:51 2019
 @author: michael.wu
 """
 import os
-import h5py
 import cv2
 import numpy as np
 import scipy
