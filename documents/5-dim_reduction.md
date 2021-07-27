@@ -1,8 +1,8 @@
-# dimensionality reduciton
+# dimensionality reduction
 
 ## Purpose
 
-Given vectors representing the learned representation of the images, fit a PCA model and generate 
+Given vectors representing the learned representation of the images, fit a PCA model and run inference
 
 The relevant CLI is:
 ```text
@@ -13,7 +13,7 @@ where <method> is one of "pca" or "umap"
 where <path to config file> is the full path to a .yml configuration file as specified in `.configs/config_example.yml`
 
 --------------------------------------------
-####**method = "pca"**
+#### **method = "pca"**
 
 Fit a PCA model on all latent space representations of the data and on all well prefixes specified in the config
 
@@ -71,7 +71,7 @@ To `config.dim_reduction.weights_dir`, if `fit_model: True`
 
 
 -------------------------------------------
-####**method = "umap"**
+#### **method = "umap"**
 
 fit a UMAP model on all latent space representations of the data and on all well prefixes specified in the config.
 

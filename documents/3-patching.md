@@ -13,7 +13,7 @@ where <method> is one of "extract_patches" or "build_trajectories" and
 where <path to config file> is the full path to a .yml configuration file as specified in `.configs/config_example.yml`
 
 --------------------------------------------
-####**method = "extract_patches"**
+#### **method = "extract_patches"**
 
 This method generates a `stacks_<timepoint>.pkl` file and 
 
@@ -46,7 +46,7 @@ To "<fov>-supps/<fov>" directory
 - `cell_positions.pkl` --> rewrites the cell_positions.pkl from the inputs
 
 -------------------------------------------
-####**method = "build_trajectories"**
+#### **method = "build_trajectories"**
 
 This method builds a `cell_traj.pkl` file that describes cell motion between frames
 

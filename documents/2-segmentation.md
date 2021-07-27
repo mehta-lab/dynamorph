@@ -14,7 +14,7 @@ where <method> is one of "segmentation" or "instance_segmentation" and
 where <path to config file> is the full path to a .yml configuration file as specified in `.configs/config_example.yml`
 
 --------------------------------------------
-####**method = "segmentation"**
+#### **method = "segmentation"**
 
 This method selection will generate a "NNProbabiliites.npy" file for each of the sites specified in the "FOV" field, given a model architecture (only 'UNet' is supported currently) and a path to the UNet weights (defined in the config file). 
 
@@ -43,7 +43,7 @@ To "raw" directory
 - writes `<fov>_NNpred.png`
 
 -------------------------------------------
-####**method = "instance_segmentation"**
+#### **method = "instance_segmentation"**
 
 This method selection will use the raw data and the probability map to generate labels and mappings to cell-instances from the segmentation
 

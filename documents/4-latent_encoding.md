@@ -15,7 +15,7 @@ where <method> is one of "assemble", "process", or "trajectory_matching" and
 where <path to config file> is the full path to a .yml configuration file as specified in `.configs/config_example.yml`
 
 --------------------------------------------
-####**method = "assemble"**
+#### **method = "assemble"**
 
 Assemble well data into format needed for DNN inference
 
@@ -73,7 +73,7 @@ Represents an aggregate of all FOV from within a well ("C5-Site_0", "C5-Site_1",
 - `<fov>_static_patches_labels.pkl`
 
 -------------------------------------------
-####**method = "process"**
+#### **method = "process"**
 
 Run DNN inference on the assembled data
 Loads the `<fov>_static_patches.pkl`, zscores it, then casts as a TensorDataset for Pytorch inference
@@ -97,7 +97,7 @@ To "raw" directory
 
 
 -------------------------------------------
-####**method = "trajectory_matching"**
+#### **method = "trajectory_matching"**
 
 Runs the trajectory matching already executed as part of `method = "assemble"`, but this time indepedent of the assemble
 
