@@ -1,6 +1,8 @@
 # DynaMorph
 
-This is a repo storing codes and scripts for **DynaMorph: learning morphodynamic states of human cells with live imaging and sc-RNAseq**, manuscript of this work can be accessed [here](https://www.biorxiv.org/content/10.1101/2020.07.20.213074v1). Analyzing pipeline of DynaMorph and structure of this repo are introduced below.
+This repository is for sharing code related to **DynaMorph: self-supervised learning of morphodynamic states of live cells**. The related preprint is [here](https://www.biorxiv.org/content/10.1101/2020.07.20.213074v2). 
+
+We summarize the components of the DynaMorph pipeline and the structure of this repository below.
 
 ![pipeline_fig](graphicalabstract_dynamorph.jpg)
 
@@ -52,6 +54,11 @@ If you are missing a particular dependency (listed in /requirements/default.txt)
 ```text
 pip install <missing package>
 ```
+## Downloading the data
+Example data to test the pipeline can be downloaded [here](https://drive.google.com/drive/folders/11GoWDwaBo1PE5FO5tcnGCOzA4pzjf-Tk?usp=sharing). 
+
+## Issues and bug reports
+The pipeline is currently in beta and we are actively working to make the pipeline easy to use. If you encounter any bugs, please report them via Issues on this repository.
 
 ## Getting Started
 
