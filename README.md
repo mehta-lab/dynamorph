@@ -1,6 +1,6 @@
 # DynaMorph
 
-This repository is for sharing code related to **DynaMorph: self-supervised learning of morphodynamic states of live cells**. The related preprint is [here](https://www.biorxiv.org/content/10.1101/2020.07.20.213074v2). 
+This repository is for sharing code related to **DynaMorph: self-supervised learning of morphodynamic states of live cells**. The related preprint is [here](https://www.biorxiv.org/content/10.1101/2020.07.20.213074v1). 
 
 We summarize the components of the DynaMorph pipeline and the structure of this repository below.
 
