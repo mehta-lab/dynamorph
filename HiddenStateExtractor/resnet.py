@@ -7,7 +7,7 @@ from HiddenStateExtractor.losses import AllTripletMiner
 class ResNetEncoder(models.resnet.ResNet):
     """Wrapper for TorchVison ResNet Model
     This was needed to remove the final FC Layer from the ResNet Model"""
-    def __init__(self, block, layers, num_inputs=2, cifar_head=False):
+    def __init__(self, block, layers, layer_planes=(64, 128, 256, 512), num_inputs=2, cifar_head=False):
         """
         Args:
             block (nn.Module): block to build the network
@@ -16,14 +16,25 @@ class ResNetEncoder(models.resnet.ResNet):
             cifar_head (bool): Use modified network for cifar-10 data if True
         """
         super().__init__(block, layers)
+        self.inplanes = layer_planes[0]
         self.cifar_head = cifar_head
         if cifar_head:
-            self.conv1 = nn.Conv2d(num_inputs, 64, kernel_size=3, stride=1, padding=1, bias=False)
-            self.bn1 = self._norm_layer(64)
-            self.relu = nn.ReLU(inplace=True)
+            self.conv1 = nn.Conv2d(num_inputs, layer_planes[0], kernel_size=3, stride=1, padding=1, bias=False)
         else:
-            self.conv1 = nn.Conv2d(num_inputs, 64, kernel_size=7, stride=2, padding=3,
+            self.conv1 = nn.Conv2d(num_inputs, layer_planes[0], kernel_size=7, stride=2, padding=3,
                                    bias=False)
+        self.bn1 = nn.BatchNorm2d(layer_planes[0])
+        self.layer1 = self._make_layer(block, layer_planes[0], layers[0])
+        self.layer2 = self._make_layer(block, layer_planes[1], layers[1], stride=2)
+        self.layer3 = self._make_layer(block, layer_planes[2], layers[2], stride=2)
+        self.layer4 = self._make_layer(block, layer_planes[3], layers[3], stride=2)
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
 
         print('** Using avgpool **')
 
@@ -45,21 +56,24 @@ class ResNetEncoder(models.resnet.ResNet):
         return x
 
 class ResNet18(ResNetEncoder):
-    def __init__(self, num_inputs=2, cifar_head=True):
-        super().__init__(models.resnet.BasicBlock, [2, 2, 2, 2], num_inputs=num_inputs, cifar_head=cifar_head)
-
+    def __init__(self, num_inputs=2, cifar_head=True, width=1):
+        super().__init__(models.resnet.BasicBlock, [2, 2, 2, 2], layer_planes=[2 ** (x + width) for x in range(5, 9)],
+                         num_inputs=num_inputs, cifar_head=cifar_head)
 
 class ResNet50(ResNetEncoder):
-    def __init__(self, num_inputs=2, cifar_head=True):
-        super().__init__(models.resnet.Bottleneck, [3, 4, 6, 3], num_inputs=num_inputs, cifar_head=cifar_head)
+    def __init__(self, num_inputs=2, cifar_head=True, width=1):
+        super().__init__(models.resnet.Bottleneck, [3, 4, 6, 3], layer_planes=[2 ** (x + width) for x in range(5, 9)],
+                         num_inputs=num_inputs, cifar_head=cifar_head)
 
 class ResNet101(ResNetEncoder):
-    def __init__(self, num_inputs=2, cifar_head=True):
-        super().__init__(models.resnet.Bottleneck, [3, 4, 23, 3], num_inputs=num_inputs, cifar_head=cifar_head)
+    def __init__(self, num_inputs=2, cifar_head=True, width=1):
+        super().__init__(models.resnet.Bottleneck, [3, 4, 23, 3], layer_planes=[2 ** (x + width) for x in range(5, 9)],
+                         num_inputs=num_inputs, cifar_head=cifar_head)
 
 class ResNet152(ResNetEncoder):
-    def __init__(self, num_inputs=2, cifar_head=True):
-        super().__init__(models.resnet.Bottleneck, [3, 8, 36, 3], num_inputs=num_inputs, cifar_head=cifar_head)
+    def __init__(self, num_inputs=2, cifar_head=True, width=1):
+        super().__init__(models.resnet.Bottleneck, [3, 8, 36, 3], layer_planes=[2 ** (x + width) for x in range(5, 9)],
+                         num_inputs=num_inputs, cifar_head=cifar_head)
 
 class BatchNorm1dNoBias(nn.BatchNorm1d):
     def __init__(self, *args, **kwargs):
@@ -70,6 +84,7 @@ class BatchNorm1dNoBias(nn.BatchNorm1d):
 class EncodeProject(nn.Module):
     def __init__(self,
                  arch='ResNet50',
+                 width=1,
                  loss=AllTripletMiner(margin=1),
                  num_inputs=2,
                  cifar_head=False,
@@ -78,17 +93,17 @@ class EncodeProject(nn.Module):
         super().__init__()
 
         if arch == 'ResNet50':
-            self.convnet = ResNet50(num_inputs=num_inputs, cifar_head=cifar_head)
-            self.encoder_dim = 2048
+            self.convnet = ResNet50(num_inputs=num_inputs, cifar_head=cifar_head, width=width)
+            self.encoder_dim = 2048 * width
         elif arch == 'ResNet101':
-            self.convnet = ResNet101(num_inputs=num_inputs, cifar_head=cifar_head)
-            self.encoder_dim = 2048
+            self.convnet = ResNet101(num_inputs=num_inputs, cifar_head=cifar_head, width=width)
+            self.encoder_dim = 2048 * width
         elif arch == 'ResNet152':
-            self.convnet = ResNet152(num_inputs=num_inputs, cifar_head=cifar_head)
-            self.encoder_dim = 2048
+            self.convnet = ResNet152(num_inputs=num_inputs, cifar_head=cifar_head, width=width)
+            self.encoder_dim = 2048 * width
         elif arch == 'ResNet18':
-            self.convnet = ResNet18(num_inputs=num_inputs, cifar_head=cifar_head)
-            self.encoder_dim = 512
+            self.convnet = ResNet18(num_inputs=num_inputs, cifar_head=cifar_head, width=width)
+            self.encoder_dim = 512 * width
         else:
             raise NotImplementedError
 

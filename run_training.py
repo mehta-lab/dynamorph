@@ -850,9 +850,6 @@ def main(config_):
     use_mask = config.training.use_mask
     channels = config.training.channels
     normalization = config.training.normalization
-    cs = [0, 1]
-    cs_mask = [2, 3]
-    input_shape = (128, 128)
 
     device = t.device('cuda:%d' % gpu_id)
 
@@ -907,7 +904,7 @@ def main(config_):
     print('len(labels):', len(labels))
     print('len(dataset):', len(dataset))
     # treat every patch as different
-    labels = np.arange(len(labels))
+    # labels = np.arange(len(labels))
     # Save the model in the train directory of the last dataset
     model_dir = os.path.join(train_dir, model_name)
     #TODO: write dataset class for VAE models
@@ -963,7 +960,7 @@ def main(config_):
         # tri_loss = HardNegativeTripletMiner(margin=margin).to(device)
         ## Initialize Model ###
 
-        model = EncodeProject(arch=network, loss=tri_loss, num_inputs=num_inputs).to(device)
+        model = EncodeProject(arch=network, loss=tri_loss, num_inputs=num_inputs, width=2).to(device)
 
         if start_model_path:
             print('Initialize the model with state {} ...'.format(start_model_path))

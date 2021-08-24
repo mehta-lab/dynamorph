@@ -130,7 +130,7 @@ def zoom_axis(x, y, ax, zoom_cutoff=1):
     ax.set_xlim(left=xlim[0], right=xlim[1])
     ax.set_ylim(bottom=ylim[0], top=ylim[1])
 
-def fit_umap(train_data, weights_dir, labels, conditions, fraction=0.1, seed=0,
+def fit_umap(train_data, weights_dir, labels, conditions, fraction=1, seed=0,
              n_nbrs=(15, 50, 200), a_s=(1.58,), b_s=(0.9,)):
     """Fit UMAP model to latent vectors and save the reduced vectors (embeddings), output UMAP plot
     Args:
@@ -173,6 +173,8 @@ def fit_umap(train_data, weights_dir, labels, conditions, fraction=0.1, seed=0,
     if fraction != 1:
         np.random.seed(seed)
         sample_ids = np.random.choice(len(train_data), int(fraction * len(train_data)), replace=False)
+    else:
+        sample_ids = np.arange(len(train_data))
 
     for n_nbr in n_nbrs:
         for a, b in zip(a_s, b_s):
@@ -180,7 +182,7 @@ def fit_umap(train_data, weights_dir, labels, conditions, fraction=0.1, seed=0,
             reducer = umap.UMAP(a=a, b=b, n_neighbors=n_nbr)
             embedding = reducer.fit_transform(train_data)
             print('Saving UMAP model {}...'.format(weights_dir))
-            with open(os.path.join(weights_dir, 'umap_nbr{}_a{}_b{}_all.pkl'.format(n_nbr, a, b)), 'wb') as f:
+            with open(os.path.join(weights_dir, 'umap_nbr{}_a{}_b{}_HEK.pkl'.format(n_nbr, a, b)), 'wb') as f:
             # with open(os.path.join(weights_dir, 'umap_nbr{}_a{}_b{}_all.pkl'.format(n_nbr, a, b)), 'rb') as f:
                 pickle.dump([embedding, labels], f, protocol=4)
                 # embedding, labels = pickle.load(f)
@@ -203,7 +205,7 @@ def fit_umap(train_data, weights_dir, labels, conditions, fraction=0.1, seed=0,
             ax[axis_count].set_xlabel('UMAP 1')
             ax[axis_count].set_ylabel('UMAP 2')
             axis_count += 1
-            fig.savefig(os.path.join(weights_dir, 'UMAP_all.png'),
+            fig.savefig(os.path.join(weights_dir, 'UMAP_HEK.png'),
             # fig.savefig(os.path.join(weights_dir, 'UMAP_long.png'),
                         dpi=300, bbox_inches='tight')
     plt.close(fig)

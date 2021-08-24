@@ -499,7 +499,7 @@ def process_VAE(raw_folder: str,
                 plt.close(fig)
     elif 'ResNet' in network:
         network_cls = getattr(resnet, 'EncodeProject')
-        model = network_cls(arch=network)
+        model = network_cls(arch=network, num_inputs=len(channels))
         model = model.to(device)
         # print(model)
         model.load_state_dict(torch.load(model_path, map_location=device))
