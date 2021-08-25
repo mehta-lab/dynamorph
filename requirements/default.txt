@@ -8,7 +8,7 @@ tifffile>=0.15.1
 imageio>=2.6.0
 POT>=0.6.0
 h5py>=2.10.0
-tensorflow==2.1
+tensorflow==2.5.1
 torch>=1.0.1
 torchvision==0.2.2
 segmentation_models==1.0.1
