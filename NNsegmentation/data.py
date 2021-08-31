@@ -12,7 +12,6 @@ import os
 import cv2
 
 CHANNEL_MAX = 65535.
-from tensorflow.keras import utils
 
 
 def load_input(file_name):
@@ -283,114 +282,45 @@ def preprocess(patches,
     ws = []
     if class_weights is None:
         class_weights = np.ones((n_classes,))
-
-    # print(f"PATCHES X SHAPE = {patches[0][0].shape}")
-    # print(f"PATCHES y SHAPE = {patches[0][1].shape}")
     
     n_channel, n_z, x_size, y_size = patches[0][0].shape
-    # todo: modification
-    # n_channel, x_size, y_size = patches[0][0].shape
-
     for pair in patches:
         assert pair[0].shape == (n_channel, n_z, x_size, y_size)
-        # Todo: modificaiton
-        # assert pair[0].shape == (n_channel, x_size, y_size)
-
-        # X = np.stack([pair[0], np.ones((1, 1, x_size, y_size))], axis=1)
-
-        # rescale each input channel to 0-1
-        scaled = []
-        # for c in pair[0]:
-
-        # scale hase
-        phase = pair[0][0]
-        x_max = np.percentile(phase, 100)
-        x_min = np.percentile(phase, 0)
-        p = (phase - x_min) / (x_max - x_min)
-        p = p.clip(0, 1)
-        # try zeroing saturated features
-        p[p == 1] = 0
-
-        # scale retardance
-        ret = pair[0][1]
-        x_max = np.percentile(ret, 100)
-        x_min = np.percentile(ret, 0)
-        r = (ret - x_min) / (x_max - x_min)
-        r = r.clip(0, 1)
-        # try zeroing saturated features
-        r[r == 1] = 0
-
-        scaled.append(p)
-        scaled.append(r)
-
-        Xs.append(np.stack(scaled))
-
+        Xs.append(pair[0])
         if label_input:
-            # print(f"\npair1.shape2 = {pair[1].shape}")
-            # print(f"\nxsize,ysize = {x_size, y_size}")
-            # assert pair[1].shape[1:] == (x_size, y_size)
+            assert pair[1].shape[2:] == (x_size, y_size)
             assert pair[1].shape[1] == 1, "Only support 2D segmentation, z dimension should be 1"
-            # todo: modification
-            # assert pair[1].shape == (1, 256, 256), "mask should be of shape (1, 256, 256)"
-
         if label_input == 'prob':
-            # assert pair[1].shape[0] == n_classes # channel dimension equals num classes
+            assert pair[1].shape[0] == n_classes # channel dimension equals num classes
             ys.append(pair[1])
             # TODO: add class weights
             ws.append(np.ones((1, 1, x_size, y_size)))
-
         elif label_input == 'annotation':
             # Transform numeric labels (1, 2, etc.) to one-hot
             # 0 are regarded as no labels available at the pixel
             y = np.zeros((n_classes, 1, x_size, y_size))
-            # todo: changed weights to ones from zeros
-            w = np.ones((1, 1, x_size, y_size))
-            # todo: modification
-            # for c in range(n_classes):
-            #     # x_pos, y_pos = np.where(pair[1] == (c+1))[-2:]
-            #     x_pos, y_pos = np.where(pair[1] == c)[-2:]
-            #     positions = tuple([np.ones_like(x_pos) * c,
-            #                        np.zeros_like(x_pos),
-            #                        x_pos,
-            #                        y_pos])
-            #     y[positions] = 1
-            #     w[..., x_pos, y_pos] = class_weights[c]
-            # ys.append(y)
-            # ws.append(w)
-            # todo: use keras, cat should be (chan, 1, 256, 256)
-            cat = utils.to_categorical(pair[1], num_classes=n_classes, dtype='uint16')
-            cat = cat.transpose(4, 0, 1, 2, 3)
-            # cat = cat.reshape(3, 1, 256, 256)
-            cat = cat.reshape(2, 1, 256, 256)
-            ys.append(cat)
-
+            w = np.zeros((1, 1, x_size, y_size))
+            for c in range(n_classes):
+                x_pos, y_pos = np.where(pair[1] == (c+1))[-2:]
+                positions = tuple([np.ones_like(x_pos) * c,
+                                   np.zeros_like(x_pos),
+                                   x_pos,
+                                   y_pos])
+                y[positions] = 1
+                w[..., x_pos, y_pos] = class_weights[c]
+            ys.append(y)
+            ws.append(w)
         elif label_input is None:
             pass
         else:
             raise ValueError("Label type not recognized")
 
     Xs = np.stack(Xs, 0).astype(float) # Batch, c, z, x, y
-
-    # Xs = Xs.astype('float32')
-    # Z SCORE by image
-    # for idx, im in enumerate(Xs):
-    #     Xs[idx][0] -= np.mean(im[0])
-    #     Xs[idx][1] -= np.mean(im[1])
-    #     Xs[idx][0] /= np.nanstd(im[0])
-    #     Xs[idx][1] /= np.nanstd(im[1])
-    # Xs = np.nan_to_num(Xs)
-    # Xs = Xs.astype('float32')
-    # Xs[0] -= np.mean(Xs[0])
-    # Xs /= np.std(Xs, axis=0)
-
-    # Xs = Xs / np.iinfo(np.uint16).max
-
-    # Xs = Xs / CHANNEL_MAX # Scale to [0, 1]
+    Xs = Xs / CHANNEL_MAX # Scale to [0, 1]
     if label_input is not None:
         ys = np.stack(ys, 0) # Batch, n_classes, 1, x, y
-        # ws = np.stack(ws, 0) # Batch, 1, 1, x, y
-        # return Xs, np.concatenate([ys, ws], 1).astype('float32')
-        return Xs, ys
+        ws = np.stack(ws, 0) # Batch, 1, 1, x, y
+        return Xs, np.concatenate([ys, ws], 1)
     else:
         return Xs, None
 
@@ -505,7 +435,6 @@ def predict_whole_map(file_path,
                 ct += 1
         
         # Supplementary runs
-        #   these introduce random offsets up to the x_size, y_size and performs another prediction
         for i_supp in range(n_supp):
             # Initiate with random offsets
             x_offset = np.random.randint(1, x_size)

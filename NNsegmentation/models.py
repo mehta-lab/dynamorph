@@ -10,8 +10,6 @@ import tensorflow as tf
 import numpy as np
 from tensorflow import keras
 keras.backend.set_image_data_format('channels_first')
-# keras.backend.set_image_data_format('channels_last')
-
 import tempfile
 import os
 import scipy
@@ -21,8 +19,7 @@ from copy import deepcopy
 # from keras.models import Model, load_model
 # from keras.layers import Dense, Layer, Input, BatchNormalization, Conv2D, Lambda
 import segmentation_models
-from .layers import weighted_binary_cross_entropy, ValidMetrics, \
-    SplitSlice, MergeSlices, precision, recall, FBeta, Precision, Recall
+from .layers import weighted_binary_cross_entropy, ValidMetrics, SplitSlice, MergeSlices
 from .data import load_input, preprocess
 
 
@@ -57,14 +54,6 @@ class Segment(object):
         self.input_shape = input_shape
         self.n_channels = self.input_shape[0]
         self.x_size, self.y_size = self.input_shape[-2:]
-
-        # if predicting and want fully convolutional, set image shape to 1024, 1024
-        if self.x_size is None and self.y_size is None:
-            self.input_shape = (2, 1024, 1024)
-        if self.x_size is None:
-            self.x_size = 1024
-        if self.y_size is None:
-            self.y_size = 1024
         
         self.n_classes = n_classes
 
@@ -73,9 +62,13 @@ class Segment(object):
             self.model_path = tempfile.mkdtemp()
         else:
             self.model_path = model_path
-
-        # self.metrics = []
+        self.call_backs = [keras.callbacks.TerminateOnNaN(),
+                           keras.callbacks.ReduceLROnPlateau(patience=5, min_lr=1e-7),
+                           keras.callbacks.ModelCheckpoint(self.model_path + '/weights.{epoch:02d}-{val_loss:.2f}.hdf5')]
+        self.valid_score_callback = ValidMetrics()
+        self.loss_func = weighted_binary_cross_entropy(n_classes=self.n_classes)
         self.build_model()
+
 
     def build_model(self):
         """ Define model structure and compile """
@@ -85,57 +78,22 @@ class Segment(object):
 
         self.unet = segmentation_models.Unet(
             backbone_name='resnet34',
-            # backbone_name='vgg19',
             input_shape=(3, self.x_size, self.y_size),
             classes=self.n_classes,
-            # activation='relu',
-            # activation='sigmoid',
             activation='linear',
-            # activation='softmax',
             encoder_weights='imagenet',
             encoder_features='default',
             decoder_block_type='upsampling',
             decoder_filters=(256, 128, 64, 32, 16),
-            # decoder_filters=(256, 128, 64, 32, 32, 16, 16),
             decoder_use_batchnorm=True)
-
-        # Segmentation models losses can be combined together by '+' and scaled by integer or float factor
-        # set class weights for dice_loss (car: 1.; pedestrian: 2.; background: 0.5;)
-        dice_loss = segmentation_models.losses.DiceLoss(class_weights=np.array([1., 1., 1.]))
-        focal_loss = segmentation_models.losses.BinaryFocalLoss() if self.n_classes == 1 else \
-            segmentation_models.losses.CategoricalFocalLoss(alpha=0.25, gamma=5.0)
-        total_loss = dice_loss + (1 * focal_loss)
-
-        self.loss_func = weighted_binary_cross_entropy(n_classes=self.n_classes)
-        # self.loss_func = focal_loss
-
-        # actually total_loss can be imported directly from library, above example just show you how to manipulate with losses
-        # total_loss = sm.losses.binary_focal_dice_loss # or sm.losses.categorical_focal_dice_loss
-
-        self.metrics = [FBeta(num_cls=self.n_classes),
-                        Precision(num_cls=self.n_classes),
-                        Recall(num_cls=self.n_classes),
-                        segmentation_models.metrics.IOUScore(threshold=0.5),
-                        segmentation_models.metrics.FScore(threshold=0.5)]
-
-    def compile_model(self, lr=0.001, opt=None):
-
-        if not opt:
-            opt = keras.optimizers.Adam(
-                learning_rate=lr, beta_1=0.9, beta_2=0.999, epsilon=1e-07, amsgrad=False,
-                name='Adam'
-            )
 
         output = self.unet(self.pre_conv)
 
         self.model = keras.models.Model(self.input, output)
-        self.model.compile(optimizer=opt,
+        self.model.compile(optimizer='Adam',
                            loss=self.loss_func,
-                           metrics=self.metrics,
-                           # Horovod: Specify `experimental_run_tf_function=False` to ensure TensorFlow
-                           # uses hvd.DistributedOptimizer() to compute gradients.
-                           experimental_run_tf_function=False
-                           )
+                           metrics=[])
+
 
     def fit(self, 
             patches,
@@ -145,7 +103,6 @@ class Segment(object):
             valid_patches=None,
             valid_label_input='prob',
             class_weights=None,
-            cbs = None,
             **kwargs):
         """ Fit model
         
@@ -178,13 +135,6 @@ class Segment(object):
         y = y.reshape(self.batch_label_shape)
         assert X.shape[0] == y.shape[0]
 
-        if not cbs:
-            call_backs = [keras.callbacks.TerminateOnNaN(),
-                          keras.callbacks.ReduceLROnPlateau(patience=5, min_lr=1e-6),
-                          ]
-        else:
-            call_backs = cbs
-
         validation_data = None
         if valid_patches is not None:
             valid_X, valid_y = preprocess(valid_patches, 
@@ -193,19 +143,18 @@ class Segment(object):
             valid_X = valid_X.reshape(self.batch_input_shape)
             valid_y = valid_y.reshape(self.batch_label_shape)
             assert valid_X.shape[0] == valid_y.shape[0]
-            valid_score_callback = ValidMetrics()
-            valid_score_callback.valid_data = (valid_X, valid_y)
+            self.valid_score_callback.valid_data = (valid_X, valid_y)
             validation_data = (valid_X, valid_y)
-            call_backs.append(valid_score_callback)
 
         self.model.fit(x=X, 
                        y=y,
                        batch_size=batch_size,
                        epochs=n_epochs,
                        verbose=1,
-                       callbacks=call_backs,
+                       callbacks=self.call_backs + [self.valid_score_callback],
                        validation_data=validation_data,
                        **kwargs)
+
 
     def predict(self, patches, label_input='prob'):
         """ Generate prediction for given data
@@ -240,7 +189,7 @@ class Segment(object):
 
     @property
     def batch_label_shape(self):
-        return tuple([-1, self.n_classes+1, self.x_size, self.y_size])
+        return tuple([-1, self.n_classes + 1, self.x_size, self.y_size])
 
 
     def save(self, path):
@@ -254,56 +203,56 @@ class Segment(object):
 
 
 
-# class SegmentWithMultipleSlice(Segment):
-#     """ Semantic segmentation model with inputs having multiple time/z slices """
-#
-#     def __init__(self,
-#                  unet_feat=32,
-#                  **kwargs):
-#         """ Define model
-#
-#         Args:
-#             unet_feat (int, optional): output dimension of unet (used as
-#                 hidden units)
-#             **kwargs: keyword arguments for `Segment`
-#                 note that `input_shape` should have 4 dimensions
-#
-#         """
-#
-#         self.unet_feat = unet_feat
-#         super(SegmentWithMultipleSlice, self).__init__(**kwargs)
-#         self.n_slices = self.input_shape[1] # Input shape (c, z, x, y)
-#
-#
-#     def build_model(self):
-#         """ Define model structure and compile """
-#
-#         # input shape: batch_size, n_channel, n_slice, x_size, y_size
-#         self.input = keras.layers.Input(shape=self.input_shape, dtype='float32')
-#
-#         # Combine time slice dimension and batch dimension
-#         inp = SplitSlice(self.n_channels, self.x_size, self.y_size)(self.input)
-#         self.pre_conv = keras.layers.Conv2D(3, (1, 1), activation=None, name='pre_conv')(inp)
-#
-#         self.unet = segmentation_models.Unet(
-#             backbone_name='resnet34',
-#             input_shape=(3, self.x_size, self.y_size),
-#             classes=self.unet_feat,
-#             activation='linear',
-#             encoder_weights='imagenet',
-#             encoder_features='default',
-#             decoder_block_type='upsampling',
-#             decoder_filters=(256, 128, 64, 32, 16),
-#             decoder_use_batchnorm=True)
-#
-#         output = self.unet(self.pre_conv)
-#
-#         # Split time slice dimension and merge to channel dimension
-#         output = MergeSlices(self.n_slices, self.unet_feat)(output)
-#         output = keras.layers.Conv2D(self.unet_feat, (1, 1), activation='relu', name='post_conv')(output)
-#         output = keras.layers.Conv2D(self.n_classes, (1, 1), activation=None, name='pred_head')(output)
-#
-#         self.model = keras.models.Model(self.input, output)
-#         self.model.compile(optimizer='Adam',
-#                            loss=self.loss_func,
-#                            metrics=[])
+class SegmentWithMultipleSlice(Segment):
+    """ Semantic segmentation model with inputs having multiple time/z slices """
+
+    def __init__(self,
+                 unet_feat=32,
+                 **kwargs):
+        """ Define model
+
+        Args:
+            unet_feat (int, optional): output dimension of unet (used as
+                hidden units)
+            **kwargs: keyword arguments for `Segment`
+                note that `input_shape` should have 4 dimensions
+
+        """
+
+        self.unet_feat = unet_feat
+        super(SegmentWithMultipleSlice, self).__init__(**kwargs)
+        self.n_slices = self.input_shape[1] # Input shape (c, z, x, y)
+
+
+    def build_model(self):
+        """ Define model structure and compile """
+
+        # input shape: batch_size, n_channel, n_slice, x_size, y_size
+        self.input = keras.layers.Input(shape=self.input_shape, dtype='float32')
+
+        # Combine time slice dimension and batch dimension
+        inp = SplitSlice(self.n_channels, self.x_size, self.y_size)(self.input)
+        self.pre_conv = keras.layers.Conv2D(3, (1, 1), activation=None, name='pre_conv')(inp)
+
+        self.unet = segmentation_models.Unet(
+            backbone_name='resnet34',
+            input_shape=(3, self.x_size, self.y_size),
+            classes=self.unet_feat,
+            activation='linear',
+            encoder_weights='imagenet',
+            encoder_features='default',
+            decoder_block_type='upsampling',
+            decoder_filters=(256, 128, 64, 32, 16),
+            decoder_use_batchnorm=True)
+
+        output = self.unet(self.pre_conv)
+
+        # Split time slice dimension and merge to channel dimension
+        output = MergeSlices(self.n_slices, self.unet_feat)(output)
+        output = keras.layers.Conv2D(self.unet_feat, (1, 1), activation='relu', name='post_conv')(output)
+        output = keras.layers.Conv2D(self.n_classes, (1, 1), activation=None, name='pred_head')(output)
+
+        self.model = keras.models.Model(self.input, output)
+        self.model.compile(optimizer='Adam',
+                           loss=self.loss_func,
+                           metrics=[])
