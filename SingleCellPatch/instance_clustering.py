@@ -159,19 +159,30 @@ def process_site_instance_segmentation(raw_data,
 
     ct_thr = (config_.patch.count_threshold_low, config_.patch.count_threshold_high)
     fg_thr = config_.patch.foreground_threshold
-    DBSCAN_thr = (config_.patch.dbscan_eps, config_.patch.dbscan_min_samplees)
+    DBSCAN_thr = (config_.patch.dbscan_eps, config_.patch.dbscan_min_samples)
 
     # TODO: Size is hardcoded here
     # Should be of size (n_frame, n_channels, z(1), x(2048), y(2048)), uint16
     print(f"\tLoading {raw_data}")
     image_stack = np.load(raw_data)
+    print(f"raw_data has shape {image_stack.shape}")
     # Should be of size (n_frame, n_classes, z(1), x(2048), y(2048)), float
     print(f"\tLoading {raw_data_segmented}")
     segmentation_stack = np.load(raw_data_segmented)
+    print(f"segmentation stack has shape {segmentation_stack.shape}")
+
+    # reshape if numpy file is too large, assume index=1 is redundant
+    if len(segmentation_stack.shape) > 4:
+        shp = segmentation_stack.shape
+        # skip index 1 which is blank
+        segmentation_stack = segmentation_stack.reshape((shp[0], shp[2], shp[3], shp[4], shp[5]))
 
     cell_positions = {}
     cell_pixel_assignments = {}
-    for t_point in range(image_stack.shape[0]):
+
+    # if the number of timepoints between images and predictions mismatch, choose the smaller one
+    endpt = image_stack.shape[0] if image_stack.shape[0] < segmentation_stack.shape[0] else segmentation_stack.shape[0]
+    for t_point in range(endpt):
         print("\tClustering time %d" % t_point)
         cell_segmentation = segmentation_stack[t_point]
         instance_map_path = os.path.join(site_supp_files_folder, 'segmentation_%d.png' % t_point)
@@ -180,7 +191,7 @@ def process_site_instance_segmentation(raw_data,
                                   map_path=instance_map_path,
                                   ct_thr=ct_thr,
                                   fg_thr=fg_thr,
-                                  DBSCAN_thr=DBSCAN_thr)
+                                  dbscan_thr=DBSCAN_thr)
         cell_positions[t_point] = res[0] # List of cell: (cell_id, mean_pos)
         cell_pixel_assignments[t_point] = res[1:]
     with open(os.path.join(site_supp_files_folder, 'cell_positions.pkl'), 'wb') as f:

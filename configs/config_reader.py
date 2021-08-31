@@ -60,7 +60,7 @@ PATCH = {
     'window_size',
     'save_fig',
     'reload',
-    'skip_boundary'
+    'skip_boundary',
     
     'count_threshold_low',
     'count_threshold_high',
