@@ -298,7 +298,33 @@ def preprocess(patches,
 
         # X = np.stack([pair[0], np.ones((1, 1, x_size, y_size))], axis=1)
 
-        Xs.append(pair[0])
+        # rescale each input channel to 0-1
+        scaled = []
+        # for c in pair[0]:
+
+        # scale hase
+        phase = pair[0][0]
+        x_max = np.percentile(phase, 100)
+        x_min = np.percentile(phase, 0)
+        p = (phase - x_min) / (x_max - x_min)
+        p = p.clip(0, 1)
+        # try zeroing saturated features
+        p[p == 1] = 0
+
+        # scale retardance
+        ret = pair[0][1]
+        x_max = np.percentile(ret, 100)
+        x_min = np.percentile(ret, 0)
+        r = (ret - x_min) / (x_max - x_min)
+        r = r.clip(0, 1)
+        # try zeroing saturated features
+        r[r == 1] = 0
+
+        scaled.append(p)
+        scaled.append(r)
+
+        Xs.append(np.stack(scaled))
+
         if label_input:
             # print(f"\npair1.shape2 = {pair[1].shape}")
             # print(f"\nxsize,ysize = {x_size, y_size}")
@@ -334,7 +360,8 @@ def preprocess(patches,
             # todo: use keras, cat should be (chan, 1, 256, 256)
             cat = utils.to_categorical(pair[1], num_classes=n_classes, dtype='uint16')
             cat = cat.transpose(4, 0, 1, 2, 3)
-            cat = cat.reshape(3, 1, 256, 256)
+            # cat = cat.reshape(3, 1, 256, 256)
+            cat = cat.reshape(2, 1, 256, 256)
             ys.append(cat)
 
         elif label_input is None:
@@ -357,6 +384,7 @@ def preprocess(patches,
     # Xs /= np.std(Xs, axis=0)
 
     # Xs = Xs / np.iinfo(np.uint16).max
+
     # Xs = Xs / CHANNEL_MAX # Scale to [0, 1]
     if label_input is not None:
         ys = np.stack(ys, 0) # Batch, n_classes, 1, x, y
@@ -477,6 +505,7 @@ def predict_whole_map(file_path,
                 ct += 1
         
         # Supplementary runs
+        #   these introduce random offsets up to the x_size, y_size and performs another prediction
         for i_supp in range(n_supp):
             # Initiate with random offsets
             x_offset = np.random.randint(1, x_size)
@@ -485,8 +514,8 @@ def predict_whole_map(file_path,
             outputs = []
             for r in range(rows - 1):
                 for c in range(columns - 1):
-                    patch_inp = inp[..., 
-                                    (x_offset + r*x_size):(x_offset + (r+1)*x_size), 
+                    patch_inp = inp[...,
+                                    (x_offset + r*x_size):(x_offset + (r+1)*x_size),
                                     (y_offset + c*y_size):(y_offset + (c+1)*y_size)]
                     if time_slices == 1:
                         patch_inp = patch_inp[0]
