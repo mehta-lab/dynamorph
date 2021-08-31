@@ -60,7 +60,7 @@ def instance_clustering(cell_segmentation,
                         instance_map=True, 
                         map_path=None, 
                         fg_thr=0.3,
-                        DBSCAN_thr=(10, 250)):
+                        dbscan_thr=(10, 250)):
     """ Perform instance clustering on a static frame
 
     Args:
@@ -75,7 +75,7 @@ def instance_clustering(cell_segmentation,
         fg_thr (float, optional): threshold of foreground, any pixel with 
             predicted background prob less than this value would be regarded as
             foreground (MG or Non-MG)
-        DBSCAN_thr (tuple, optional): parameters for DBSCAN, (eps, min_samples)
+        dbscan_thr (tuple, optional): parameters for DBSCAN, (eps, min_samples)
 
     Returns:
         (list * 3): 3 lists (MG, Non-MG, intermediate) of cell identifiers
@@ -92,7 +92,7 @@ def instance_clustering(cell_segmentation,
         return [], np.zeros((0, 2), dtype=int), np.zeros((0,), dtype=int)
 
     # DBSCAN clustering of cell pixels
-    clustering = DBSCAN(eps=DBSCAN_thr[0], min_samples=DBSCAN_thr[1]).fit(positions)
+    clustering = DBSCAN(eps=dbscan_thr[0], min_samples=dbscan_thr[1]).fit(positions)
     positions_labels = clustering.labels_
     cell_ids, point_cts = np.unique(positions_labels, return_counts=True)
     
@@ -140,7 +140,7 @@ def instance_clustering(cell_segmentation,
 def process_site_instance_segmentation(raw_data,
                                        raw_data_segmented,
                                        site_supp_files_folder,
-                                       **kwargs):
+                                       config_):
     """
     Wrapper method for instance segmentation
 
@@ -153,9 +153,13 @@ def process_site_instance_segmentation(raw_data,
     :param raw_data: (str) path to image stack (.npy)
     :param raw_data_segmented: (str) path to semantic segmentation stack (.npy)
     :param site_supp_files_folder: (str) path to the folder where supplementary files will be saved
-    :param kwargs:
+    :param config_: config file parameters
     :return:
     """
+
+    ct_thr = (config_.patch.count_threshold_low, config_.patch.count_threshold_high)
+    fg_thr = config_.patch.foreground_threshold
+    DBSCAN_thr = (config_.patch.dbscan_eps, config_.patch.dbscan_min_samplees)
 
     # TODO: Size is hardcoded here
     # Should be of size (n_frame, n_channels, z(1), x(2048), y(2048)), uint16
@@ -171,8 +175,12 @@ def process_site_instance_segmentation(raw_data,
         print("\tClustering time %d" % t_point)
         cell_segmentation = segmentation_stack[t_point]
         instance_map_path = os.path.join(site_supp_files_folder, 'segmentation_%d.png' % t_point)
-        #TODO: expose instance clustering parameters in config
-        res = instance_clustering(cell_segmentation, instance_map=True, map_path=instance_map_path)
+        res = instance_clustering(cell_segmentation,
+                                  instance_map=True,
+                                  map_path=instance_map_path,
+                                  ct_thr=ct_thr,
+                                  fg_thr=fg_thr,
+                                  DBSCAN_thr=DBSCAN_thr)
         cell_positions[t_point] = res[0] # List of cell: (cell_id, mean_pos)
         cell_pixel_assignments[t_point] = res[1:]
     with open(os.path.join(site_supp_files_folder, 'cell_positions.pkl'), 'wb') as f:

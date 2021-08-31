@@ -47,7 +47,8 @@ def instance_segmentation(raw_folder: str,
         raw_folder (str): folder for raw data, segmentation and summarized results
         supp_folder (str): folder for supplementary data
         sites (list of str): list of site names
-        config (YamlReader):
+        config_ (YamlReader):
+        rerun:
 
     """
 
@@ -74,7 +75,7 @@ def instance_segmentation(raw_folder: str,
         process_site_instance_segmentation(site_path,
                                            site_segmentation_path,
                                            site_supp_files_folder,
-                                           **kwargs)
+                                           config_)
     return
 
 
