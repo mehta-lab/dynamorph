@@ -70,30 +70,34 @@ def load_raw(fullpaths: list,
             # for z in z_indicies:
             #     files.append([c for c in sorted(os.listdir(fullpath)) if chan in c and f"z{z:03d}" in c])
             # files = np.array(files).flatten()
-            if chan is not "RetardanceZavg":
-                zfiles = sorted([c for c in fullpaths if chan in c.split('/')[-1] and f"z{z_slice:03d}" in c.split('/')[-1]])
-            else:
-                zfiles = sorted([c for c in fullpaths if chan in c.split('/')[-1]])
+            if chan == "RetardanceZavg":
+                print('')
 
-            if not zfiles:
+            # RetardanceZavg does not take z-slicing
+            if chan != "RetardanceZavg":
+                files = sorted([c for c in fullpaths if chan in c.split('/')[-1] and f"z{z_slice:03d}" in c.split('/')[-1]])
+            else:
+                files = sorted([c for c in fullpaths if chan in c.split('/')[-1]])
+
+            if not files:
                 log.warning(f"no files of any type with {chan} identified")
                 continue
 
             # resulting shapes are in (t, y, x) order
             if "Phase" in chan:
-                phase = np.stack([read_image(f) for f in zfiles])
+                phase = np.stack([read_image(f) for f in files])
                 # phase = phase.reshape((len(z_indicies), -1, phase.shape[-2], phase.shape[-1]))
                 shapes.append(phase.shape)
-            elif "Retardance" is chan:
-                ret = np.stack([read_image(f) for f in zfiles])
+            elif "Retardance" == chan:
+                ret = np.stack([read_image(f) for f in files])
                 # ret = ret.reshape((len(z_indicies), -1, ret.shape[-2], ret.shape[-1]))
                 shapes.append(ret.shape)
-            elif "Brightfield" is chan:
-                bf = np.stack([read_image(f) for f in zfiles])
+            elif "Brightfield" == chan:
+                bf = np.stack([read_image(f) for f in files])
                 # bf = bf.reshape((len(z_indicies), -1, bf.shape[-2], bf.shape[-1]))
                 shapes.append(bf.shape)
-            elif "RetardanceZavg" is chan:
-                ret = np.stack([read_image(f) for f in zfiles])
+            elif "RetardanceZavg" == chan:
+                ret = np.stack([read_image(f) for f in files])
                 # ret = ret.reshape((len(z_indicies), -1, ret.shape[-2], ret.shape[-1]))
                 shapes.append(ret.shape)
             else:
@@ -104,8 +108,11 @@ def load_raw(fullpaths: list,
         # load stabilized multipage tiffs.
         for chan in chans:
 
-            if chan is not "RetardanceZavg":
+            # RetardanceZavg does not take z-slicing
+            if chan != "RetardanceZavg":
                 files = sorted([c for c in fullpaths if chan in c.split('/')[-1] and '.tif' in c.split('/')[-1]])
+            else:
+                files = sorted([c for c in fullpaths if chan in c.split('/')[-1]])
 
             if not files:
                 log.warning(f"no files with {chan} identified")
@@ -120,18 +127,22 @@ def load_raw(fullpaths: list,
                                            flags=cv2.IMREAD_ANYDEPTH)
                 phase = np.array(phase)
                 shapes.append(phase.shape)
-            if "Retardance" in chan:
+            if "Retardance" == chan:
                 # multi_tif_retard = 'img__Retardance__stabilized.tif'
                 _, ret = cv2.imreadmulti(files[0],
                                          flags=cv2.IMREAD_ANYDEPTH)
                 ret = np.array(ret)
                 shapes.append(ret.shape)
-            if "Brightfield" in chan:
+            if "Brightfield" == chan:
                 # multi_tif_bf = 'img_Brightfield_computed_stabilized.tif'
                 _, bf = cv2.imreadmulti(files[0],
                                         flags=cv2.IMREAD_ANYDEPTH)
                 bf = np.array(bf)
                 shapes.append(bf.shape)
+            elif "RetardanceZavg" == chan:
+                ret = np.stack([read_image(f) for f in files])
+                # ret = ret.reshape((len(z_indicies), -1, ret.shape[-2], ret.shape[-1]))
+                shapes.append(ret.shape)
 
     # check that all shapes are the same
     assert shapes.count(shapes[0]) == len(shapes)
@@ -144,7 +155,7 @@ def load_raw(fullpaths: list,
         try:
             if "Phase" in chan:
                 out[:, 0, 0] = phase
-            if "Retardance" in chan:
+            if "Retardance" == chan or "RetardanceZavg" == chan:
                 out[:, 1, 0] = ret
             if "Brightfield" in chan:
                 out[:, 2, 0] = bf
