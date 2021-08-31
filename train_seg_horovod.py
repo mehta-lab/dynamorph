@@ -17,6 +17,8 @@ from NNsegmentation.data import preprocess
 from NNsegmentation.layers import metricsHistory, ValidMetrics
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
+import segmentation_models as sm
+
 """
 To make changes:
 1. select a source data location
@@ -25,18 +27,23 @@ To make changes:
 
 # ===== Input Data ===========
 parent = '/gpfs/CompMicro/rawdata/dragonfly/Bryant/Galina/10-29-2020'
-mg_a2 = 'target_binary_A2_mg_patches_2'
-mg_b2 = 'target_binary_B2_mg_patches'
-mg_c2 = 'target_binary_C2_mg_patches'
-glial_b2 = 'patches_glial_twoclass_noaug_fullset'
-neuron_b2 = 'patches_neurons_twoclass_noaug_fullset'
 
-experiment = os.path.join(parent, neuron_b2)
+# not enough glial samples
+glial_B2 = 'patches_glial_oneclass'
+
+# expanded neuron samples
+neuron_C2 = 'patches_neurons_oneclass'
+neuron_C2_2 = 'patches_neurons_oneclass_2'
+
+# mega set of mg samples
+mg_all_wells = 'patches_mg_oneclass'
+
+experiment = os.path.join(parent, 'patches', neuron_C2_2)
 print(f"\nexperiment set to {experiment}")
 
 # ==== Output Model Path ======
-model_expt = 'neuron_model_twoclass_test1_run2'
-model_path = os.path.join(parent, model_expt)
+model_expt = 'neuron_model_oneclass_run2-3'
+model_path = os.path.join(parent, 'models', model_expt)
 # Define model
 if not os.path.exists(model_path):
     os.makedirs(model_path, exist_ok=True)
@@ -45,7 +52,7 @@ if not os.path.exists(model_path):
 batch_size = 64
 epochs = 200
 base_lr = 0.0001
-classes = 3
+classes = 2
 
 train_pct = 0.85
 val_pct = 0.15
@@ -132,9 +139,14 @@ def pre(patches, cls, inp):
                       n_classes=cls,
                       label_input=inp,
                       class_weights=None)
+
     X = X.reshape((-1,) + (2, 256, 256))
     # y = y.reshape((-1, args.classes+1,) + (256, 256))
     y = y.reshape((-1, args.classes,) + (256, 256))
+
+    # X = X.reshape((-1,) + (256, 256, 2))
+    # # y = y.reshape((-1, args.classes+1,) + (256, 256))
+    # y = y.reshape((-1, ) + (256, 256, args.classes))
 
     assert X.shape[0] == y.shape[0]
     return X, y
@@ -252,11 +264,16 @@ if __name__ == "__main__":
                        args.classes,
                        'annotation')
 
+    # ================================ Augmentation  =============================================================
     # create generators
-    train_gen = ImageDataGenerator(samplewise_center=True, samplewise_std_normalization=True, rotation_range=10,
-                                   horizontal_flip=True, vertical_flip=True)
+    # train_gen = ImageDataGenerator(samplewise_center=True, samplewise_std_normalization=True, rotation_range=10,
+    #                                horizontal_flip=True, vertical_flip=True)
     # train_gen = ImageDataGenerator()
+    train_gen = ImageDataGenerator(horizontal_flip=True, vertical_flip=True, data_format='channels_first',
+                                   rotation_range=10, shear_range=10)
     val_gen = ImageDataGenerator()
+
+    # ============================================================================================================
 
     # initialize model
     model = Segment(input_shape=(2, 256, 256),  # Phase + Retardance
@@ -272,14 +289,18 @@ if __name__ == "__main__":
         name='Adam'
     )
     opt = hvd.DistributedOptimizer(opt)
+
     model.compile_model(opt=opt)
 
-    # transfer learning maybe
+    # ================================ load model weights  =============================================================
+
     if hvd.rank() == 0:
-        model_weights = os.path.join('/gpfs/CompMicro/rawdata/dragonfly/Bryant/Galina/10-29-2020/'
-                                     'neuron_model_twoclass_test1',
-                                     'weights.epoch-070.loss-466.137.valloss-467.703.hdf5')
+        model_weights = os.path.join('/gpfs/CompMicro/rawdata/dragonfly/Bryant/Galina/10-29-2020/models',
+                                     'neuron_best_model_8-27-2021',
+                                     'weights.epoch-160.loss-0.216.valloss-0.108.hdf5')
         model.load(model_weights)
+
+    # ============================================================================================================
 
     # assign callbacks
     callbacks = [
@@ -287,6 +308,7 @@ if __name__ == "__main__":
         callbacks.MetricAverageCallback(),
         callbacks.LearningRateWarmupCallback(initial_lr=scaled_lr, warmup_epochs=5, verbose=1),
         # keras.callbacks.ReduceLROnPlateau(patience=10, verbose=1)
+        keras.callbacks.ReduceLROnPlateau()
     ]
 
     if hvd.rank() == 0:

@@ -60,31 +60,42 @@ def load_raw(fullpaths: list,
     if not multipage:
         log.info(f"single-page tiffs specified")
         # load singlepage tiffs.  String parse assuming time series and z### format
+
+        if "RetardanceZavg" and "Retardance" in chans:
+            raise ValueError("only one of Retardance or RetardanceZavg can be used")
+
         for chan in chans:
             # files maps (key:value) = (z_index, t_y_x array)
             # files = []
             # for z in z_indicies:
             #     files.append([c for c in sorted(os.listdir(fullpath)) if chan in c and f"z{z:03d}" in c])
             # files = np.array(files).flatten()
-            files = [c for c in fullpaths if chan in c.split('/')[-1] and f"z{z_slice:03d}" in c.split('/')[-1]]
-            files = sorted(files)
-            if not files:
-                log.warning(f"no files with {chan} identified")
+            if chan is not "RetardanceZavg":
+                zfiles = sorted([c for c in fullpaths if chan in c.split('/')[-1] and f"z{z_slice:03d}" in c.split('/')[-1]])
+            else:
+                zfiles = sorted([c for c in fullpaths if chan in c.split('/')[-1]])
+
+            if not zfiles:
+                log.warning(f"no files of any type with {chan} identified")
                 continue
 
             # resulting shapes are in (t, y, x) order
             if "Phase" in chan:
-                phase = np.stack([read_image(f) for f in files])
+                phase = np.stack([read_image(f) for f in zfiles])
                 # phase = phase.reshape((len(z_indicies), -1, phase.shape[-2], phase.shape[-1]))
                 shapes.append(phase.shape)
-            elif "Retardance" in chan:
-                ret = np.stack([read_image(f) for f in files])
+            elif "Retardance" is chan:
+                ret = np.stack([read_image(f) for f in zfiles])
                 # ret = ret.reshape((len(z_indicies), -1, ret.shape[-2], ret.shape[-1]))
                 shapes.append(ret.shape)
-            elif "Brightfield" in chan:
-                bf = np.stack([read_image(f) for f in files])
+            elif "Brightfield" is chan:
+                bf = np.stack([read_image(f) for f in zfiles])
                 # bf = bf.reshape((len(z_indicies), -1, bf.shape[-2], bf.shape[-1]))
                 shapes.append(bf.shape)
+            elif "RetardanceZavg" is chan:
+                ret = np.stack([read_image(f) for f in zfiles])
+                # ret = ret.reshape((len(z_indicies), -1, ret.shape[-2], ret.shape[-1]))
+                shapes.append(ret.shape)
             else:
                 log.warning(f'not implemented: {chan} parse from single page files')
 
@@ -92,8 +103,10 @@ def load_raw(fullpaths: list,
         log.info(f"multi-page tiffs specified")
         # load stabilized multipage tiffs.
         for chan in chans:
-            files = [c for c in fullpaths if chan in c.split('/')[-1] and '.tif' in c.split('/')[-1]]
-            files = sorted(files)
+
+            if chan is not "RetardanceZavg":
+                files = sorted([c for c in fullpaths if chan in c.split('/')[-1] and '.tif' in c.split('/')[-1]])
+
             if not files:
                 log.warning(f"no files with {chan} identified")
                 continue
