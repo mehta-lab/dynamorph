@@ -60,7 +60,8 @@ def instance_clustering(cell_segmentation,
                         instance_map=True, 
                         map_path=None, 
                         fg_thr=0.3,
-                        dbscan_thr=(10, 250)):
+                        dbscan_thr=(10, 250),
+                        channel=0):
     """ Perform instance clustering on a static frame
 
     Args:
@@ -85,7 +86,7 @@ def instance_clustering(cell_segmentation,
 
     """
     cell_segmentation = check_segmentation_dim(cell_segmentation)
-    all_cells = np.mean(cell_segmentation[0], axis=0) < fg_thr
+    all_cells = np.mean(cell_segmentation[channel], axis=0) < fg_thr
     positions = np.array(list(zip(*np.where(all_cells))))
     if len(positions) < 1000:
         # No cell detected
@@ -160,16 +161,17 @@ def process_site_instance_segmentation(raw_data,
     ct_thr = (config_.patch.count_threshold_low, config_.patch.count_threshold_high)
     fg_thr = config_.patch.foreground_threshold
     DBSCAN_thr = (config_.patch.dbscan_eps, config_.patch.dbscan_min_samples)
+    channel = config_.patch.channel
 
     # TODO: Size is hardcoded here
     # Should be of size (n_frame, n_channels, z(1), x(2048), y(2048)), uint16
     print(f"\tLoading {raw_data}")
     image_stack = np.load(raw_data)
-    print(f"raw_data has shape {image_stack.shape}")
+    print(f"\traw_data has shape {image_stack.shape}")
     # Should be of size (n_frame, n_classes, z(1), x(2048), y(2048)), float
     print(f"\tLoading {raw_data_segmented}")
     segmentation_stack = np.load(raw_data_segmented)
-    print(f"segmentation stack has shape {segmentation_stack.shape}")
+    print(f"\tsegmentation stack has shape {segmentation_stack.shape}")
 
     # reshape if numpy file is too large, assume index=1 is redundant
     if len(segmentation_stack.shape) > 4:
@@ -191,8 +193,10 @@ def process_site_instance_segmentation(raw_data,
                                   map_path=instance_map_path,
                                   ct_thr=ct_thr,
                                   fg_thr=fg_thr,
-                                  dbscan_thr=DBSCAN_thr)
-        cell_positions[t_point] = res[0] # List of cell: (cell_id, mean_pos)
+                                  dbscan_thr=DBSCAN_thr,
+                                  channel=channel)
+        print(f"\tfound {len(res[0])} cells for timepoint {t_point}")
+        cell_positions[t_point] = res[0]  # List of cell: (cell_id, mean_pos)
         cell_pixel_assignments[t_point] = res[1:]
     with open(os.path.join(site_supp_files_folder, 'cell_positions.pkl'), 'wb') as f:
         pickle.dump(cell_positions, f)

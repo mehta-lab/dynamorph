@@ -85,11 +85,15 @@ patch:
   # False to pad patches with mean background values
 
   # instance segmentation parameters
-  count_threshold_low: 500
-  count_threshold_high: 12000
-  foreground_threshold: 0.3
+  channel: 0
+  # segmentation output can produce multiple channels.  Select which one to cluster on
+  foreground_threshold: 0.6
+  # channel values under foreground_threshold will be considered
   dbscan_eps: 10
   dbscan_min_samples: 250
+  count_threshold_low: 100
+  count_threshold_high: 12000
+
 
 
 

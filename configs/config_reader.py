@@ -61,7 +61,8 @@ PATCH = {
     'save_fig',
     'reload',
     'skip_boundary',
-    
+
+    'channel',
     'count_threshold_low',
     'count_threshold_high',
     'foreground_threshold',
