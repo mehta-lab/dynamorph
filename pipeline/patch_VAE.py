@@ -59,6 +59,7 @@ def extract_patches(raw_folder: str,
             print("Site data not found %s" % site_segmentation_path, flush=True)
         if not os.path.exists(site_supp_files_folder):
             print("Site supp folder not found %s" % site_supp_files_folder, flush=True)
+            print(" ... did you remember to run 'instance segmentation'? ")
         else:
             print("Building patches %s" % site_path, flush=True)
 
