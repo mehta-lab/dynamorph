@@ -10,6 +10,7 @@ Created on Thu Feb 14 17:51:20 2019
 # import numpy as np
 from tensorflow import keras
 from tensorflow.keras import backend as K
+import segmentation_models
 # from keras import backend as K
 # from keras.models import Model, load_model
 # from keras.layers import Dense, Layer, Input
@@ -169,12 +170,10 @@ class weighted_binary_cross_entropy(object):
 
         if self.n_classes > 2:
             print('using categorical xentropy for this >2 class model')
-            loss = keras.backend.categorical_crossentropy(y_true, y_pred,
-                                                          from_logits=False,
-                                                          axis=-1)
-            # loss = logits(y_true, y_pred)
-            # loss = keras.losses.CategoricalCrossentropy(from_logits=False,
-            #                                             name='categorical_crossentropy')
+            # loss = keras.backend.categorical_crossentropy(y_true, y_pred,
+            #                                               from_logits=True,
+            #                                               axis=-1)
+            loss = segmentation_models.losses.categorical_focal_loss(y_true, y_pred)
         else:
             print('using binary xentropy for this 2 class model')
             loss = keras.backend.binary_crossentropy(y_true, y_pred, from_logits=False)
