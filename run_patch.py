@@ -97,7 +97,7 @@ def parse_args():
         '-m', '--method',
         type=str,
         required=False,
-        choices=['extract_patches', 'build_trajectories'],
+        choices=['extract_patches', 'build_trajectories', 'instance_segmentation'],
         default='extract_patches',
         help="Method: one of 'extract_patches', 'build_trajectories'",
     )
