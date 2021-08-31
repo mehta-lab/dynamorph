@@ -61,6 +61,12 @@ PATCH = {
     'save_fig',
     'reload',
     'skip_boundary'
+    
+    'count_threshold_low',
+    'count_threshold_high',
+    'foreground_threshold',
+    'dbscan_eps',
+    'dbscan_min_samples'
 }
 
 # change this to "latent encoding" or similar

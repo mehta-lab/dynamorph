@@ -84,6 +84,14 @@ patch:
   # True to skip patches whose edges exceed the image boundaries
   # False to pad patches with mean background values
 
+  # instance segmentation parameters
+  count_threshold_low: 500
+  count_threshold_high: 12000
+  foreground_threshold: 0.3
+  dbscan_eps: 10
+  dbscan_min_samples: 250
+
+
 
 latent_encoding:
   raw_dirs: [
