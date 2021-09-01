@@ -92,7 +92,7 @@ class weighted_binary_cross_entropy(object):
     def __init__(self, n_classes=2):
         self.n_classes = n_classes
         self.__name__ = "weighted_binary_cross_entropy"
-      
+
     def __call__(self, y_true, y_pred):
         """
         Args:
@@ -101,16 +101,16 @@ class weighted_binary_cross_entropy(object):
                 last slice of the last dimension is weight
             y_pred (tensor): in shape (batch_size, x_size, y_size, n_classes)
                 model predictions
-        
+
         """
 
         w = y_true[:, -1]
         y_true = y_true[:, :-1]
-        
+
         # Switch to channel last form
         y_true = keras.backend.permute_dimensions(y_true, (0, 2, 3, 1))
         y_pred = keras.backend.permute_dimensions(y_pred, (0, 2, 3, 1))
-        
+
         loss = keras.backend.categorical_crossentropy(y_true, y_pred, from_logits=True) * w
         return loss
 
@@ -120,7 +120,7 @@ class ValidMetrics(keras.callbacks.Callback):
 
     Calculate ROC-AUC and F1 on validation data and test data (if applicable)
     after each epoch
-    
+
     """
 
     def __init__(self, valid_data=None, test_data=None):
@@ -141,5 +141,5 @@ class ValidMetrics(keras.callbacks.Callback):
             f1 = f1_score(y_true.flatten(), y_pred.flatten()>0.5)
             print('\r test-roc-auc: %f  test-f1: %f\n' % (roc, f1))
         return
-   
+
 

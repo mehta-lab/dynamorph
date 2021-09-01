@@ -1,6 +1,6 @@
 # bchhun, {2020-02-21}
 
-from pipeline.segmentation import segmentation, instance_segmentation
+from pipeline.segmentation import segmentation # instance_segmentation
 from pipeline.segmentation_validation import segmentation_validation_michael
 from multiprocessing import Process
 import os
@@ -26,9 +26,9 @@ class Worker(Process):
         if self.method == 'segmentation':
             log.info(f"running segmentation worker on {self.gpuid}")
             segmentation(*self.inputs)
-        elif self.method == 'instance_segmentation':
-            log.info(f"running instance segmentation")
-            instance_segmentation(*self.inputs)
+        # elif self.method == 'instance_segmentation':
+        #     log.info(f"running instance segmentation")
+        #     instance_segmentation(*self.inputs)
         elif self.method == 'segmentation_validation':
             segmentation_validation_michael(*self.inputs)
 
@@ -55,11 +55,11 @@ def main(method_, raw_dir_, supp_dir_, val_dir_, config_):
         if config_.segmentation.inference.weights is None:
             raise AttributeError("Weights supp_dir must be specified when method=segmentation")
 
-    # instance segmentation requires raw (stack, NNprob), supp (to write outputs) to be defined
-    elif method == 'instance_segmentation':
-        TARGET = ''
-    else:
-        raise AttributeError(f"method flag {method} not implemented")
+    # # instance segmentation requires raw (stack, NNprob), supp (to write outputs) to be defined
+    # elif method == 'instance_segmentation':
+    #     TARGET = ''
+    # else:
+    #     raise AttributeError(f"method flag {method} not implemented")
 
     # all methods all require
     if config_.segmentation.inference.fov:

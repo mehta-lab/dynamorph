@@ -68,7 +68,7 @@ class Segment(object):
         self.valid_score_callback = ValidMetrics()
         self.loss_func = weighted_binary_cross_entropy(n_classes=self.n_classes)
         self.build_model()
-    
+
 
     def build_model(self):
         """ Define model structure and compile """
@@ -77,7 +77,7 @@ class Segment(object):
         self.pre_conv = keras.layers.Conv2D(3, (1, 1), activation=None, name='pre_conv')(self.input)
 
         self.unet = segmentation_models.Unet(
-            backbone_name='resnet34', 
+            backbone_name='resnet34',
             input_shape=(3, self.x_size, self.y_size),
             classes=self.n_classes,
             activation='linear',
@@ -86,11 +86,11 @@ class Segment(object):
             decoder_block_type='upsampling',
             decoder_filters=(256, 128, 64, 32, 16),
             decoder_use_batchnorm=True)
-        
+
         output = self.unet(self.pre_conv)
-        
+
         self.model = keras.models.Model(self.input, output)
-        self.model.compile(optimizer='Adam', 
+        self.model.compile(optimizer='Adam',
                            loss=self.loss_func,
                            metrics=[])
 
@@ -127,14 +127,14 @@ class Segment(object):
             os.mkdir(self.model_path)
         # `X` and `y` should originally be 5 dimensional: (batch, c, z, x, y),
         # in default model z=1 will be neglected
-        X, y = preprocess(patches, 
-                          n_classes=self.n_classes, 
-                          label_input=label_input, 
+        X, y = preprocess(patches,
+                          n_classes=self.n_classes,
+                          label_input=label_input,
                           class_weights=class_weights)
         X = X.reshape(self.batch_input_shape)
         y = y.reshape(self.batch_label_shape)
         assert X.shape[0] == y.shape[0]
-        
+
         validation_data = None
         if valid_patches is not None:
             valid_X, valid_y = preprocess(valid_patches, 
@@ -145,7 +145,7 @@ class Segment(object):
             assert valid_X.shape[0] == valid_y.shape[0]
             self.valid_score_callback.valid_data = (valid_X, valid_y)
             validation_data = (valid_X, valid_y)
-        
+
         self.model.fit(x=X, 
                        y=y,
                        batch_size=batch_size,
@@ -212,13 +212,13 @@ class SegmentWithMultipleSlice(Segment):
         """ Define model
 
         Args:
-            unet_feat (int, optional): output dimension of unet (used as 
+            unet_feat (int, optional): output dimension of unet (used as
                 hidden units)
             **kwargs: keyword arguments for `Segment`
                 note that `input_shape` should have 4 dimensions
 
         """
-        
+
         self.unet_feat = unet_feat
         super(SegmentWithMultipleSlice, self).__init__(**kwargs)
         self.n_slices = self.input_shape[1] # Input shape (c, z, x, y)
@@ -233,9 +233,9 @@ class SegmentWithMultipleSlice(Segment):
         # Combine time slice dimension and batch dimension
         inp = SplitSlice(self.n_channels, self.x_size, self.y_size)(self.input)
         self.pre_conv = keras.layers.Conv2D(3, (1, 1), activation=None, name='pre_conv')(inp)
-        
+
         self.unet = segmentation_models.Unet(
-            backbone_name='resnet34', 
+            backbone_name='resnet34',
             input_shape=(3, self.x_size, self.y_size),
             classes=self.unet_feat,
             activation='linear',
@@ -251,7 +251,7 @@ class SegmentWithMultipleSlice(Segment):
         output = MergeSlices(self.n_slices, self.unet_feat)(output)
         output = keras.layers.Conv2D(self.unet_feat, (1, 1), activation='relu', name='post_conv')(output)
         output = keras.layers.Conv2D(self.n_classes, (1, 1), activation=None, name='pred_head')(output)
-        
+
         self.model = keras.models.Model(self.input, output)
         self.model.compile(optimizer='Adam',
                            loss=self.loss_func,

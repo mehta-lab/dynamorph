@@ -443,8 +443,8 @@ def predict_whole_map(file_path,
             outputs = []
             for r in range(rows - 1):
                 for c in range(columns - 1):
-                    patch_inp = inp[..., 
-                                    (x_offset + r*x_size):(x_offset + (r+1)*x_size), 
+                    patch_inp = inp[...,
+                                    (x_offset + r*x_size):(x_offset + (r+1)*x_size),
                                     (y_offset + c*y_size):(y_offset + (c+1)*y_size)]
                     if time_slices == 1:
                         patch_inp = patch_inp[0]

@@ -60,7 +60,15 @@ PATCH = {
     'window_size',
     'save_fig',
     'reload',
-    'skip_boundary'
+    'skip_boundary',
+
+    'overwrite',
+    'channel',
+    'count_threshold_low',
+    'count_threshold_high',
+    'foreground_threshold',
+    'dbscan_eps',
+    'dbscan_min_samples'
 }
 
 # change this to "latent encoding" or similar

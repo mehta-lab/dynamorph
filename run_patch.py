@@ -1,11 +1,13 @@
 # bchhun, {2020-02-21}
 
-from pipeline.patch_VAE import extract_patches, build_trajectories
+from pipeline.patch_VAE import extract_patches, build_trajectories, instance_segmentation
 from multiprocessing import Pool, Queue, Process
 import os
 import numpy as np
 import argparse
 from configs.config_reader import YamlReader
+import logging
+log = logging.getLogger(__name__)
 
 
 class Worker(Process):
@@ -16,7 +18,10 @@ class Worker(Process):
         self.method = method
 
     def run(self):
-        if self.method == 'extract_patches':
+        if self.method == 'instance_segmentation':
+            log.info(f"running instance segmentation")
+            instance_segmentation(*self.inputs)
+        elif self.method == 'extract_patches':
             extract_patches(*self.inputs)
         elif self.method == 'build_trajectories':
             build_trajectories(*self.inputs)
@@ -44,6 +49,13 @@ def main(method_, raw_dir_, supp_dir_, config_):
         if not supp:
             raise AttributeError("supplementary directory must be specified when method = extract_patches")
 
+    # instance segmentation requires raw (stack, NNprob), supp (to write outputs) to be defined
+    elif method == 'instance_segmentation':
+        pass
+
+    else:
+        raise AttributeError(f"method flag {method} not implemented")
+
     if fov:
         sites = fov
     else:
@@ -51,13 +63,14 @@ def main(method_, raw_dir_, supp_dir_, config_):
         img_names = [file for file in os.listdir(raw) if (file.endswith(".npy")) & ('_NN' not in file)]
         sites = [os.path.splitext(img_name)[0] for img_name in img_names]
         sites = list(set(sites))
+
     # if probabilities and formatted stack exist
-    segment_sites = [site for site in sites if os.path.exists(os.path.join(raw, "%s.npy" % site)) and \
+    segment_sites = [site for site in sites if os.path.exists(os.path.join(raw, "%s.npy" % site)) and
                      os.path.exists(os.path.join(raw, "%s_NNProbabilities.npy" % site))]
     if len(segment_sites) == 0:
         raise AttributeError("no sites found in raw directory with preprocessed data and matching NNProbabilities")
 
-    # process each site on a different GPU if using multi-gpu
+    # process each site on a different cpu if using multi-cpu
     sep = np.linspace(0, len(segment_sites), n_cpus + 1).astype(int)
 
     # TARGET is never used in either extract_patches or build_trajectory
@@ -84,7 +97,7 @@ def parse_args():
         '-m', '--method',
         type=str,
         required=False,
-        choices=['extract_patches', 'build_trajectories'],
+        choices=['extract_patches', 'build_trajectories', 'instance_segmentation'],
         default='extract_patches',
         help="Method: one of 'extract_patches', 'build_trajectories'",
     )
