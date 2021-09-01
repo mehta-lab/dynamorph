@@ -62,6 +62,7 @@ PATCH = {
     'reload',
     'skip_boundary',
 
+    'overwrite',
     'channel',
     'count_threshold_low',
     'count_threshold_high',

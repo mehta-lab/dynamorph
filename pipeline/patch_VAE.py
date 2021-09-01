@@ -66,9 +66,13 @@ def instance_segmentation(raw_folder: str,
                                               '%s' % site)
 
         if os.path.exists(os.path.join(site_supp_files_folder, 'cell_pixel_assignments.pkl')) and not rerun:
-            log.info('Found previously saved instance clustering output in {}. Skip processing...'
+            log.info('Found previously saved instance clustering output in {}.'
                   .format(site_supp_files_folder))
-            continue
+            if config_.patch.overwrite:
+                print(f"\toverwriting ...")
+            else:
+                print(f"\tskip processing ...")
+                continue
         elif not os.path.exists(site_supp_files_folder):
             os.makedirs(site_supp_files_folder, exist_ok=True)
 
