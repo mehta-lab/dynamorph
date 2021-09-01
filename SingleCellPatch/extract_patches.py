@@ -189,16 +189,20 @@ def process_site_extract_patches(site_path,
     # Load data
     image_stack = np.load(site_path)
     if channels is None:
-        channels = list(range(len(image_stack)))
-    image_stack = image_stack[channels]
+        channels = list(range(len(image_stack[0])))
+    image_stack = image_stack[:, channels]
     segmentation_stack = np.load(site_segmentation_path)
     with open(os.path.join(site_supp_files_folder, 'cell_positions.pkl'), 'rb') as f:
         cell_positions = pickle.load(f)
     with open(os.path.join(site_supp_files_folder, 'cell_pixel_assignments.pkl'), 'rb') as f:
         cell_pixel_assignments = pickle.load(f)
-
     n_frames, n_channels, n_z, x_full_size, y_full_size = image_stack.shape
-    for t_point in range(n_frames):
+
+    # if the number of timepoints between images and predictions mismatch, choose the smaller one
+    endpt = image_stack.shape[0] if image_stack.shape[0] < segmentation_stack.shape[0] else segmentation_stack.shape[0]
+    print(f"total timepoints to process = {endpt}")
+    for t_point in range(endpt):
+    # for t_point in range(n_frames):
         print(f"processing timepoint {t_point}")
         stack_dat_path = os.path.join(site_supp_files_folder, 'stacks_%d.pkl' % t_point)
         if reload and os.path.exists(stack_dat_path):
