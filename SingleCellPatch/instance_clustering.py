@@ -44,6 +44,11 @@ def check_segmentation_dim(segmentation):
         segmentation: (np.array): segmentation mask for the frame
 
     """
+    # reshape if numpy file is too large, assume index=0 is redundant
+    if len(segmentation.shape) > 4:
+        shp = segmentation.shape
+        # skip index 1 which is blank
+        segmentation = segmentation.reshape((shp[1], shp[2], shp[3], shp[4]))
 
     assert len(segmentation.shape) == 4, "Semantic segmentation should be formatted with dimension (c, z, x, y)"
     n_channels, _, _, _ = segmentation.shape
