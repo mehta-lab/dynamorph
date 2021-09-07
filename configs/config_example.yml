@@ -106,26 +106,26 @@ latent_encoding:
     '<path to folder containing first experiment "SUPP" data>',
     '<path to folder containing second experiment "SUPP" data>'
   ]
-
   weights: ['<path to pytorch weight file that will be used across all experiments>']
-  # pytorch weight file
-
+    # pytorch weight file
   save_output: True
-  # write .jpg results from run_vae.process
-
+    # write .jpg results from run_vae.process
   gpu_ids: [0,1,2]
-  # list of GPU ids to run inference across.
-
+    # list of GPU ids to run inference across.
   fov: ['C5-Site_0','C5-Site_1']
-  patch_type: "masked_mat"
 
+  # assemble VAE
+  patch_type: "masked_mat"
   channels: [0,1]
+    # also used by process VAE
+
+  # process VAE
   channel_mean: [0.4, 0]
   channel_std: [0.05, 0.05]
-  # for each channel in channels, hardcode a mean and std for zscoring
-
+    # for each channel in channels, hardcode a mean and std for zscoring
+    # currently, number of channels is inferred from length of this list
   network: 'VQ_VAE_z16'
-  # VQ_VAE_z16 or UNet
+    # VQ_VAE_z16 or UNet
   num_hiddens: 16
   num_residual_hiddens: 32
   num_embeddings: 64

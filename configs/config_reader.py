@@ -68,7 +68,9 @@ PATCH = {
     'count_threshold_high',
     'foreground_threshold',
     'dbscan_eps',
-    'dbscan_min_samples'
+    'dbscan_min_samples',
+
+    'distance_cutoff'
 }
 
 # change this to "latent encoding" or similar
@@ -82,6 +84,7 @@ LATENT_ENCODING = {
     'patch_type',
 
     'channels',
+    'sample',
     'channel_mean',
     'channel_std',
 
@@ -106,6 +109,7 @@ TRAINING = {
     'raw_dirs',
     'supp_dirs',
     'weights_dirs',
+    'reload_weights',
 
     'network',
     'num_inputs',
@@ -118,8 +122,11 @@ TRAINING = {
     'w_a',
     'w_t',
     'w_n',
+    'num_channels',
     'channel_mean',
     'channel_std',
+    'well_row',
+    'augment',
 
     'commitment_cost',
     'n_epochs',
