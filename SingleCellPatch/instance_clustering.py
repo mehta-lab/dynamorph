@@ -82,6 +82,7 @@ def instance_clustering(cell_segmentation,
             predicted background prob less than this value would be regarded as
             foreground (MG or Non-MG)
         dbscan_thr (tuple, optional): parameters for DBSCAN, (eps, min_samples)
+        channel (int): index of channel that must satisfy thresholding cutoff
 
     Returns:
         (list * 3): 3 lists (MG, Non-MG, intermediate) of cell identifiers
