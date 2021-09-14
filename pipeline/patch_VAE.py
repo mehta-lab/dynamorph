@@ -173,7 +173,7 @@ def build_trajectories(summary_folder: str,
             print("Site data not found %s" % site_path, flush=True)
         else:
             print("Building trajectories %s" % site_path, flush=True)
-            process_site_build_trajectory(site_supp_files_folder, **kwargs)
+            process_site_build_trajectory(site_supp_files_folder, config, **kwargs)
     return
 
 
@@ -204,6 +204,7 @@ def assemble_VAE(raw_folder: str,
 
     channels = config.latent_encoding.channels
     patch_type = config.latent_encoding.patch_type
+    target_size = tuple(config.latent_encoding.sample)
 
     assert len(channels) > 0, "At least one channel must be specified"
 
@@ -219,7 +220,10 @@ def assemble_VAE(raw_folder: str,
         dat_fs.extend([os.path.join(supp_files_folder, f) \
             for f in os.listdir(supp_files_folder) if f.startswith('stacks')])
 
-    dataset, fs = prepare_dataset_v2(dat_fs, channels=channels, key=patch_type)
+    dataset, fs = prepare_dataset_v2(dat_fs,
+                                     channels=channels,
+                                     key=patch_type,
+                                     input_shape=target_size)
     assert fs == sorted(fs)
     
     print(f"\tsaving {os.path.join(raw_folder, '%s_file_paths.pkl' % well)}")
@@ -437,7 +441,7 @@ def process_VAE(raw_folder: str,
     # For inference same normalization parameters can be used or determined from the inference data,
     # depending on if the inference data has the same distribution as training data
 
-    model_path = config_.latent_encoding.weights
+    # model_path = config_.latent_encoding.weights
     channels = config_.latent_encoding.channels
 
     num_hiddens = config_.latent_encoding.num_hiddens
@@ -493,17 +497,14 @@ def process_VAE(raw_folder: str,
                             num_residual_hiddens=num_residual_hiddens,
                             num_residual_layers=2,
                             num_embeddings=num_embeddings,
-                            gpu=True)
+                            # gpu=True
+                            )
 
         model = model.to(device)
-        try:
-            if not model_path is None:
-                model.load_state_dict(torch.load(model_path))
-            else:
-                model.load_state_dict(torch.load('HiddenStateExtractor/save_0005_bkp4.pt'))
-        except Exception as ex:
-            print(ex)
-            raise ValueError("Error in loading model weights for VQ-VAE")
+        if model_path:
+            model.load_state_dict(torch.load(model_path))
+        else:
+            raise FileNotFoundError(f"specified model {model_path} does not exist")
 
         z_bs = {}
         z_as = {}
