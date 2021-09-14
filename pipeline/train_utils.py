@@ -225,19 +225,26 @@ class ImageDataset(Dataset):
         return datum
 
 
-def zscore(input_image, channel_mean=None, channel_std=None):
+def zscore(input_image, channel_mean=None, channel_std=None, channel_num=1):
     """
     Performs z-score normalization. Adds epsilon in denominator for robustness
 
     :param input_image: input image for intensity normalization
+    :param channel_mean: supplied mean to z-score on
+    :param channel_std: supplied std to z-score on
+    :param channel_num: supplied channel to apply z-score to
     :return: z score normalized image
     """
+    # assume axis=1 is the channel axis
     if not channel_mean:
-        channel_mean = np.mean(input_image, axis=(0, 2, 3))
+        channel_mean = np.mean(input_image, axis=(0, 2, 3, 4))
     if not channel_std:
-        channel_std = np.std(input_image, axis=(0, 2, 3))
+        channel_std = np.std(input_image, axis=(0, 2, 3, 4))
+    if not channel_num:
+        channel_num = len(channel_mean)
+
     channel_slices = []
-    for c in range(len(channel_mean)):
+    for c in range(channel_num):
         mean = channel_mean[c]
         std = channel_std[c]
         channel_slice = (input_image[:, c, ...] - mean) / \
