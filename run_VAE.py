@@ -49,10 +49,11 @@ def main(method_, raw_dir_, supp_dir_, config_):
 
     # process needs raw (load _file_paths), and target (torch weights)
     elif method == 'process':
+        # process can occur on exactly one GPU
+        gpus = [0]
+        gpu_count = 1
         if not inputs:
             raise AttributeError("raw directory must be specified when method = process")
-        # if type(weights) is not list:
-        #     weights = [weights]
         if not weights:
             raise AttributeError("pytorch VQ-VAE weights path must be specified when method = process")
 
