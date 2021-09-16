@@ -332,6 +332,8 @@ def random_crop(img, crop_ratio = (0.6, 1)):
 
 
 def random_intensity_jitter(img, mean_jitter, std_jitter):
+    if mean_jitter == 0 and std_jitter == 0:
+        return img
     img_j = []
     for im in img:
         mean_offset = np.random.uniform(-mean_jitter, mean_jitter)
@@ -340,8 +342,8 @@ def random_intensity_jitter(img, mean_jitter, std_jitter):
         img_j.append(im)
     return np.stack(img_j)
 
-def augment_img(img, rotate_range=180, zoom_range=(1, 1), crop_ratio = (0.6, 1), intensity_jitter=(0.5, 0.5)):
-# def augment_img(img, rotate_range=180, zoom_range=(1, 1), crop_ratio=(0.6, 1), intensity_jitter=(0, 0)):
+# def augment_img(img, rotate_range=180, zoom_range=(1, 1), crop_ratio = (0.6, 1), intensity_jitter=(0.5, 0.5)):
+def augment_img(img, rotate_range=180, zoom_range=(1, 1), crop_ratio=(0.6, 1), intensity_jitter=(0, 0)):
 # def augment_img(img, rotate_range=180, zoom_range=(1, 1), crop_ratio=(1, 1), intensity_jitter=(0.5, 0.5)):
     """Data augmentation with flipping and rotation"""
     # TODO: Rewrite with torchvision transform
@@ -960,7 +962,7 @@ def main(config_):
         # tri_loss = HardNegativeTripletMiner(margin=margin).to(device)
         ## Initialize Model ###
 
-        model = EncodeProject(arch=network, loss=tri_loss, num_inputs=num_inputs, width=2).to(device)
+        model = EncodeProject(arch=network, loss=tri_loss, num_inputs=num_inputs, width=1).to(device)
 
         if start_model_path:
             print('Initialize the model with state {} ...'.format(start_model_path))
