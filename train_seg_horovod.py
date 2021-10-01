@@ -32,17 +32,18 @@ parent = '/gpfs/CompMicro/rawdata/dragonfly/Bryant/Galina/10-29-2020'
 glial_B2 = 'patches_glial_oneclass'
 
 # expanded neuron samples
-neuron_C2 = 'patches_neurons_oneclass'
-neuron_C2_2 = 'patches_neurons_oneclass_2'
+neuron_C2 = 'patches_neurons_oneclass_train'
 
 # mega set of mg samples
 mg_all_wells = 'patches_mg_oneclass'
 
-experiment = os.path.join(parent, 'patches', neuron_C2_2)
+experiment = os.path.join(parent, 'patches', neuron_C2)
 print(f"\nexperiment set to {experiment}")
+test_data = os.path.join(parent, 'patches', 'patches_neurons_oneclass_test')
+print(f"\ntestdata gathered from {test_data}")
 
 # ==== Output Model Path ======
-model_expt = 'neuron_model_oneclass_run2-3'
+model_expt = 'neuron_model_oneclass_Site7-8_test_continue_2'
 model_path = os.path.join(parent, 'models', model_expt)
 # Define model
 if not os.path.exists(model_path):
@@ -54,9 +55,9 @@ epochs = 200
 base_lr = 0.0001
 classes = 2
 
-train_pct = 0.85
-val_pct = 0.15
-test_pct = 0
+train_pct = 1.0
+val_pct = 0.0
+test_pct = 0.0
 
 
 def build_train_test_split(zarr_files, train_percent, val_percent, test_percent):
@@ -243,15 +244,29 @@ if __name__ == "__main__":
     # ===============================================================================
     print(f"Building dataset")
     # build dataset
-    train_fs, val_fs, test_fs = build_train_test_split(experiment,
+    train_fs, _, _ = build_train_test_split(experiment,
                                                        args.train_pct,
                                                        args.val_pct,
                                                        args.test_pct)
-    print(f"train-test split constructed, num(total, train, val,test): {len(train_fs)}, {len(val_fs)}, {len(test_fs)}")
+    print(f"train-test split constructed, num(total, train, val,test): {len(train_fs)}")  #", {len(val_fs)}, {len(test_fs)}")
     print(f"\tloading files ...")
     train_patch_list = load_zarr(train_fs)
+    # val_patch_list = load_zarr(val_fs)
+    # test_patch_list = load_zarr(test_fs)
+
+    # ======
+    test_data = os.path.join(parent, 'patches', 'patches_neurons_oneclass_test')
+    val_fs, _, _ = build_train_test_split(test_data,
+                                          1.0,
+                                          0.0,
+                                          0.0)
+    print(f"train-test split constructed, num(total, train, val,test): {len(val_fs)}")  # {len(val_fs)}, {len(test_fs)}")
+    print(f"\tloading files ...")
+    # train_patch_list = load_zarr(train_fs)
     val_patch_list = load_zarr(val_fs)
-    test_patch_list = load_zarr(test_fs)
+    # test_patch_list = load_zarr(test_fs)
+
+    # ======
 
     train_batches = len(train_patch_list) // args.batch_size
     val_batches = len(val_patch_list) // args.batch_size
@@ -296,8 +311,8 @@ if __name__ == "__main__":
 
     if hvd.rank() == 0:
         model_weights = os.path.join('/gpfs/CompMicro/rawdata/dragonfly/Bryant/Galina/10-29-2020/models',
-                                     'neuron_best_model_8-27-2021',
-                                     'weights.epoch-160.loss-0.216.valloss-0.108.hdf5')
+                                     'neuron_model_oneclass_Site7-8_test_continue',
+                                     'weights.epoch-050.loss-0.112.valloss-0.223.hdf5')
         model.load(model_weights)
 
     # ============================================================================================================

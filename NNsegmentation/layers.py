@@ -176,7 +176,7 @@ class weighted_binary_cross_entropy(object):
             loss = segmentation_models.losses.categorical_focal_loss(y_true, y_pred)
         else:
             print('using binary xentropy for this 2 class model')
-            loss = keras.backend.binary_crossentropy(y_true, y_pred, from_logits=False)
+            loss = keras.backend.binary_crossentropy(y_true, y_pred, from_logits=True)
         return loss
 
 
